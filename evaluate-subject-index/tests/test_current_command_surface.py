@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -52,7 +53,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertNotIn("integrate", text)
 
     def test_scoring_surface_is_current_only(self) -> None:
-        text = help_text("dimension_score_v7_cli.py")
+        text = help_text("dimension_score_v8_cli.py")
         self.assertIn("preflight", text)
         self.assertIn("calculate", text)
         self.assertNotIn("migrate", text)
@@ -90,8 +91,12 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             policy = json.loads(output.read_text())
-            self.assertEqual("subject-index-evaluation-policy-v3", policy["schema_version"])
-            self.assertEqual("subject-index-standard-policy-v7", policy["policy_profile"]["id"])
+            self.assertEqual("subject-index-evaluation-policy-v4", policy["schema_version"])
+            self.assertEqual("subject-index-standard-policy-v8", policy["policy_profile"]["id"])
+            self.assertEqual(
+                hashlib.sha256((ROOT / "references" / "standard-policy-v8.md").read_bytes()).hexdigest(),
+                policy["policy_profile"]["standard_policy_sha256"],
+            )
 
 
 if __name__ == "__main__":

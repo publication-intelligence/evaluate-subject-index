@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Deterministic current V7 scoring and projection tooling.
+"""Deterministic current V8 scoring and projection tooling.
 
-V7 changes only the per-locator precision input to Page-reference Reliability.
-It derives independent page-treatment and complete-path-fit ceilings from frozen
-structured evidence, combines them with ``min(T, F)``, and preserves every V6
-non-reliability formula, cap, gate, recall rule, and rounding rule.
+V8 uses the frozen keep judgment as binary rating credit while retaining the
+independent page-treatment and complete-path-fit minimum as a diagnostic grade.
+Every non-reliability formula, cap, gate, recall rule, and rounding rule is
+unchanged.
 """
 
 from __future__ import annotations
@@ -41,10 +41,10 @@ from structure_locator_review import (
 )
 
 
-RUBRIC_VERSION = "subject-index-rubric-v7"
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v3"
-CALCULATION_SCHEMA = "subject-index-dimension-calculations-v4"
-ITEM_GRADING_POLICY = "subject-index-item-grading-v3"
+RUBRIC_VERSION = "subject-index-rubric-v8"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
+CALCULATION_SCHEMA = "subject-index-dimension-calculations-v5"
+ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
 SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA = (
     "subject-index-v7-architecture-review-supplement-v1"
 )
@@ -61,7 +61,7 @@ def _mapping_failure(locator: Mapping[str, Any], errors: Iterable[str]) -> dict[
     return {
         "code": "inconsistent_or_incomplete_locator_utility_state",
         "path": f"locator:{locator.get('locator_id', '<missing>')}",
-        "message": "V7 requires an unambiguous structured treatment and complete-path-fit mapping.",
+        "message": "V8 requires an unambiguous structured treatment and complete-path-fit mapping.",
         "locator_id": locator.get("locator_id"),
         "path_id": locator.get("path_id"),
         "frozen_state": {
@@ -287,7 +287,7 @@ def locator_fit_preflight(
             {
                 "code": "required_locator_not_measured",
                 "path": "locator_not_measured",
-                "message": "Full V7 scoring requires every frozen locator assignment to be measured.",
+                "message": "Full V8 scoring requires every frozen locator assignment to be measured.",
                 "locator_ids": sorted(ledgers["locator_not_measured"]),
                 "prose_inference_permitted": False,
             }
@@ -313,7 +313,7 @@ def locator_fit_preflight(
         and not (deterministic_ids & invalid_ids)
         and not (unresolved_ids & invalid_ids),
         "locator_fit_preflight_group_overlap",
-        "Each frozen locator record must appear in exactly one V7 fit-preflight group.",
+        "Each frozen locator record must appear in exactly one V8 fit-preflight group.",
     )
     locator_invalid_count = sum(
         item.get("code") == "inconsistent_or_incomplete_locator_utility_state"
@@ -323,10 +323,10 @@ def locator_fit_preflight(
         len(deterministic) + len(unresolved) + locator_invalid_count
         == len(ledgers["locators"]),
         "locator_fit_preflight_group_coverage_invalid",
-        "Every frozen locator record must appear exactly once in a V7 fit-preflight group.",
+        "Every frozen locator record must appear exactly once in a V8 fit-preflight group.",
     )
     return {
-        "schema_version": "subject-index-v7-locator-fit-preflight-v1",
+        "schema_version": "subject-index-v8-locator-fit-preflight-v1",
         "deterministically_compatible": deterministic,
         "unresolved_complete_path_fit": unresolved,
         "invalid_or_contradictory_state": invalid,
@@ -340,7 +340,7 @@ def locator_fit_preflight(
         "unresolved_set_sha256": v5.canonical_hash(
             {"unresolved_locator_fit": unresolved}
         ),
-        "aggregate_v7_score_available": False,
+        "aggregate_v8_score_available": False,
         "prose_inference_used": False,
         "historical_artifacts_modified": False,
         "_locator_records_by_id": {
@@ -365,7 +365,7 @@ def locator_state_requirements(
     *,
     legacy_defects: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
-    """Return precise V7 mapping failures without consulting prose."""
+    """Return precise V8 mapping failures without consulting prose."""
 
     report = locator_fit_preflight(
         ledgers, audit_mode, legacy_defects=legacy_defects
@@ -388,10 +388,10 @@ def locator_state_requirements(
 def raw_locator_state_requirements(
     config_path: Path,
 ) -> tuple[str | None, list[dict[str, Any]], list[Path]]:
-    """Pre-scan raw audits for actionable V7 field and mapping failures."""
+    """Pre-scan raw audits for actionable V8 field and mapping failures."""
 
     try:
-        config = v5.load_json(config_path, "V7 calculation input")
+        config = v5.load_json(config_path, "V8 calculation input")
     except (OSError, v5.CalculationError):
         return None, [], []
     references = config.get("inputs", {}).get("locator_audits", [])
@@ -415,7 +415,7 @@ def raw_locator_state_requirements(
                 {
                     "code": "missing_locator_judgment_collection",
                     "path": f"locator_audit[{batch_index}].judgments",
-                        "message": "V7 scoring requires the frozen locator judgment array.",
+                        "message": "V8 scoring requires the frozen locator judgment array.",
                     "state_errors": ["missing:judgments"],
                 }
             )
@@ -426,7 +426,7 @@ def raw_locator_state_requirements(
                     {
                         "code": "invalid_locator_record",
                         "path": f"locator_audit[{batch_index}].judgments[{judgment_index}]",
-                        "message": "V7 requires an object for every locator judgment.",
+                        "message": "V8 requires an object for every locator judgment.",
                         "state_errors": ["invalid:locator_record"],
                     }
                 )
@@ -448,13 +448,13 @@ def raw_locator_state_requirements(
     return config.get("evaluation_id"), failures, paths
 
 
-def load_v7_inputs(config_path: Path) -> dict[str, Any]:
-    """Load the native V7 V5 structure contract.
+def load_v8_inputs(config_path: Path) -> dict[str, Any]:
+    """Load native V8 inputs while reusing the unchanged structure contract.
 
     The V5 scorer is reused as an unchanged arithmetic engine.  For a native
     ``structure-audit-v5`` document, only its in-memory schema tag is projected
     to V4 for that engine; the exact V5 bytes and artifact identity remain the
-    bound input, and the explicit V7 architecture decisions remain present.
+    bound input, and the existing architecture decisions remain present.
     """
 
     config = v5.load_json(config_path, "Dimension calculation input")
@@ -464,21 +464,42 @@ def load_v7_inputs(config_path: Path) -> dict[str, Any]:
         "dimension-calculation-input.schema.json",
         "Dimension calculation input",
     )
-    structure_ref = config["inputs"]["structure_audit"]
+    inputs = config["inputs"]
+    policy_path, policy_document, policy_artifact = v5.resolve_input(
+        config_path, inputs["policy"], "policy"
+    )
+    v5.validate_schema_document(
+        policy_document, "evaluation-policy-v4.schema.json", "policy"
+    )
+    v5.require(
+        policy_document.get("policy_sha256")
+        == v5.canonical_hash(policy_document, "policy_sha256"),
+        "policy_self_hash_mismatch",
+        "The V8 evaluation policy self-hash does not reconstruct.",
+    )
+    standard_policy_path = (
+        Path(__file__).resolve().parents[1] / "references" / "standard-policy-v8.md"
+    )
+    v5.require(
+        policy_document.get("policy_profile", {}).get("standard_policy_sha256")
+        == v5.sha256_file(standard_policy_path),
+        "standard_policy_profile_hash_mismatch",
+        "The V8 policy must bind the exact built-in standard-policy-v8 content.",
+    )
+    structure_ref = inputs["structure_audit"]
     structure_path, structure_document, structure_artifact = v5.resolve_input(
         config_path, structure_ref, "structure_audit"
     )
     v5.require(
         structure_document.get("schema_version") == "structure-audit-v5",
         "unsupported_structure_audit_schema",
-        "Current V7 scoring requires structure-audit-v5.",
+        "Current V8 scoring requires structure-audit-v5.",
     )
     v5.validate_schema_document(
         structure_document, "structure-audit-v5.schema.json", "structure_audit"
     )
     runtime_structure = deepcopy(structure_document)
     runtime_structure["schema_version"] = "structure-audit-v4"
-    inputs = config["inputs"]
     locator_entries: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
     missing_entries: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
     for index, record in enumerate(inputs["locator_audits"]):
@@ -501,8 +522,8 @@ def load_v7_inputs(config_path: Path) -> dict[str, Any]:
         missing_entries.append((document, artifact, path))
     locator_entries.sort(key=lambda item: str(item[0].get("chunk_id", "")))
     missing_entries.sort(key=lambda item: str(item[0].get("chunk_id", "")))
-    artifacts: list[dict[str, Any]] = []
-    paths: list[Path] = []
+    artifacts: list[dict[str, Any]] = [policy_artifact]
+    paths: list[Path] = [policy_path]
     for prefix, entries in (
         ("locator_audit", locator_entries),
         ("missing_access_audit", missing_entries),
@@ -529,13 +550,9 @@ def load_v7_inputs(config_path: Path) -> dict[str, Any]:
         )
         artifacts.append(chunk_artifact)
         paths.append(chunk_path)
-    v5.require(
-        "migration_supplement" not in inputs,
-        "unexpected_migration_supplement",
-        "A native structure-audit-v5 calculation cannot use a V5 historical migration supplement.",
-    )
     return {
         "config": config,
+        "policy": policy_document,
         "locator_documents": [item[0] for item in locator_entries],
         "missing_documents": [item[0] for item in missing_entries],
         "structure": runtime_structure,
@@ -548,6 +565,20 @@ def load_v7_inputs(config_path: Path) -> dict[str, Any]:
     }
 
 
+def policy_identity_requirements(
+    loaded: Mapping[str, Any], ledgers: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    if loaded.get("policy", {}).get("policy_sha256") == ledgers["identity"].get(
+        "policy_sha256"
+    ):
+        return []
+    return [{
+        "code": "policy_identity_mismatch",
+        "path": "inputs.policy",
+        "message": "The V8 policy hash must equal the policy hash frozen into every audit ledger.",
+    }]
+
+
 def preflight_loaded(
     loaded: dict[str, Any]
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
@@ -556,6 +587,7 @@ def preflight_loaded(
         return None, missing
     missing = [
         *missing,
+        *policy_identity_requirements(loaded, ledgers),
         *locator_state_requirements(
             ledgers,
             loaded["config"]["audit_mode"],
@@ -584,7 +616,7 @@ def utility_assignments(
         except ValueError as exc:
             raise v5.CalculationError(
                 "inconsistent_locator_utility_state",
-                f"Locator {locator.get('locator_id')} cannot receive a V7 two-axis credit.",
+                f"Locator {locator.get('locator_id')} cannot receive a V8 diagnostic and rating assignment.",
                 _mapping_failure(locator, str(exc).split(";")),
             ) from exc
         assignments.append(assignment.as_dict())
@@ -636,17 +668,8 @@ def calculate_reliability(
         item for item in ledgers["locators"] if item.get("judgment") == "uninspectable"
     ]
     locator_not_measured = ledgers["locator_not_measured"]
-    weighted_denom = v5.component_denominators(
-        "weighted_locator_precision",
-        ledgers["locator_original"],
-        ledgers["locator_original"],
-        len(measured_locators),
-        len(uninspectable_locators),
-        len(locator_not_measured),
-        {},
-    )
-    strict_denom = v5.component_denominators(
-        "strict_substantive_precision",
+    keep_denom = v5.component_denominators(
+        "keep_precision",
         ledgers["locator_original"],
         ledgers["locator_original"],
         len(measured_locators),
@@ -679,8 +702,8 @@ def calculate_reliability(
     )
 
     assessed_assignments = [by_id[item["locator_id"]] for item in measured_locators]
-    weighted_numerator = sum(
-        (v5.decimal_value(item["combined_credit"]) for item in assessed_assignments), ZERO
+    diagnostic_numerator = sum(
+        (v5.decimal_value(item["diagnostic_credit"]) for item in assessed_assignments), ZERO
     )
     treatment_numerator = sum(
         (v5.decimal_value(item["treatment_score"]) for item in assessed_assignments), ZERO
@@ -691,23 +714,17 @@ def calculate_reliability(
     supported = sum(item["judgment"] == "supported" for item in measured_locators)
     found = sum(item["status"] == "found" for item in measured_treatments)
     assessable = len(measured_locators)
-    pw = weighted_numerator / Decimal(assessable) if assessable else ZERO
+    mean_diagnostic = diagnostic_numerator / Decimal(assessable) if assessable else ZERO
     mean_treatment = treatment_numerator / Decimal(assessable) if assessable else ZERO
     mean_fit = fit_numerator / Decimal(assessable) if assessable else ZERO
-    strict_precision = v5.rate(supported, assessable)
+    keep_precision = v5.rate(supported, assessable)
     recall = v5.rate(found, len(measured_treatments))
 
     unknown_loc = len(uninspectable_locators) + len(locator_not_measured)
     unknown_treat = len(uninspectable_treatments) + len(treatment_not_measured)
     locator_bound_denominator = assessable + unknown_loc
-    pw_lower = weighted_numerator / Decimal(locator_bound_denominator) if locator_bound_denominator else ZERO
-    pw_upper = (
-        (weighted_numerator + Decimal(unknown_loc)) / Decimal(locator_bound_denominator)
-        if locator_bound_denominator
-        else ZERO
-    )
-    strict_lower = v5.rate(supported, locator_bound_denominator)
-    strict_upper = v5.rate(supported + unknown_loc, locator_bound_denominator)
+    keep_lower = v5.rate(supported, locator_bound_denominator)
+    keep_upper = v5.rate(supported + unknown_loc, locator_bound_denominator)
     recall_lower = v5.rate(found, len(measured_treatments) + unknown_treat)
     recall_upper = v5.rate(found + unknown_treat, len(measured_treatments) + unknown_treat)
 
@@ -716,15 +733,14 @@ def calculate_reliability(
     attempt = ledgers["context"]["candidate_attempt"]["status"]
     if expected_treatments > 0 and no_locator_assignments:
         central_base = lower_base = upper_base = ZERO
-        for denominator in (weighted_denom, strict_denom):
-            v5.mark_defined_zero(denominator, "expected_treatments_but_no_locator_assignments")
+        v5.mark_defined_zero(keep_denom, "expected_treatments_but_no_locator_assignments")
     else:
-        central_base = FIVE * v5.f1(pw, recall)
-        lower_base = FIVE * v5.f1(pw_lower, recall_lower)
-        upper_base = FIVE * v5.f1(pw_upper, recall_upper)
+        central_base = FIVE * v5.f1(keep_precision, recall)
+        lower_base = FIVE * v5.f1(keep_lower, recall_lower)
+        upper_base = FIVE * v5.f1(keep_upper, recall_upper)
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
-        for denominator in (weighted_denom, strict_denom, recall_denom):
+        for denominator in (keep_denom, recall_denom):
             v5.mark_defined_zero(denominator, f"candidate_attempt:{attempt}", non_attempt=True)
 
     high_measured = [
@@ -745,7 +761,7 @@ def calculate_reliability(
         severities={"critical"},
         kinds={"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
     )
-    # Preserve the exact V6 cap trigger; V7 changes credit, not gate/cap evidence.
+    # Preserve the exact cap trigger; V8 changes precision credit, not cap evidence.
     pattern = [
         item
         for item in measured_locators
@@ -829,7 +845,7 @@ def calculate_reliability(
 
     result = v5.finish_dimension(
         "page_reference_reliability",
-        [weighted_denom, strict_denom, recall_denom],
+        [keep_denom, recall_denom],
         central_base,
         lower_base,
         upper_base,
@@ -843,24 +859,33 @@ def calculate_reliability(
 
     treatment_tiers = ("substantive", "mixed", "weak_presence", "absent", "invalid_destination", "uninspectable", "not_measured")
     fit_tiers = ("exact_fit", "material_partial_fit", "material_mismatch", "severe_mismatch", "no_fit", "uninspectable", "not_measured")
-    combined_values = ("1", "0.7", "0.35", "0.25", "0.15", "0", "uninspectable", "not_measured")
+    diagnostic_values = ("1", "0.7", "0.35", "0.25", "0.15", "0", "uninspectable", "not_measured")
+    rating_values = ("1", "0", "uninspectable", "not_measured")
 
-    def combined_count_key(item: dict[str, Any]) -> str:
+    def credit_count_key(item: dict[str, Any], field: str) -> str:
         if item["disposition"] == "bounded":
             return "uninspectable"
         if item["disposition"] == "not_measured":
             return "not_measured"
-        return str(item["combined_credit"])
+        return str(item[field])
 
     treatment_counts = _complete_counts((item["treatment_category"] for item in assignments), treatment_tiers)
     fit_counts = _complete_counts((item["fit_category"] for item in assignments), fit_tiers)
-    combined_counts = _complete_counts((combined_count_key(item) for item in assignments), combined_values)
+    diagnostic_counts = _complete_counts(
+        (credit_count_key(item, "diagnostic_credit") for item in assignments),
+        diagnostic_values,
+    )
+    rating_counts = _complete_counts(
+        (credit_count_key(item, "rating_credit") for item in assignments),
+        rating_values,
+    )
     result["raw_status_counts"] = {
         "locator_support": dict(Counter(item["judgment"] for item in ledgers["locators"])),
         "locator_treatment_class": dict(Counter(item.get("treatment_class") for item in ledgers["locators"])),
         "treatment_tier": treatment_counts,
         "fit_tier": fit_counts,
-        "combined_credit": combined_counts,
+        "diagnostic_credit": diagnostic_counts,
+        "rating_credit": rating_counts,
         "treatment_recall": dict(Counter(item.get("status") or "not_measured" for item in ledgers["treatments"])),
         "not_measured_locators": len(locator_not_measured),
         "not_measured_treatments": len(treatment_not_measured),
@@ -868,17 +893,17 @@ def calculate_reliability(
     result["credit_mappings"] = {
         "page_treatment": {key: v5.decimal_text(value) for key, value in TREATMENT_SCORES.items()} | {"uninspectable": "neutral_uncertainty_bounds"},
         "complete_path_fit": {key: v5.decimal_text(value) for key, value in FIT_SCORES.items()} | {"uninspectable": "neutral_uncertainty_bounds"},
-        "combination": {"rule": "minimum", "formula": "L_j=min(T_j,F_j)"},
-        "strict_substantive_precision": {"supported": "1", "partially_supported": "0", "unsupported": "0"},
+        "diagnostic_combination": {"rule": "minimum", "formula": "D_j=min(T_j,F_j)"},
+        "rating_credit": {"supported": "1", "partially_supported": "0", "unsupported": "0"},
         "treatment_recall": {"found": "1", "missed": "0"},
     }
-    f1_denominator = pw + recall
+    f1_denominator = keep_precision + recall
     result["components"] = [
         {
-            "component_id": "weighted_locator_precision",
-            "raw_numerator": v5.decimal_text(weighted_numerator),
+            "component_id": "keep_precision",
+            "raw_numerator": v5.decimal_text(Decimal(supported)),
             "raw_denominator": v5.decimal_text(Decimal(assessable)),
-            "normalized_value": v5.decimal_text(pw),
+            "normalized_value": v5.decimal_text(keep_precision),
             "weight": "harmonic_mean",
             "effective_weight": "harmonic_mean",
             "weight_renormalized": False,
@@ -902,10 +927,10 @@ def calculate_reliability(
             "weight_renormalized": False,
         },
         {
-            "component_id": "strict_substantive_precision",
-            "raw_numerator": v5.decimal_text(Decimal(supported)),
+            "component_id": "diagnostic_locator_credit_mean",
+            "raw_numerator": v5.decimal_text(diagnostic_numerator),
             "raw_denominator": v5.decimal_text(Decimal(assessable)),
-            "normalized_value": v5.decimal_text(strict_precision),
+            "normalized_value": v5.decimal_text(mean_diagnostic),
             "weight": "reported_diagnostic_only",
             "effective_weight": "not_used_in_dimension_arithmetic",
             "weight_renormalized": False,
@@ -920,10 +945,10 @@ def calculate_reliability(
             "weight_renormalized": False,
         },
         {
-            "component_id": "weighted_f1",
-            "raw_numerator": v5.decimal_text(TWO * pw * recall),
+            "component_id": "reliability_f1",
+            "raw_numerator": v5.decimal_text(TWO * keep_precision * recall),
             "raw_denominator": v5.decimal_text(f1_denominator),
-            "normalized_value": v5.decimal_text(v5.f1(pw, recall)),
+            "normalized_value": v5.decimal_text(v5.f1(keep_precision, recall)),
             "weight": "base_rating_times_5",
             "effective_weight": "base_rating_times_5",
             "weight_renormalized": False,
@@ -939,7 +964,7 @@ def calculate_reliability(
         },
     ]
     result["reliability_provenance"] = {
-        "model": "two_axis_independent_ceilings_minimum_v1",
+        "model": "binary_keep_precision_with_two_axis_diagnostics_v1",
         "original_locator_denominator": ledgers["locator_original"],
         "assessable_locator_denominator": assessable,
         "uninspectable_locator_count": len(uninspectable_locators),
@@ -951,7 +976,8 @@ def calculate_reliability(
         "counts_by_treatment_class": dict(sorted(Counter(item.get("treatment_class") for item in ledgers["locators"]).items())) | ({"not_measured": len(locator_not_measured)} if locator_not_measured else {}),
         "counts_by_treatment_tier": treatment_counts,
         "counts_by_fit_tier": fit_counts,
-        "counts_by_combined_credit_value": combined_counts,
+        "counts_by_diagnostic_credit_value": diagnostic_counts,
+        "counts_by_rating_credit_value": rating_counts,
         "locator_utility_assignments": assignments,
         "mapping_rejections": [],
         "compatibility_classifications": [
@@ -977,23 +1003,23 @@ def calculate_reliability(
         "fit_score_numerator": v5.decimal_text(fit_numerator),
         "fit_score_denominator": assessable,
         "mean_fit_score": v5.decimal_text(mean_fit),
-        "weighted_precision_numerator": v5.decimal_text(weighted_numerator),
-        "weighted_precision_denominator": assessable,
-        "weighted_locator_precision": v5.decimal_text(pw),
-        "strict_precision_numerator": supported,
-        "strict_precision_denominator": assessable,
-        "strict_substantive_precision": v5.decimal_text(strict_precision),
+        "diagnostic_credit_numerator": v5.decimal_text(diagnostic_numerator),
+        "diagnostic_credit_denominator": assessable,
+        "mean_diagnostic_credit": v5.decimal_text(mean_diagnostic),
+        "keep_precision_numerator": supported,
+        "keep_precision_denominator": assessable,
+        "keep_precision": v5.decimal_text(keep_precision),
         "treatment_recall_numerator": found,
         "treatment_recall_denominator": len(measured_treatments),
         "treatment_recall": v5.decimal_text(recall),
-        "weighted_f1": v5.decimal_text(v5.f1(pw, recall)),
+        "reliability_f1": v5.decimal_text(v5.f1(keep_precision, recall)),
         "treatment_score_uncertainty": _uncertainty_triple(treatment_numerator, assessable, unknown_loc),
         "fit_score_uncertainty": _uncertainty_triple(fit_numerator, assessable, unknown_loc),
-        "strict_precision_uncertainty": {"lower": v5.decimal_text(strict_lower), "central": v5.decimal_text(strict_precision), "upper": v5.decimal_text(strict_upper)},
-        "weighted_precision_uncertainty": {"lower": v5.decimal_text(pw_lower), "central": v5.decimal_text(pw), "upper": v5.decimal_text(pw_upper)},
+        "diagnostic_credit_uncertainty": _uncertainty_triple(diagnostic_numerator, assessable, unknown_loc),
+        "keep_precision_uncertainty": {"lower": v5.decimal_text(keep_lower), "central": v5.decimal_text(keep_precision), "upper": v5.decimal_text(keep_upper)},
         "treatment_recall_uncertainty": {"lower": v5.decimal_text(recall_lower), "central": v5.decimal_text(recall), "upper": v5.decimal_text(recall_upper)},
-        "calculation_credit_source": "locator_utility_assignments[].combined_credit",
-        "diagnostic_grade_formula": "100 * combined_credit",
+        "rating_credit_source": "locator_utility_assignments[].rating_credit",
+        "diagnostic_grade_formula": "100 * diagnostic_credit",
         "diagnostic_grades_used_in_dimension_arithmetic": False,
         "pre_cap_rating": result["pre_cap_rating"],
         "cap_evaluations": result["cap_evaluations"],
@@ -1018,11 +1044,11 @@ def calculate_loaded(
     locator_fit_supplement: Mapping[str, Any] | None = None,
     locator_fit_supplement_artifact: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    ledgers, missing = v5.preflight_loaded(loaded)
+    ledgers, missing = preflight_loaded(loaded)
     v5.require(
         ledgers is not None and not missing,
-        "v7_inputs_insufficient",
-        "The frozen ledgers do not satisfy the V7 two-axis calculation contract.",
+        "v8_inputs_insufficient",
+        "The frozen ledgers do not satisfy the V8 diagnostic-and-rating calculation contract.",
         missing,
     )
     audit_mode = loaded["config"]["audit_mode"]
@@ -1032,8 +1058,8 @@ def calculate_loaded(
     )
     v5.require(
         not fit_preflight["invalid_or_contradictory_state"],
-        "v7_inputs_insufficient",
-        "The frozen ledgers contain invalid or contradictory V7 locator states.",
+        "v8_inputs_insufficient",
+        "The frozen ledgers contain invalid or contradictory V8 locator states.",
         fit_preflight["invalid_or_contradictory_state"],
     )
     unresolved_ids = [
@@ -1044,7 +1070,7 @@ def calculate_loaded(
     if locator_fit_supplement is None:
         v5.require(
             not unresolved_ids,
-            "v7_inputs_insufficient",
+            "v8_inputs_insufficient",
             "The frozen ledgers contain unresolved complete-path-fit states.",
             fit_preflight["unresolved_complete_path_fit"],
         )
@@ -1081,7 +1107,7 @@ def calculate_loaded(
         v5.require(
             structure_review_artifact is not None,
             "structure_review_artifact_binding_required",
-            "A V7 structure-locator review requires its exact file binding.",
+            "A V8 structure-locator review requires its exact file binding.",
         )
         structure_artifact = next(
             (item for item in loaded["input_artifacts"] if item.get("role") == "structure_audit"),
@@ -1092,7 +1118,7 @@ def calculate_loaded(
             and structure_review.get("inputs", {}).get("structure_audit_file_sha256")
             == structure_artifact.get("sha256"),
             "structure_review_input_binding_mismatch",
-            "The V7 review does not bind the exact frozen structure audit used for calculation.",
+            "The V8 review does not bind the exact frozen structure audit used for calculation.",
         )
         supplemental_sha256 = structure_review.get("inputs", {}).get(
             "supplemental_architecture_review_file_sha256"
@@ -1101,7 +1127,7 @@ def calculate_loaded(
             v5.require(
                 supplemental_architecture_review_artifact is None,
                 "unexpected_supplemental_architecture_review_artifact",
-                "A V7 calculation cannot bind a supplemental architecture review that is absent from the structure-locator review.",
+                "A V8 calculation cannot bind a supplemental architecture review that is absent from the structure-locator review.",
             )
         else:
             v5.require(
@@ -1111,7 +1137,7 @@ def calculate_loaded(
                 and supplemental_architecture_review_artifact.get("schema_version")
                 == SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA,
                 "supplemental_architecture_review_binding_mismatch",
-                "The V7 structure-locator review does not bind the supplied supplemental architecture review.",
+                "The V8 structure-locator review does not bind the supplied supplemental architecture review.",
             )
             calculation_artifacts.append(
                 deepcopy(supplemental_architecture_review_artifact)
@@ -1141,7 +1167,7 @@ def calculate_loaded(
         selected: list[dict[str, Any]] = []
         for artifact in calculation_artifacts:
             role = artifact["role"]
-            include = any(
+            include = role == "policy" or any(
                 role == "chunk_manifest"
                 or (requested == "locator_audit" and role.startswith("locator_audit["))
                 or (requested == "missing_access_audit" and role.startswith("missing_access_audit["))
@@ -1184,7 +1210,7 @@ def calculate_loaded(
         "input_artifacts": calculation_artifacts,
         "diagnostic_item_grades": {
             "used_in_dimension_arithmetic": False,
-            "policy": "separate_non_additive_display_layer_same_scale_as_locator_credit",
+            "policy": "separate_non_additive_display_layer_independent_of_binary_rating_credit",
             "required_policy_version": ITEM_GRADING_POLICY,
             "expected_source_subjects": {
                 "count": len(ledgers["expected_subject_ids"]),
@@ -1251,22 +1277,22 @@ def calculate_loaded(
 
 def reliability_dimension(calculation: dict[str, Any]) -> dict[str, Any]:
     matches = [item for item in calculation.get("dimensions", []) if item.get("dimension_id") == "page_reference_reliability"]
-    v5.require(len(matches) == 1, "v7_reliability_dimension_required", "A V7 calculation must contain exactly one Page-reference Reliability dimension.")
+    v5.require(len(matches) == 1, "v8_reliability_dimension_required", "A V8 calculation must contain exactly one Page-reference Reliability dimension.")
     return matches[0]
 
 
 def load_structure_review(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    document = v5.load_json(path, "V7 structure-locator review")
+    document = v5.load_json(path, "V8 structure-locator review")
     v5.validate_schema_document(
         document,
         "structure-locator-review-v1.schema.json",
-        "V7 structure-locator review",
+        "V8 structure-locator review",
     )
     v5.require(
         document.get("review_sha256")
         == structure_review_hash(document, "review_sha256"),
         "structure_review_hash_mismatch",
-        "The V7 structure-locator review self-hash does not reconstruct.",
+        "The V8 structure-locator review self-hash does not reconstruct.",
     )
     validate_structure_locator_review_semantics(document)
     return document, {
@@ -1291,7 +1317,7 @@ def command_derive_structure_review(args: argparse.Namespace) -> None:
         v5.require(
             structure.get("schema_version") == "structure-audit-v5",
             "unsupported_structure_audit_schema",
-            "Current V7 scoring requires structure-audit-v5.",
+            "Current V8 scoring requires structure-audit-v5.",
         )
         v5.validate_schema_document(structure, "structure-audit-v5.schema.json", "Frozen structure audit")
         v5.require(
@@ -1299,7 +1325,7 @@ def command_derive_structure_review(args: argparse.Namespace) -> None:
                 output_path, {candidate_path, inventory_path, structure_path}
             ),
             "output_aliases_frozen_input",
-            "The V7 derived review must not overwrite a frozen artifact.",
+            "The V8 derived review must not overwrite a frozen artifact.",
         )
         review = derive_structure_locator_review(
             candidate,
@@ -1313,12 +1339,12 @@ def command_derive_structure_review(args: argparse.Namespace) -> None:
         v5.validate_schema_document(
             review,
             "structure-locator-review-v1.schema.json",
-            "Generated V7 structure-locator review",
+            "Generated V8 structure-locator review",
         )
         write_json(output_path, review)
         v5.emit(
             {
-                "command": "derive-v7-structure-locator-review",
+                "command": "derive-v8-structure-locator-review",
                 "ok": True,
                 "artifact_written": str(output_path),
                 "review_id": review["review_id"],
@@ -1332,7 +1358,7 @@ def command_derive_structure_review(args: argparse.Namespace) -> None:
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
         else:
             error = {"code": "file_error", "message": str(exc)}
-        v5.emit({"command": "derive-v7-structure-locator-review", "ok": False, "error": error}, 1)
+        v5.emit({"command": "derive-v8-structure-locator-review", "ok": False, "error": error}, 1)
 
 
 def command_preflight(args: argparse.Namespace) -> None:
@@ -1341,14 +1367,14 @@ def command_preflight(args: argparse.Namespace) -> None:
         raw_evaluation_id, raw_missing, raw_paths = raw_locator_state_requirements(config_path)
         if raw_missing:
             result = {
-                "command": "v7-calculation-sufficiency-preflight",
+                "command": "v8-calculation-sufficiency-preflight",
                 "ok": True,
                 "evaluation_id": raw_evaluation_id,
                 "target_rubric_version": RUBRIC_VERSION,
                 "target_calculation_profile": CALCULATION_PROFILE,
                 "sufficient": False,
                 "missing_requirements": raw_missing,
-                "aggregate_v7_score_available": False,
+                "aggregate_v8_score_available": False,
                 "source_reopened": False,
                 "prose_inference_used": False,
                 "frozen_evidence_mutated": False,
@@ -1359,8 +1385,10 @@ def command_preflight(args: argparse.Namespace) -> None:
                 write_json(output_path, result)
                 result["artifact_written"] = str(output_path)
             v5.emit(result)
-        loaded = load_v7_inputs(config_path)
+        loaded = load_v8_inputs(config_path)
         ledgers, base_missing = v5.preflight_loaded(loaded)
+        if ledgers is not None:
+            base_missing.extend(policy_identity_requirements(loaded, ledgers))
         fit_report = (
             locator_fit_preflight(
                 ledgers,
@@ -1369,7 +1397,7 @@ def command_preflight(args: argparse.Namespace) -> None:
             )
             if ledgers is not None
             else {
-                "schema_version": "subject-index-v7-locator-fit-preflight-v1",
+                "schema_version": "subject-index-v8-locator-fit-preflight-v1",
                 "deterministically_compatible": [],
                 "unresolved_complete_path_fit": [],
                 "invalid_or_contradictory_state": [],
@@ -1383,7 +1411,7 @@ def command_preflight(args: argparse.Namespace) -> None:
                 "unresolved_set_sha256": v5.canonical_hash(
                     {"unresolved_locator_fit": []}
                 ),
-                "aggregate_v7_score_available": False,
+                "aggregate_v8_score_available": False,
                 "prose_inference_used": False,
                 "historical_artifacts_modified": False,
             }
@@ -1407,11 +1435,11 @@ def command_preflight(args: argparse.Namespace) -> None:
         public_fit_report = public_locator_fit_preflight(fit_report)
         v5.validate_schema_document(
             public_fit_report,
-            "v7-locator-fit-preflight.schema.json",
-            "V7 locator-fit preflight",
+            "v8-locator-fit-preflight.schema.json",
+            "V8 locator-fit preflight",
         )
         result = {
-            "command": "v7-calculation-sufficiency-preflight",
+            "command": "v8-calculation-sufficiency-preflight",
             "ok": True,
             "evaluation_id": loaded["config"]["evaluation_id"],
             "target_rubric_version": RUBRIC_VERSION,
@@ -1419,7 +1447,7 @@ def command_preflight(args: argparse.Namespace) -> None:
             "sufficient": not missing,
             "missing_requirements": missing,
             "locator_fit_preflight": public_fit_report,
-            "aggregate_v7_score_available": False,
+            "aggregate_v8_score_available": False,
             "required_locator_fields": ["judgment", "treatment_class", "source_scope_status", "error_codes", "severity", "applicable_structured_defects"],
             "source_reopened": False,
             "prose_inference_used": False,
@@ -1433,12 +1461,12 @@ def command_preflight(args: argparse.Namespace) -> None:
         v5.emit(result)
     except (OSError, v5.CalculationError) as exc:
         error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, v5.CalculationError) else {"code": "file_error", "message": str(exc)}
-        v5.emit({"command": "v7-calculation-sufficiency-preflight", "ok": False, "error": error}, 1)
+        v5.emit({"command": "v8-calculation-sufficiency-preflight", "ok": False, "error": error}, 1)
 
 
 def command_calculate(args: argparse.Namespace) -> None:
     try:
-        loaded = load_v7_inputs(Path(args.input).resolve())
+        loaded = load_v8_inputs(Path(args.input).resolve())
         review_path = Path(args.structure_locator_review).resolve()
         review, review_artifact = load_structure_review(review_path)
         result = calculate_loaded(
@@ -1446,24 +1474,24 @@ def command_calculate(args: argparse.Namespace) -> None:
             structure_review=review,
             structure_review_artifact=review_artifact,
         )
-        v5.validate_schema_document(result, "dimension-calculations-v4.schema.json", "Generated V7 dimension calculations")
+        v5.validate_schema_document(result, "dimension-calculations-v5.schema.json", "Generated V8 dimension calculations")
         if args.output:
             output_path = Path(args.output).resolve()
             v5.require(not v5.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Calculation output must not overwrite frozen evidence.")
             write_json(output_path, result)
-            response = {"command": "calculate-v7-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "total_score": result["total_score"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
+            response = {"command": "calculate-v8-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "total_score": result["total_score"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
         else:
-            response = {"command": "calculate-v7-dimensions", "ok": True, **result}
+            response = {"command": "calculate-v8-dimensions", "ok": True, **result}
         v5.emit(response)
     except (OSError, v5.CalculationError) as exc:
         error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, v5.CalculationError) else {"code": "file_error", "message": str(exc)}
-        v5.emit({"command": "calculate-v7-dimensions", "ok": False, "error": error}, 1)
+        v5.emit({"command": "calculate-v8-dimensions", "ok": False, "error": error}, 1)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    preflight = subparsers.add_parser("preflight", help="Report exact V7 two-axis calculation sufficiency.")
+    preflight = subparsers.add_parser("preflight", help="Report exact V8 diagnostic-and-rating calculation sufficiency.")
     preflight.add_argument("--input", required=True)
     preflight.add_argument("--output")
     preflight.set_defaults(func=command_preflight)
@@ -1477,7 +1505,7 @@ def build_parser() -> argparse.ArgumentParser:
     derive.add_argument("--audit-mode", required=True, choices=("full", "pilot"))
     derive.add_argument("--output", required=True)
     derive.set_defaults(func=command_derive_structure_review)
-    calculate = subparsers.add_parser("calculate", help="Derive all six V7 ratings from frozen ledgers.")
+    calculate = subparsers.add_parser("calculate", help="Derive all six V8 ratings from frozen ledgers.")
     calculate.add_argument("--input", required=True)
     calculate.add_argument("--structure-locator-review", required=True)
     calculate.add_argument("--output")

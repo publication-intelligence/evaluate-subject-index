@@ -1,4 +1,4 @@
-"""Live item-inventory and V7 projection helpers."""
+"""Live item-inventory and V8 projection helpers."""
 
 from __future__ import annotations
 

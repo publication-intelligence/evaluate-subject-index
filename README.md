@@ -1,6 +1,6 @@
 # Evaluate Subject Index
 
-A source-grounded, current-V7 workflow for evaluating a finished subject index.
+A source-grounded, current-V8 workflow for evaluating a finished subject index.
 
 The repository separates four questions:
 
@@ -9,7 +9,7 @@ The repository separates four questions:
 3. Can readers reach every required subject?
 4. Does the whole index form a coherent navigation system?
 
-Validated ledgers feed deterministic V7 scoring and report projection.
+Validated ledgers feed deterministic V8 scoring and report projection.
 
 ## Setup
 
@@ -19,14 +19,14 @@ python -m pip install -r requirements.txt
 
 ## Current workflow
 
-The canonical run is `evaluation-state.json` (state schema V5). It is the only control inventory; there is no artifact manifest.
+The canonical run is `evaluation-state.json` (state schema V6). It is the only control inventory; there is no artifact manifest.
 
 ```text
 initialize → page map → chunks → policy
   → source discovery → benchmark synthesis/review/freeze
   → candidate normalization → locator packets
   → locator audit → missing-access audit → structure audit
-  → V7 scoring → web report
+  → V8 scoring → web report
 ```
 
 Important helpers:
@@ -35,8 +35,8 @@ Important helpers:
 - `bundle_cli.py` — optional recovery checkpoints and imports.
 - `candidate_preparation_cli.py` — normalize, validate, and register a contract-valid candidate.
 - `parallel_candidate_audit_cli.py` — validate/register audit chunks returned by separate chats.
-- `dimension_score_v7_cli.py` — current V7 preflight, structure review, and calculation.
-- `item_grade_v7_cli.py` — current V7 item projection.
+- `dimension_score_v8_cli.py` — current V8 preflight, structure review, and calculation.
+- `item_grade_v8_cli.py` — current V8 item projection.
 
 See [SKILL.md](evaluate-subject-index/SKILL.md) and [workflow.md](evaluate-subject-index/references/workflow.md) for the operating contract.
 
@@ -83,7 +83,7 @@ Chunk workers return current-schema JSON artifacts. The coordinator validates an
 
 ## Compatibility policy
 
-Only the current V7 workflow is exposed. Historical V4–V6 migration commands and compatibility tests have been removed. Broad schema consolidation is intentionally deferred while a TypeScript migration is evaluated.
+Only the current V8 workflow is exposed. Existing frozen evaluations must be newly instantiated and frozen under the V8 policy; historical migration commands and aliases are not provided.
 
 ## Test
 

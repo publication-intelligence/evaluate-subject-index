@@ -13,8 +13,8 @@ from typing import Any
 from schema_validation import schema_errors
 
 
-POLICY_SCHEMA = "subject-index-evaluation-policy-v3"
-POLICY_PROFILE = "subject-index-standard-policy-v7"
+POLICY_SCHEMA = "subject-index-evaluation-policy-v4"
+POLICY_PROFILE = "subject-index-standard-policy-v8"
 
 DEFAULT_INCLUDED = [
     "preparation-approved indexable content",
@@ -37,16 +37,16 @@ DEFAULT_EXCLUDED = [
 ]
 
 POLICY_AREAS = {
-    "scope_compliance": "standard-policy-v7.md#locator-utility",
-    "substantive_coverage": "standard-policy-v7.md#locator-utility",
-    "editorial_selectivity": "standard-policy-v7.md#locator-utility",
-    "conceptual_stance_fidelity": "standard-policy-v7.md#locator-utility",
-    "heading_access_architecture": "standard-policy-v7.md#locator-strings-and-ranges",
-    "locator_quality": "standard-policy-v7.md#locator-utility",
-    "compound_heading_scope": "standard-policy-v7.md#locator-utility",
-    "cross_references": "standard-policy-v7.md#locator-utility",
-    "whole_index_coherence": "standard-policy-v7.md#locator-strings-and-ranges",
-    "mechanical_validity": "standard-policy-v7.md#locator-strings-and-ranges",
+    "scope_compliance": "standard-policy-v8.md#locator-utility",
+    "substantive_coverage": "standard-policy-v8.md#locator-utility",
+    "editorial_selectivity": "standard-policy-v8.md#locator-utility",
+    "conceptual_stance_fidelity": "standard-policy-v8.md#locator-utility",
+    "heading_access_architecture": "standard-policy-v8.md#locator-strings-and-ranges",
+    "locator_quality": "standard-policy-v8.md#locator-utility",
+    "compound_heading_scope": "standard-policy-v8.md#locator-utility",
+    "cross_references": "standard-policy-v8.md#locator-utility",
+    "whole_index_coherence": "standard-policy-v8.md#locator-strings-and-ranges",
+    "mechanical_validity": "standard-policy-v8.md#locator-strings-and-ranges",
 }
 
 STAGE_APPLICATION = {
@@ -243,7 +243,7 @@ def build_policy(source: dict[str, Any], standard_path: Path) -> dict[str, Any]:
         "policy_sha256": None,
     }
     policy["policy_sha256"] = canonical_hash(policy, "policy_sha256")
-    errors = schema_errors(policy, "evaluation-policy-v3.schema.json")
+    errors = schema_errors(policy, "evaluation-policy-v4.schema.json")
     if errors:
         raise ValueError("Generated policy is structurally invalid: " + "; ".join(errors))
     return policy
@@ -252,7 +252,7 @@ def build_policy(source: dict[str, Any], standard_path: Path) -> dict[str, Any]:
 def command_build(args: argparse.Namespace) -> None:
     input_path = Path(args.input)
     output_path = Path(args.output)
-    standard_path = Path(args.standard_policy) if args.standard_policy else Path(__file__).resolve().parents[1] / "references" / "standard-policy-v7.md"
+    standard_path = Path(args.standard_policy) if args.standard_policy else Path(__file__).resolve().parents[1] / "references" / "standard-policy-v8.md"
     try:
         source = read_input(input_path)
         policy = build_policy(source, standard_path)

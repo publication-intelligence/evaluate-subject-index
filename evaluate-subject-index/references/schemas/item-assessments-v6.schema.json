@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "item-assessments-v5.schema.json",
-  "title": "V7 two-axis diagnostic item assessments",
+  "$id": "item-assessments-v6.schema.json",
+  "title": "V8 diagnostic item assessments with binary keep credit",
   "type": "object",
   "required": ["schema_version", "grading_policy", "evaluation_id", "candidate_id", "candidate_sha256", "item_inventory_sha256", "item_inventory_artifact", "evidence_identity", "assessment_completeness", "audit_mode", "scope_complete", "grade_disclosure", "explanation_contract", "locator_grading_provenance", "structure_locator_review_binding", "color_legend", "locator_assessments", "path_assessments", "heading_node_assessments", "cross_reference_assessments", "source_subject_assessments", "summary"],
   "properties": {
-    "schema_version": {"const": "subject-index-item-assessments-v5"},
-    "grading_policy": {"const": "subject-index-item-grading-v3"},
+    "schema_version": {"const": "subject-index-item-assessments-v6"},
+    "grading_policy": {"const": "subject-index-item-grading-v4"},
     "evaluation_id": {"type": "string", "minLength": 1},
     "candidate_id": {"type": "string", "minLength": 1},
     "candidate_sha256": {"$ref": "#/$defs/sha256"},
@@ -21,7 +21,7 @@
       "type": "object",
       "required": ["contract_version", "authored_evidence_is_primary", "prose_used_in_scoring", "legacy_compatibility_mode"],
       "properties": {
-        "contract_version": {"const": "locator-explanations-v1"},
+        "contract_version": {"const": "locator-explanations-v2"},
         "authored_evidence_is_primary": {"const": true},
         "prose_used_in_scoring": {"const": false},
         "legacy_compatibility_mode": {"type": "boolean"}
@@ -30,20 +30,22 @@
     },
     "locator_grading_provenance": {
       "type": "object",
-      "required": ["model", "page_treatment_mapping", "complete_path_fit_mapping", "combination_rule", "diagnostic_grade_rule", "calculation_credit_ledger_sha256", "diagnostic_grades_used_in_dimension_arithmetic", "selectivity_mapping_unchanged", "weak_presence_selectivity_credit", "counts_by_treatment_tier", "counts_by_fit_tier", "counts_by_combined_credit_value"],
+      "required": ["model", "page_treatment_mapping", "complete_path_fit_mapping", "diagnostic_combination_rule", "diagnostic_grade_rule", "rating_credit_rule", "calculation_locator_utility_ledger_sha256", "diagnostic_grades_used_in_dimension_arithmetic", "selectivity_mapping_unchanged", "weak_presence_selectivity_credit", "counts_by_treatment_tier", "counts_by_fit_tier", "counts_by_diagnostic_credit_value", "counts_by_rating_credit_value"],
       "properties": {
-        "model": {"const": "two_axis_independent_ceilings_minimum_v1"},
+        "model": {"const": "two_axis_diagnostic_minimum_with_binary_keep_credit_v1"},
         "page_treatment_mapping": {"type": "object"},
         "complete_path_fit_mapping": {"type": "object"},
-        "combination_rule": {"const": "min(page_treatment_score, complete_path_fit_score)"},
-        "diagnostic_grade_rule": {"const": "100 * combined_credit"},
-        "calculation_credit_ledger_sha256": {"$ref": "#/$defs/sha256"},
+        "diagnostic_combination_rule": {"const": "min(page_treatment_score, complete_path_fit_score)"},
+        "diagnostic_grade_rule": {"const": "100 * diagnostic_credit"},
+        "rating_credit_rule": {"const": "supported=1; partially_supported=0; unsupported=0; uninspectable/not_measured=null"},
+        "calculation_locator_utility_ledger_sha256": {"$ref": "#/$defs/sha256"},
         "diagnostic_grades_used_in_dimension_arithmetic": {"const": false},
         "selectivity_mapping_unchanged": {"const": true},
         "weak_presence_selectivity_credit": {"const": 0},
-        "counts_by_treatment_tier": {"$ref": "dimension-calculations-v4.schema.json#/$defs/treatmentTierCounts"},
-        "counts_by_fit_tier": {"$ref": "dimension-calculations-v4.schema.json#/$defs/fitTierCounts"},
-        "counts_by_combined_credit_value": {"$ref": "dimension-calculations-v4.schema.json#/$defs/combinedCreditCounts"}
+        "counts_by_treatment_tier": {"$ref": "dimension-calculations-v5.schema.json#/$defs/treatmentTierCounts"},
+        "counts_by_fit_tier": {"$ref": "dimension-calculations-v5.schema.json#/$defs/fitTierCounts"},
+        "counts_by_diagnostic_credit_value": {"$ref": "dimension-calculations-v5.schema.json#/$defs/diagnosticCreditCounts"},
+        "counts_by_rating_credit_value": {"$ref": "dimension-calculations-v5.schema.json#/$defs/ratingCreditCounts"}
       },
       "additionalProperties": false
     },
@@ -57,8 +59,8 @@
       },
       "additionalProperties": false
     },
-    "locator_fit_compatibility": {"description": "Projected score-free compatibility and unresolved-fit provenance; conflict supplementation never rewrites the locator's historical non-fit fields.", "$ref": "dimension-calculations-v4.schema.json#/properties/locator_fit_compatibility"},
-    "locator_fit_supplement": {"$ref": "dimension-calculations-v4.schema.json#/properties/locator_fit_supplement"},
+    "locator_fit_compatibility": {"description": "Projected score-free compatibility and unresolved-fit provenance; conflict supplementation never rewrites the locator's historical non-fit fields.", "$ref": "dimension-calculations-v5.schema.json#/properties/locator_fit_compatibility"},
+    "locator_fit_supplement": {"$ref": "dimension-calculations-v5.schema.json#/properties/locator_fit_supplement"},
     "color_legend": {"$ref": "item-assessments.schema.json#/properties/color_legend"},
     "locator_assessments": {
       "type": "array",
@@ -71,8 +73,8 @@
             "properties": {
               "locator_id": {"type": "string", "pattern": "^LOC-"},
               "path_id": {"type": "string", "pattern": "^PATH-"},
-              "dimension_reliability_credit": {"enum": ["1", "0.7", "0.35", "0.25", "0.15", "0", null]},
-              "locator_utility": {"$ref": "dimension-calculations-v4.schema.json#/$defs/utilityAssignment"},
+              "dimension_reliability_credit": {"enum": ["1", "0", null]},
+              "locator_utility": {"$ref": "dimension-calculations-v5.schema.json#/$defs/utilityAssignment"},
               "locator_explanation": {"$ref": "#/$defs/locatorExplanation"}
             }
           }
@@ -117,14 +119,14 @@
     },
     "locatorExplanation": {
       "type": "object",
-      "required": ["locator_id", "path_id", "evidence_summary", "page_treatment", "complete_path_fit", "combined_locator_utility", "evidence_ids", "structured_defect_ids", "fit_rationale_required"],
+      "required": ["locator_id", "path_id", "evidence_summary", "page_treatment", "complete_path_fit", "diagnostic_locator_grade", "keep_rating_credit", "evidence_ids", "structured_defect_ids", "fit_rationale_required"],
       "properties": {
         "locator_id": {"type": "string", "pattern": "^LOC-"},
         "path_id": {"type": "string", "pattern": "^PATH-"},
         "evidence_summary": {"type": "string", "minLength": 1},
         "page_treatment": {"$ref": "#/$defs/axisExplanation"},
         "complete_path_fit": {"$ref": "#/$defs/axisExplanation"},
-        "combined_locator_utility": {
+        "diagnostic_locator_grade": {
           "type": "object",
           "required": ["rule_id", "calculation", "score", "credit"],
           "properties": {
@@ -132,6 +134,16 @@
             "calculation": {"type": "string", "minLength": 1},
             "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
             "credit": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        },
+        "keep_rating_credit": {
+          "type": "object",
+          "required": ["keep_decision", "rule_id", "credit"],
+          "properties": {
+            "keep_decision": {"type": "boolean"},
+            "rule_id": {"type": "string", "pattern": "^R-[A-Z0-9-]+$"},
+            "credit": {"enum": ["1", "0", null]}
           },
           "additionalProperties": false
         },

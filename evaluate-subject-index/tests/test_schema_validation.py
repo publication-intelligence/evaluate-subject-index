@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
+
+from jsonschema import Draft202012Validator
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +15,35 @@ from schema_validation import schema_errors
 
 
 class SharedSchemaValidationTests(unittest.TestCase):
+    def test_v8_identity_contracts_reject_retired_identities(self) -> None:
+        cases = [
+            ("dimension-calculations-v5.schema.json", "subject-index-dimension-calculations-v5", "subject-index-dimension-calculations-v4"),
+            ("item-assessments-v6.schema.json", "subject-index-item-assessments-v6", "subject-index-item-assessments-v5"),
+            ("evaluation-result-v10.schema.json", "subject-index-evaluation-result-v10", "subject-index-evaluation-result-v9"),
+            ("evaluation-state.schema.json", "subject-index-evaluation-state-v6", "subject-index-evaluation-state-v5"),
+            ("web-report-v8.schema.json", "subject-index-web-report-v8", "subject-index-web-report-v7"),
+            ("evaluation-policy-v4.schema.json", "subject-index-evaluation-policy-v4", "subject-index-evaluation-policy-v3"),
+            ("dimension-calculation-input.schema.json", "subject-index-dimension-calculation-input-v2", "subject-index-dimension-calculation-input-v1"),
+            ("v8-projection-metadata-v1.schema.json", "subject-index-v8-projection-metadata-v1", "subject-index-v7-projection-metadata-v2"),
+            ("v8-locator-fit-preflight.schema.json", "subject-index-v8-locator-fit-preflight-v1", "subject-index-v7-locator-fit-preflight-v1"),
+        ]
+        schema_root = ROOT / "references" / "schemas"
+        for filename, current, retired in cases:
+            with self.subTest(filename=filename):
+                schema = json.loads((schema_root / filename).read_text())
+                validator = Draft202012Validator(schema["properties"]["schema_version"])
+                self.assertTrue(validator.is_valid(current))
+                self.assertFalse(validator.is_valid(retired))
+
+    def test_v8_native_result_and_report_have_no_migration_requirement(self) -> None:
+        schema_root = ROOT / "references" / "schemas"
+        result_schema = json.loads((schema_root / "evaluation-result-v10.schema.json").read_text())
+        report_schema = json.loads((schema_root / "web-report-v8.schema.json").read_text())
+        self.assertNotIn("score_migration", result_schema["required"])
+        self.assertNotIn("score_migration", result_schema["properties"])
+        self.assertNotIn("migration_comparison", report_schema["required"])
+        self.assertNotIn("migration_comparison", report_schema["properties"])
+
     def test_locator_audit_nested_shape_is_owned_by_schema(self) -> None:
         audit = {
             "schema_version": "locator-audit-v2",
@@ -26,9 +58,10 @@ class SharedSchemaValidationTests(unittest.TestCase):
                 "document_page": 1,
                 "source_page_label": "1",
                 "source_scope_status": "indexable",
-                "treatment_class": "substantive",
+                "treatment_class": "mixed",
                 "judgment": "supported",
-                "evidence_summary": "Supported by the cited page.",
+                "evidence_summary": "Supported with meaningful but mixed treatment.",
+                "fit_rationale": "The complete heading path fits the independently useful fact exactly.",
                 "evidence_ids": ["EVID-1"],
                 "confidence": "high",
                 "error_codes": [],

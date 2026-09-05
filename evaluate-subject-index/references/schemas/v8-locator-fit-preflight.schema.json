@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "v7-locator-fit-preflight.schema.json",
-  "title": "V7 locator complete-path-fit preflight",
+  "$id": "v8-locator-fit-preflight.schema.json",
+  "title": "V8 locator complete-path-fit preflight",
   "description": "Score-free classification of each frozen locator into one and only one deterministic, supplement-eligible unresolved, or invalid state.",
   "type": "object",
-  "required": ["schema_version", "deterministically_compatible", "unresolved_complete_path_fit", "invalid_or_contradictory_state", "compatibility_classifications", "group_counts", "unresolved_reason_counts", "unresolved_set_sha256", "aggregate_v7_score_available", "prose_inference_used", "historical_artifacts_modified"],
+  "required": ["schema_version", "deterministically_compatible", "unresolved_complete_path_fit", "invalid_or_contradictory_state", "compatibility_classifications", "group_counts", "unresolved_reason_counts", "unresolved_set_sha256", "aggregate_v8_score_available", "prose_inference_used", "historical_artifacts_modified"],
   "properties": {
-    "schema_version": {"const": "subject-index-v7-locator-fit-preflight-v1"},
+    "schema_version": {"const": "subject-index-v8-locator-fit-preflight-v1"},
     "deterministically_compatible": {
       "type": "array",
       "items": {"$ref": "#/$defs/deterministicFit"}
@@ -26,7 +26,7 @@
     "group_counts": {"$ref": "#/$defs/groupCounts"},
     "unresolved_reason_counts": {"$ref": "#/$defs/unresolvedReasonCounts"},
     "unresolved_set_sha256": {"$ref": "#/$defs/sha256"},
-    "aggregate_v7_score_available": {"const": false},
+    "aggregate_v8_score_available": {"const": false},
     "prose_inference_used": {"const": false},
     "historical_artifacts_modified": {"const": false}
   },

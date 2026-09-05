@@ -1,4 +1,4 @@
-# Current V7 commands
+# Current V8 commands
 
 All paths below are examples. Use absolute paths or run from a stable evaluation directory.
 
@@ -12,7 +12,7 @@ python scripts/state_cli.py validate --state evaluation-state.json
 python scripts/state_cli.py set-stage --state evaluation-state.json ...
 ```
 
-State V5 is the only control inventory.
+State V6 is the only control inventory.
 
 ## Checkpoint and resume
 
@@ -54,18 +54,18 @@ python scripts/parallel_discovery_cli.py register-discoveries ...
 ## Scoring
 
 ```bash
-python scripts/dimension_score_v7_cli.py preflight --input dimension-calculation-input.json
-python scripts/dimension_score_v7_cli.py derive-structure-review \
+python scripts/dimension_score_v8_cli.py preflight --input dimension-calculation-input.json
+python scripts/dimension_score_v8_cli.py derive-structure-review \
   --normalized-candidate candidate-index.json \
   --item-inventory item-inventory.json \
   --structure-audit structure-audit.json \
   --audit-mode full \
   --output structure-locator-review.json
-python scripts/dimension_score_v7_cli.py calculate \
+python scripts/dimension_score_v8_cli.py calculate \
   --input dimension-calculation-input.json \
   --structure-locator-review structure-locator-review.json \
   --output dimension-calculations.json
-python scripts/item_grade_v7_cli.py build-assessments \
+python scripts/item_grade_v8_cli.py build-assessments \
   --base-items base-item-assessments.json \
   --calculation dimension-calculations.json \
   --structure-locator-review structure-locator-review.json \

@@ -1,24 +1,24 @@
 ---
 name: evaluate-subject-index
-description: Run a repeatable, source-grounded V7 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
+description: Run a repeatable, source-grounded V8 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
 ---
 
 # Evaluate Subject Index
 
-Evaluate one finished subject index against its source and a frozen policy. Use only the current V7 workflow; this skill does not migrate or validate historical V4–V6 evaluations.
+Evaluate one finished subject index against its source and a frozen policy. Use only the current V8 workflow; this skill does not migrate or reinterpret historical evaluations.
 
 ## Method
 
 1. Map one-based document pages to source page labels. Store labels as strings and require the user to approve chunk boundaries.
-2. Freeze the standard V7 policy, then discover source subjects before exposing the candidate index to the discovery context.
+2. Freeze the standard V8 policy, then discover source subjects before exposing the candidate index to the discovery context.
 3. Synthesize, independently review, and freeze the candidate-blind benchmark.
 4. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments from the published layout contract.
 5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.
 6. Judge global structure only after the locator and missing-access ledgers are complete.
-7. Calculate the six V7 dimensions from validated ledgers. Do not ask a model to maintain arithmetic or workflow state.
+7. Calculate the six V8 dimensions from validated ledgers. Do not ask a model to maintain arithmetic or workflow state.
 8. Produce structured JSON and a web-report projection.
 
-Use [standard-policy-v7.md](references/standard-policy-v7.md), [judgment-policy-v7.md](references/judgment-policy-v7.md), and [rubric-v7.md](references/rubric-v7.md) for substantive decisions. Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
+Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-v8.md](references/judgment-policy-v8.md), and [rubric-v8.md](references/rubric-v8.md) for substantive decisions. Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
 
 ## Current command surface
 
@@ -29,7 +29,7 @@ Use [standard-policy-v7.md](references/standard-policy-v7.md), [judgment-policy-
 - `scripts/benchmark_review_cli.py`: benchmark screening, independent review, and freeze validation.
 - `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
 - `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
-- `scripts/dimension_score_v7_cli.py` and `scripts/item_grade_v7_cli.py`: current deterministic V7 calculation and projection.
+- `scripts/dimension_score_v8_cli.py` and `scripts/item_grade_v8_cli.py`: current deterministic V8 calculation and projection.
 - `scripts/bundle_cli.py`: optional checkpoints, exports, artifact listing, and resume imports.
 - `scripts/worker_prompt_cli.py`: render locator-worker prompt packs from a structurally valid checkpoint.
 
@@ -61,7 +61,7 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 
 ## Scoring
 
-Native V7 uses `structure-audit-v5`, `locator-audit-v2`, `subject-index-dimension-calculations-v4`, `subject-index-item-assessments-v5`, result V9, and web report V7. Page treatment and complete-path fit are independent axes combined with `min(T,F)`. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
+Native V8 uses evaluation-policy V4, state V6, `structure-audit-v5`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V6, result V10, and web report V8. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
 
 This repository intentionally exposes no legacy migration commands or compatibility workflow. Runtime commands and schemas cover the current workflow only.
 
@@ -91,6 +91,6 @@ Represent `not_measured`, `uninspectable`, and `uncertain` explicitly rather tha
 - [parallel-candidate-audits.md](references/parallel-candidate-audits.md)
 - [benchmark-review.md](references/benchmark-review.md)
 - [page-mapping-and-chunks.md](references/page-mapping-and-chunks.md)
-- [structure-audit-v7.md](references/structure-audit-v7.md)
-- [customer-methodology-v7.md](references/customer-methodology-v7.md)
-- [json-contracts-v7.md](references/json-contracts-v7.md)
+- [structure-audit-v8.md](references/structure-audit-v8.md)
+- [customer-methodology-v8.md](references/customer-methodology-v8.md)
+- [json-contracts-v8.md](references/json-contracts-v8.md)

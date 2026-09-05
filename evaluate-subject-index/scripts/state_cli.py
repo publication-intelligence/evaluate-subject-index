@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Track one current V7 subject-index evaluation in one atomic state file."""
+"""Track one current V8 subject-index evaluation in one atomic state file."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ REQUIRED_INPUTS = {
     "initialize": ["source file", "source title", "document-page span"],
     "page_mapping": ["source page-label mapping"],
     "chunk_definition": ["expanded page map", "approved chunk ranges"],
-    "define_policy": ["source facts", "page map", "chunk manifest", "standard V7 policy"],
+    "define_policy": ["source facts", "page map", "chunk manifest", "standard V8 policy"],
     "source_chunk_preparation": ["source PDF", "page map", "chunk manifest"],
     "source_subject_discovery": ["source chunks", "sidecars", "policy"],
     "benchmark_synthesis": ["all source-subject chunks"],
@@ -52,20 +52,20 @@ REQUIRED_INPUTS = {
     "locator_audit": ["locator packets", "source chunks"],
     "missing_access_audit": ["benchmark", "normalized candidate", "locator audits"],
     "structure_audit": ["complete candidate audits", "normalized index"],
-    "scoring": ["complete V7 audit ledgers"],
-    "web_report": ["validated V7 result", "V7 item assessments"],
+    "scoring": ["complete V8 audit ledgers"],
+    "web_report": ["validated V8 result", "V8 item assessments"],
 }
-COMPLETION_TESTS = {name: f"A current V7 {name.replace('_', ' ')} artifact is registered." for name in STAGES}
+COMPLETION_TESTS = {name: f"A current V8 {name.replace('_', ' ')} artifact is registered." for name in STAGES}
 COMPLETION_TESTS["initialize"] = "The state file and source identity are recorded."
 
 VALID_STATUSES = {"not_started", "in_progress", "completed", "blocked"}
 VALID_VISIBILITY = {"public", "private", "restricted"}
 VALID_RETENTION = {"required", "cache"}
-STATE_SCHEMA_VERSION = "subject-index-evaluation-state-v5"
-SCORE_RUBRIC_VERSION = "subject-index-rubric-v7"
-DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v3"
-SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v9"
-WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v7"
+STATE_SCHEMA_VERSION = "subject-index-evaluation-state-v6"
+SCORE_RUBRIC_VERSION = "subject-index-rubric-v8"
+DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
+SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v10"
+WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v8"
 
 
 def now() -> str:
@@ -187,7 +187,7 @@ def validate_state(
     configuration = state["configuration"]
     expected_identity = {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE}
     if configuration.get("scoring_identity") != expected_identity:
-        errors.append("configuration.scoring_identity must select the current V7 profile.")
+        errors.append("configuration.scoring_identity must select the current V8 profile.")
 
     stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
     completed_prefix = True
@@ -315,7 +315,7 @@ def command_init(args: argparse.Namespace) -> None:
             "intended_readership": args.intended_readership,
             "readership_provenance": {"basis": args.readership_basis, "confidence": args.readership_confidence, "rationale": args.readership_rationale},
             "output_format": "json", "storage_mode": args.storage_mode,
-            "policy_profile": "subject-index-standard-policy-v7", "rubric_version": SCORE_RUBRIC_VERSION,
+            "policy_profile": "subject-index-standard-policy-v8", "rubric_version": SCORE_RUBRIC_VERSION,
             "scoring_identity": {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE},
         },
         "stages": stages, "artifacts": [], "blockers": [],
@@ -371,7 +371,7 @@ def command_set_stage(args: argparse.Namespace) -> None:
                 schema_version = document.get("schema_version")
         required_schema = _completion_schema(args.stage) if args.status == "completed" else None
         if required_schema and schema_version != required_schema:
-            fail("current_v7_artifact_required", f"Completing {args.stage} requires {required_schema}.", {"actual": schema_version})
+            fail("current_v8_artifact_required", f"Completing {args.stage} requires {required_schema}.", {"actual": schema_version})
         record = {
             "artifact_id": artifact_id(relative, digest), "stage": args.stage,
             "artifact_type": args.artifact_type or local.stem, "path": relative, "sha256": digest,
@@ -416,7 +416,7 @@ def command_adopt_standard_policy(args: argparse.Namespace) -> None:
     if args.intended_readership:
         configuration["intended_readership"] = args.intended_readership
     configuration["readership_provenance"] = {"basis": args.readership_basis, "confidence": args.readership_confidence, "rationale": args.readership_rationale}
-    configuration["policy_profile"] = "subject-index-standard-policy-v7"
+    configuration["policy_profile"] = "subject-index-standard-policy-v8"
     configuration["rubric_version"] = SCORE_RUBRIC_VERSION
     configuration["scoring_identity"] = {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE}
     state["updated_at"] = now()

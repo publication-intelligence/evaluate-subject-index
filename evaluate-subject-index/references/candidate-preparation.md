@@ -21,7 +21,7 @@ Convert the supplied subject index mechanically into candidate-layout-extraction
 3. `validate-private` checks full fidelity and denominator accounting.
 4. `register` validates the preparation again, records the final benchmark lock, copies no publication evidence, and advances `candidate_normalization` in `evaluation-state.json`.
 
-The current contract uses `candidate-index-v2`, `subject-index-item-inventory-v2`, and evaluation state V5. Superseded preparation formats are not accepted.
+The current contract uses `candidate-index-v2`, `subject-index-item-inventory-v2`, and evaluation state V6. Superseded preparation formats are not accepted.
 
 ## Separation from judgment
 

@@ -1,4 +1,4 @@
-# Customer methodology — V7
+# Customer methodology — V8
 
 The evaluation compares a finished subject index with its source using a benchmark prepared without seeing the candidate index. It reports six dimensions, evidence-backed findings, item-level explanations, and an overall result.
 
@@ -8,13 +8,15 @@ The evaluation compares a finished subject index with its source using a benchma
 2. Freeze the evaluation policy and source benchmark.
 3. Prepare the candidate index into normalized paths and atomic locator assignments.
 4. Audit locator support, missing access, structure, cross-references, and density.
-5. Calculate current V7 dimensions and render the report.
+5. Calculate current V8 dimensions and render the report.
 
 Parallel chats may process independent frozen chunks. Their output becomes canonical only after local validation and registration in `evaluation-state.json`.
 
 ## Reliability method
 
-Each locator receives two structured assessments: how much relevant treatment is present on the referenced page and how well the complete index path fits that treatment. The lower of those two credits is used, preventing one good axis from hiding a failure on the other. Expected-treatment recall is then combined with weighted locator precision using an F1 calculation.
+Each locator receives two diagnostic assessments: how much independently useful information is present and how well the complete index path fits it. Comparative or attributed wording does not reduce treatment by itself. The lower diagnostic score produces the displayed locator grade.
+
+Rating credit is separate: a locator marked `supported` is kept unchanged and receives full credit; any assessable locator not kept as delivered receives zero. Expected-treatment recall is combined with this binary keep precision using the unchanged F1 calculation.
 
 Free-text rationale explains structured decisions but never supplies a score. Uninspectable material is represented through explicit uncertainty rather than guessed.
 
@@ -26,4 +28,4 @@ A continuous page range counts as one displayed locator for scanning and subdivi
 
 The state file records the active configuration and artifact inventory. Hashes link related records and catch accidental mix-ups; they are not security attestations. Checkpoints are optional recovery snapshots and do not have to match an earlier archive checksum to resume.
 
-This repository supports the current V7 workflow only.
+This repository supports the current V8 workflow only. Existing frozen evaluations must be newly instantiated and frozen to use V8.

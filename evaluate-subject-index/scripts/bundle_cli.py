@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and resume lightweight checkpoints for a V7 evaluation."""
+"""Create and resume lightweight checkpoints for a V8 evaluation."""
 
 from __future__ import annotations
 

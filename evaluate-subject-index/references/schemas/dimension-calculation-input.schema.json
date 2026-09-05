@@ -1,25 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "dimension-calculation-input.schema.json",
-  "title": "V5 subject-index dimension calculation input",
+  "title": "V8 subject-index dimension calculation input",
   "type": "object",
   "required": ["schema_version", "evaluation_id", "audit_mode", "inputs"],
   "properties": {
-    "schema_version": {"const": "subject-index-dimension-calculation-input-v1"},
+    "schema_version": {"const": "subject-index-dimension-calculation-input-v2"},
     "evaluation_id": {"type": "string", "minLength": 1},
     "audit_mode": {"enum": ["full", "pilot"]},
     "inputs": {
       "type": "object",
-      "required": ["locator_audits", "missing_access_audits", "structure_audit"],
+      "required": ["policy", "locator_audits", "missing_access_audits", "structure_audit"],
       "properties": {
+        "policy": {"$ref": "#/$defs/artifactReference"},
         "chunk_manifest": {
           "$ref": "#/$defs/artifactReference",
           "description": "Canonical user-approved full-scope chunk manifest. Optional only so preflight can report its absence; calculation requires it."
         },
         "locator_audits": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifactReference"}},
         "missing_access_audits": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifactReference"}},
-        "structure_audit": {"$ref": "#/$defs/artifactReference"},
-        "migration_supplement": {"$ref": "#/$defs/artifactReference"}
+        "structure_audit": {"$ref": "#/$defs/artifactReference"}
       },
       "additionalProperties": false
     }

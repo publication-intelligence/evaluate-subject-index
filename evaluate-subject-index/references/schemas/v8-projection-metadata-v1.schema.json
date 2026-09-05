@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "v7-projection-metadata-v2.schema.json",
-  "title": "V7 result, web, and score-view projection metadata",
+  "$id": "v8-projection-metadata-v1.schema.json",
+  "title": "V8 result, web, and score-view projection metadata",
   "type": "object",
   "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_locator_review", "projection_metadata_sha256"],
   "properties": {
-    "schema_version": {"const": "subject-index-v7-projection-metadata-v2"},
+    "schema_version": {"const": "subject-index-v8-projection-metadata-v1"},
     "candidate_label": {"type": "string", "minLength": 1},
     "inclusion_policy": {"type": "string", "minLength": 1},
     "uncertainty_policy": {"type": "string", "minLength": 1},
@@ -49,7 +49,7 @@
       "properties": {
         "role": {"type": "string", "minLength": 1},
         "schema_version": {"type": "string", "minLength": 1},
-        "artifact_path": {"$ref": "score-migration.schema.json#/$defs/portablePath"},
+        "artifact_path": {"$ref": "#/$defs/portablePath"},
         "sha256": {"$ref": "#/$defs/sha256"}
       },
       "additionalProperties": false
@@ -58,12 +58,12 @@
       "type": "object",
       "required": ["schema_version", "artifact_path", "sha256", "calculation_sha256", "rubric_version", "calculation_profile"],
       "properties": {
-        "schema_version": {"const": "subject-index-dimension-calculations-v4"},
-        "artifact_path": {"$ref": "score-migration.schema.json#/$defs/portablePath"},
+        "schema_version": {"const": "subject-index-dimension-calculations-v5"},
+        "artifact_path": {"$ref": "#/$defs/portablePath"},
         "sha256": {"$ref": "#/$defs/sha256"},
         "calculation_sha256": {"$ref": "#/$defs/sha256"},
-        "rubric_version": {"const": "subject-index-rubric-v7"},
-        "calculation_profile": {"const": "subject-index-dimension-calculation-v3"}
+        "rubric_version": {"const": "subject-index-rubric-v8"},
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v4"}
       },
       "additionalProperties": false
     },
@@ -72,7 +72,7 @@
       "required": ["schema_version", "artifact_path", "sha256", "review_sha256"],
       "properties": {
         "schema_version": {"const": "subject-index-structure-locator-review-v1"},
-        "artifact_path": {"$ref": "score-migration.schema.json#/$defs/portablePath"},
+        "artifact_path": {"$ref": "#/$defs/portablePath"},
         "sha256": {"$ref": "#/$defs/sha256"},
         "review_sha256": {"$ref": "#/$defs/sha256"}
       },
@@ -84,7 +84,7 @@
       "required": ["schema_version", "artifact_path", "sha256", "supplement_id", "supplement_sha256", "unresolved_set_sha256", "decision_count"],
       "properties": {
         "schema_version": {"enum": ["subject-index-v7-locator-fit-supplement-v1", "subject-index-v7-locator-fit-supplement-v2"]},
-        "artifact_path": {"$ref": "score-migration.schema.json#/$defs/portablePath"},
+        "artifact_path": {"$ref": "#/$defs/portablePath"},
         "sha256": {"$ref": "#/$defs/sha256"},
         "supplement_id": {"type": "string", "pattern": "^FITSUP-[A-F0-9]{12}$"},
         "supplement_sha256": {"$ref": "#/$defs/sha256"},
@@ -92,7 +92,8 @@
         "decision_count": {"type": "integer", "minimum": 1}
       },
       "additionalProperties": false
-    }
+    },
+    "portablePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"}
   },
   "additionalProperties": false
 }

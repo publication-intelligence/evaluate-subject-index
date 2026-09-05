@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["schema_version", "evaluation_id", "source", "configuration", "stages", "artifacts", "blockers"],
   "properties": {
-    "schema_version": {"const": "subject-index-evaluation-state-v5"},
+    "schema_version": {"const": "subject-index-evaluation-state-v6"},
     "evaluation_id": {"type": "string", "minLength": 1},
     "created_at": {"type": "string"},
     "updated_at": {"type": "string"},
@@ -69,14 +69,14 @@
         },
         "output_format": {"const": "json"},
         "storage_mode": {"enum": ["local", "library", "hybrid"]},
-        "policy_profile": {"const": "subject-index-standard-policy-v7"},
-        "rubric_version": {"const": "subject-index-rubric-v7"},
+        "policy_profile": {"const": "subject-index-standard-policy-v8"},
+        "rubric_version": {"const": "subject-index-rubric-v8"},
         "scoring_identity": {
           "type": "object",
           "required": ["rubric_version", "dimension_calculation_profile"],
           "properties": {
-            "rubric_version": {"const": "subject-index-rubric-v7"},
-            "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v3"}
+            "rubric_version": {"const": "subject-index-rubric-v8"},
+            "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v4"}
           },
           "additionalProperties": false
         },

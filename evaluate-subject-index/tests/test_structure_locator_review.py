@@ -66,7 +66,7 @@ def candidate_from_specs(specs: list[tuple[str, int]]) -> dict:
         next_page += count + 2
     return {
         "schema_version": "candidate-index-v2",
-        "candidate_id": "CAND-V7-STRUCTURE",
+        "candidate_id": "CAND-CURRENT-STRUCTURE",
         "candidate_sha256": SHA,
         "page_map_sha256": "b" * 64,
         "records": [
@@ -95,7 +95,7 @@ def structure_for(candidate: dict, inventory: dict, defects: list[dict] | None =
     node_id = inventory["paths"][0]["node_ids"][-1]
     result = {
         "schema_version": "structure-audit-v5",
-        "evaluation_id": "EVAL-V7-STRUCTURE",
+        "evaluation_id": "EVAL-CURRENT-STRUCTURE",
         "candidate_sha256": candidate["candidate_sha256"],
         "v5_scoring_context": {"defects": defects or []},
         "node_judgments": [

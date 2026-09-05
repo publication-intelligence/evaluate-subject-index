@@ -241,7 +241,7 @@ def load_source_identities(
     require_schema(state, "evaluation-state.schema.json", "Evaluation state")
     require_schema(page_map, "page-map.schema.json", "Page map")
     require_schema(chunks, "chunk-manifest.schema.json", "Chunk manifest")
-    require_schema(policy, "evaluation-policy-v3.schema.json", "Evaluation policy")
+    require_schema(policy, "evaluation-policy-v4.schema.json", "Evaluation policy")
     validate_self_hash(page_map, "page_map_sha256", "Page map")
     validate_self_hash(chunks, "chunk_manifest_sha256", "Chunk manifest")
     validate_self_hash(policy, "policy_sha256", "Evaluation policy")
@@ -263,7 +263,7 @@ def load_source_identities(
     rubric_version = configuration.get("rubric_version")
     audit_mode = policy.get("audit_design", {}).get("mode")
     require(configuration.get("policy_profile") == policy_profile, "policy_identity_mismatch", "State and policy profile identities differ.")
-    require(rubric_version == "subject-index-rubric-v7", "rubric_identity_mismatch", "Candidate preparation requires the current V7 rubric identity.")
+    require(rubric_version == "subject-index-rubric-v8", "rubric_identity_mismatch", "Candidate preparation requires the current V8 rubric identity.")
     require(configuration.get("audit_mode") == audit_mode, "audit_mode_mismatch", "State and policy audit modes differ.")
     return {
         "state": state,

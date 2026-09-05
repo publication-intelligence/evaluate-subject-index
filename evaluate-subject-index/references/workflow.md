@@ -1,13 +1,13 @@
 # Workflow and state machine
 
-The current V7 evaluation uses one linear 16-stage state machine and one control file, `evaluation-state.json`.
+The current V8 evaluation uses one linear 16-stage state machine and one control file, `evaluation-state.json`.
 
 | Stage | Typical completion artifact |
 | --- | --- |
 | initialize | state and source identity |
 | page_mapping | expanded page map |
 | chunk_definition | approved chunk manifest |
-| define_policy | run-specific standard V7 policy |
+| define_policy | run-specific standard V8 policy |
 | source_chunk_preparation | chunk PDFs and sidecars |
 | source_subject_discovery | all source-subject chunks |
 | benchmark_synthesis | benchmark draft |
@@ -18,8 +18,8 @@ The current V7 evaluation uses one linear 16-stage state machine and one control
 | locator_audit | all locator-audit V2 chunks |
 | missing_access_audit | all missing-access chunks |
 | structure_audit | global structure-audit V5 |
-| scoring | V7 calculation, item assessments, result V9 |
-| web_report | web report V7 |
+| scoring | V8 calculation, item assessments, result V10 |
+| web_report | web report V8 |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.
 
@@ -68,4 +68,4 @@ Registering an updated judgment artifact makes it the current version in state. 
 
 ## Current-only policy
 
-Runtime commands accept the current V7 workflow. Historical migrations and backward-compatibility lanes are intentionally not part of this state machine. Broader schema consolidation remains deferred pending the possible TypeScript migration.
+Runtime commands accept the current V8 workflow. Historical migrations and backward-compatibility lanes are intentionally not part of this state machine.

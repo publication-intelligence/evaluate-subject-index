@@ -49,13 +49,25 @@ class StateAndCheckpointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             state_path = self.initialize(Path(temporary))
             state = json.loads(state_path.read_text())
-            self.assertEqual(state["schema_version"], "subject-index-evaluation-state-v5")
+            self.assertEqual(state["schema_version"], "subject-index-evaluation-state-v6")
             self.assertNotIn("artifact_manifest_path", state)
-            self.assertEqual(state["configuration"]["rubric_version"], "subject-index-rubric-v7")
+            self.assertEqual(state["configuration"]["rubric_version"], "subject-index-rubric-v8")
             self.assertEqual(
                 state["configuration"]["scoring_identity"]["dimension_calculation_profile"],
-                "subject-index-dimension-calculation-v3",
+                "subject-index-dimension-calculation-v4",
             )
+
+    def test_v5_state_identity_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            state_path = self.initialize(Path(temporary))
+            state = json.loads(state_path.read_text())
+            state["schema_version"] = "subject-index-evaluation-state-v5"
+            state_path.write_text(json.dumps(state))
+            validation = run_cli(
+                "state_cli.py", "validate", "--state", state_path, "--skip-files", ok=False
+            )
+            self.assertFalse(validation["ok"])
+            self.assertTrue(any("evaluation-state-v6" in error for error in validation["errors"]))
 
     def test_changed_registered_bytes_warn_without_blocking_resume(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

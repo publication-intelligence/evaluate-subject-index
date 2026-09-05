@@ -169,7 +169,7 @@ def load_frozen_inputs(args: argparse.Namespace, audit_kind: str) -> dict[str, A
     state = run["state"]
     page_map, page_map_bytes, page_map_file_sha = validate_json_identity_file(Path(args.page_map), "Page map", "page-map.schema.json", "page_map_sha256")
     chunks, chunk_bytes, chunk_file_sha = validate_json_identity_file(Path(args.chunk_manifest), "Chunk manifest", "chunk-manifest.schema.json", "chunk_manifest_sha256")
-    policy, policy_bytes, policy_file_sha = validate_json_identity_file(Path(args.policy), "Evaluation policy", "evaluation-policy-v3.schema.json", "policy_sha256")
+    policy, policy_bytes, policy_file_sha = validate_json_identity_file(Path(args.policy), "Evaluation policy", "evaluation-policy-v4.schema.json", "policy_sha256")
     benchmark, benchmark_bytes, benchmark_file_sha = validate_json_identity_file(Path(args.benchmark), "Frozen benchmark", "source-benchmark.schema.json", "benchmark_sha256")
     candidate, candidate_bytes, candidate_file_sha = validate_json_identity_file(Path(args.normalized_candidate), "Normalized candidate", "candidate-index-v2.schema.json")
     inventory, inventory_bytes, inventory_file_sha = validate_json_identity_file(Path(args.item_inventory), "Item inventory", "item-inventory-v2.schema.json")
@@ -843,7 +843,7 @@ def add_frozen_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--state", required=True, help="Canonical evaluation-state.json (v5).")
     parser.add_argument("--page-map", required=True, help="Frozen page-map-v1 JSON.")
     parser.add_argument("--chunk-manifest", required=True, help="Frozen chunk-manifest-v1 JSON.")
-    parser.add_argument("--policy", required=True, help="Frozen subject-index-evaluation-policy-v3 JSON.")
+    parser.add_argument("--policy", required=True, help="Frozen subject-index-evaluation-policy-v4 JSON.")
     parser.add_argument("--benchmark", required=True, help="Frozen source-subject-benchmark-v2 JSON.")
     parser.add_argument("--normalized-candidate", required=True, help="Integrated candidate-index-v2 JSON.")
     parser.add_argument("--item-inventory", required=True, help="Integrated item-inventory-v2 JSON.")

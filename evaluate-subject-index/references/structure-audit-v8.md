@@ -1,6 +1,6 @@
-# Structure audit — V7
+# Structure audit — V8
 
-Native V7 structure audits use `structure-audit-v5`.
+Native V8 structure audits use `structure-audit-v5`.
 
 For each complete path, retain three distinct quantities:
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build V7 diagnostic item projections from a frozen V7 calculation ledger."""
+"""Build V8 diagnostic item projections from a frozen V8 calculation ledger."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from structure_locator_review import (
 )
 
 
-SCHEMA_VERSION = "subject-index-item-assessments-v5"
-GRADING_POLICY = "subject-index-item-grading-v3"
+SCHEMA_VERSION = "subject-index-item-assessments-v6"
+GRADING_POLICY = "subject-index-item-grading-v4"
 
 
 def _decimal(value: Any) -> Decimal | None:
@@ -41,7 +41,7 @@ def _reliability(calculation: Mapping[str, Any]) -> Mapping[str, Any]:
         if item.get("dimension_id") == "page_reference_reliability"
     ]
     if len(matches) != 1:
-        raise ValueError("v7_reliability_dimension_required")
+        raise ValueError("v8_reliability_dimension_required")
     return matches[0]
 
 
@@ -104,7 +104,7 @@ def _locator_explanation(
 
     treatment_score = _grade_score(_decimal(assignment["treatment_score"]))
     fit_score = _grade_score(_decimal(assignment["fit_score"]))
-    combined_score = assignment["diagnostic_grade"]
+    diagnostic_score = assignment["diagnostic_grade"]
     evidence_ids = sorted(
         {
             *assessment.get("evidence_ids", []),
@@ -132,14 +132,19 @@ def _locator_explanation(
                 "rationale": fit_rationale,
                 "rationale_source": fit_rationale_source,
             },
-            "combined_locator_utility": {
+            "diagnostic_locator_grade": {
                 "rule_id": assignment["mapping_rule_id"],
                 "calculation": (
                     f"min({_score_text(treatment_score)}, {_score_text(fit_score)}) = "
-                    f"{_score_text(combined_score)}"
+                    f"{_score_text(diagnostic_score)}"
                 ),
-                "score": combined_score,
-                "credit": assignment["combined_credit"],
+                "score": diagnostic_score,
+                "credit": assignment["diagnostic_credit"],
+            },
+            "keep_rating_credit": {
+                "keep_decision": assignment["judgment"] == "supported",
+                "rule_id": assignment["rating_rule_id"],
+                "credit": assignment["rating_credit"],
             },
             "evidence_ids": evidence_ids,
             "structured_defect_ids": list(
@@ -177,12 +182,12 @@ def _locator_factor(
             "evidence_ids": explanation["evidence_ids"],
         },
         {
-            "factor_id": "combined_locator_utility",
-            "label": "Combined locator utility",
+            "factor_id": "diagnostic_locator_grade",
+            "label": "Diagnostic locator grade",
             "status": assignment["disposition"],
             "score": assignment["diagnostic_grade"],
             "weight": 0,
-            "explanation": explanation["combined_locator_utility"]["calculation"],
+            "explanation": explanation["diagnostic_locator_grade"]["calculation"],
             "evidence_ids": explanation["evidence_ids"],
         },
     ]
@@ -199,7 +204,7 @@ def _structure_metric_summary(review: Mapping[str, Any]) -> str:
     )
 
 
-def build_v7_assessments(
+def build_v8_assessments(
     base_items: Mapping[str, Any],
     calculation: Mapping[str, Any],
     structure_review: Mapping[str, Any],
@@ -210,8 +215,8 @@ def build_v7_assessments(
 
     if base_items.get("schema_version") != "subject-index-item-assessments-v3":
         raise ValueError("base_item_assessments_required")
-    if calculation.get("schema_version") != "subject-index-dimension-calculations-v4":
-        raise ValueError("v7_calculation_required")
+    if calculation.get("schema_version") != "subject-index-dimension-calculations-v5":
+        raise ValueError("v8_calculation_required")
     if base_items.get("evaluation_id") != calculation.get("evaluation_id"):
         raise ValueError("item_calculation_evaluation_mismatch")
     if base_items.get("evidence_identity") != calculation.get("evidence_identity"):
@@ -249,7 +254,7 @@ def build_v7_assessments(
         legacy_compatibility_mode = legacy_compatibility_mode or legacy_compatibility
         score = assignment["diagnostic_grade"]
         assessment["grade"] = items.grade(score)
-        assessment["dimension_reliability_credit"] = assignment["combined_credit"]
+        assessment["dimension_reliability_credit"] = assignment["rating_credit"]
         assessment["locator_utility"] = deepcopy(assignment)
         assessment["locator_explanation"] = explanation
         assessment["summary"] = explanation["evidence_summary"]
@@ -276,9 +281,9 @@ def build_v7_assessments(
             page_component["score"] = None
             page_component["measurement_status"] = "locator_level_only"
             page_component["summary"] = (
-                "V7 exposes each locator grade on the same 0–100 scale as its calculation credit. "
+                "V8 exposes each locator grade as a diagnostic of treatment and complete-path fit. "
                 "No path-level average is canonical, and Page-reference Reliability is reconstructed "
-                "only from the frozen locator-utility credit ledger."
+                "only from binary keep credit plus expected-treatment recall."
             )
             page_factor = next(
                 (
@@ -341,18 +346,18 @@ def build_v7_assessments(
     result["schema_version"] = SCHEMA_VERSION
     result["grading_policy"] = GRADING_POLICY
     result["explanation_contract"] = {
-        "contract_version": "locator-explanations-v1",
+        "contract_version": "locator-explanations-v2",
         "authored_evidence_is_primary": True,
         "prose_used_in_scoring": False,
         "legacy_compatibility_mode": legacy_compatibility_mode,
     }
     result["grade_disclosure"] = (
-        "V7 locator grades equal 100 times the frozen combined locator credit and are non-additive. "
-        "They are not averaged to reconstruct Page-reference Reliability; the canonical calculation uses "
-        "locator_utility_assignments[].combined_credit. Editorial Selectivity remains separate."
+        "V8 locator grades equal 100 times min(page-treatment score, complete-path-fit score) and remain diagnostic. "
+        "They are not averaged to reconstruct Page-reference Reliability; its precision input uses binary "
+        "locator_utility_assignments[].rating_credit, where supported means keep unchanged. Editorial Selectivity remains separate."
     )
     result["locator_grading_provenance"] = {
-        "model": "two_axis_independent_ceilings_minimum_v1",
+        "model": "two_axis_diagnostic_minimum_with_binary_keep_credit_v1",
         "page_treatment_mapping": {
             "substantive": "1",
             "mixed": "0.7",
@@ -369,9 +374,10 @@ def build_v7_assessments(
             "no_fit": "0",
             "uninspectable": None,
         },
-        "combination_rule": "min(page_treatment_score, complete_path_fit_score)",
-        "diagnostic_grade_rule": "100 * combined_credit",
-        "calculation_credit_ledger_sha256": v5.canonical_hash(
+        "diagnostic_combination_rule": "min(page_treatment_score, complete_path_fit_score)",
+        "diagnostic_grade_rule": "100 * diagnostic_credit",
+        "rating_credit_rule": "supported=1; partially_supported=0; unsupported=0; uninspectable/not_measured=null",
+        "calculation_locator_utility_ledger_sha256": v5.canonical_hash(
             {"locator_utility_assignments": provenance["locator_utility_assignments"]}
         ),
         "diagnostic_grades_used_in_dimension_arithmetic": False,
@@ -379,8 +385,11 @@ def build_v7_assessments(
         "weak_presence_selectivity_credit": 0,
         "counts_by_treatment_tier": deepcopy(provenance["counts_by_treatment_tier"]),
         "counts_by_fit_tier": deepcopy(provenance["counts_by_fit_tier"]),
-        "counts_by_combined_credit_value": deepcopy(
-            provenance["counts_by_combined_credit_value"]
+        "counts_by_diagnostic_credit_value": deepcopy(
+            provenance["counts_by_diagnostic_credit_value"]
+        ),
+        "counts_by_rating_credit_value": deepcopy(
+            provenance["counts_by_rating_credit_value"]
         ),
     }
     result["structure_locator_review_binding"] = {
@@ -397,10 +406,18 @@ def build_v7_assessments(
             calculation["locator_fit_supplement"]
         )
     items.rebuild_summary(result)
+    def credit_tier(item: Mapping[str, Any], field: str) -> str:
+        if item["disposition"] == "bounded":
+            return "uninspectable"
+        if item["disposition"] == "not_measured":
+            return "not_measured"
+        return str(item[field])
+
     result["summary"]["locator_utility_tiers"] = {
         "treatment": dict(sorted(Counter(item["treatment_category"] for item in assignments.values()).items())),
         "fit": dict(sorted(Counter(item["fit_category"] for item in assignments.values()).items())),
-        "combined_credit": dict(sorted(Counter(str(item["combined_credit"]) for item in assignments.values()).items())),
+        "diagnostic_credit": dict(sorted(Counter(credit_tier(item, "diagnostic_credit") for item in assignments.values()).items())),
+        "rating_credit": dict(sorted(Counter(credit_tier(item, "rating_credit") for item in assignments.values()).items())),
     }
     return result
 
@@ -412,8 +429,8 @@ def command_build_assessments(args: argparse.Namespace) -> None:
         review_path = Path(args.structure_locator_review).resolve()
         output_path = Path(args.output).resolve()
         base_items = v5.load_json(items_path, "Base item assessments")
-        calculation = v5.load_json(calculation_path, "V7 calculation")
-        review = v5.load_json(review_path, "V7 structure-locator review")
+        calculation = v5.load_json(calculation_path, "V8 calculation")
+        review = v5.load_json(review_path, "V8 structure-locator review")
         locator_documents = []
         for index, stored in enumerate(args.locator_audit or []):
             document = v5.load_json(Path(stored).resolve(), f"Locator audit {index}")
@@ -421,7 +438,7 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             v5.require(
                 schema_name is not None,
                 "unsupported_locator_audit_schema",
-                "V7 item projection accepts current locator-audit-v2 only.",
+                "V8 item projection accepts current locator-audit-v2 only.",
             )
             v5.validate_schema_document(document, schema_name, f"Locator audit {index}")
             locator_documents.append(document)
@@ -429,24 +446,24 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             base_items, "item-assessments-v3.schema.json", "Base item assessments"
         )
         v5.validate_schema_document(
-            calculation, "dimension-calculations-v4.schema.json", "V7 calculation"
+            calculation, "dimension-calculations-v5.schema.json", "V8 calculation"
         )
         v5.validate_schema_document(
             review,
             "structure-locator-review-v1.schema.json",
-            "V7 structure-locator review",
+            "V8 structure-locator review",
         )
         v5.require(
             calculation.get("calculation_sha256")
             == v5.canonical_hash(calculation, "calculation_sha256"),
             "calculation_self_hash_mismatch",
-            "The V7 calculation self-hash does not reconstruct.",
+            "The V8 calculation self-hash does not reconstruct.",
         )
         v5.require(
             review.get("review_sha256")
             == structure_review_hash(review, "review_sha256"),
             "structure_review_hash_mismatch",
-            "The V7 structure-locator review self-hash does not reconstruct.",
+            "The V8 structure-locator review self-hash does not reconstruct.",
         )
         validate_structure_locator_review_semantics(review)
         v5.require(
@@ -454,14 +471,14 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             "score_only_migration_item_projection_required",
             "Current item projection cannot consume a structure review that removes historical defects.",
         )
-        result = build_v7_assessments(
+        result = build_v8_assessments(
             base_items,
             calculation,
             review,
             locator_documents=locator_documents,
         )
         v5.validate_schema_document(
-            result, "item-assessments-v5.schema.json", "Generated V7 item assessments"
+            result, "item-assessments-v6.schema.json", "Generated V8 item assessments"
         )
         v5.require(
             not v5.aliases_existing_file(
@@ -474,12 +491,12 @@ def command_build_assessments(args: argparse.Namespace) -> None:
                 },
             ),
             "output_aliases_frozen_input",
-            "V7 item assessments must not overwrite a bound input artifact.",
+            "V8 item assessments must not overwrite a bound input artifact.",
         )
         v5.write_json(output_path, result)
         v5.emit(
             {
-                "command": "build-v7-item-assessments",
+                "command": "build-v8-item-assessments",
                 "ok": True,
                 "evaluation_id": result["evaluation_id"],
                 "schema_version": result["schema_version"],
@@ -493,7 +510,7 @@ def command_build_assessments(args: argparse.Namespace) -> None:
         else:
             error = {"code": "item_projection_error", "message": str(exc)}
         v5.emit(
-            {"command": "build-v7-item-assessments", "ok": False, "error": error},
+            {"command": "build-v8-item-assessments", "ok": False, "error": error},
             1,
         )
 
@@ -503,7 +520,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     build = subparsers.add_parser(
         "build-assessments",
-        help="Project current V7 locator grades from base items and frozen V7 ledgers.",
+        help="Project current V8 diagnostic locator grades and binary keep credit.",
     )
     build.add_argument("--base-items", required=True)
     build.add_argument("--calculation", required=True)

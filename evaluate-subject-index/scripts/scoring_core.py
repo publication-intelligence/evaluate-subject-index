@@ -1,4 +1,4 @@
-"""Shared deterministic arithmetic used by current V7 scoring."""
+"""Shared deterministic arithmetic used by current V8 scoring."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from schema_validation import schema_errors
 
 
 CALCULATION_PROFILE = "subject-index-dimension-calculation-v1"
-INPUT_SCHEMA = "subject-index-dimension-calculation-input-v1"
+INPUT_SCHEMA = "subject-index-dimension-calculation-input-v2"
 
 WEIGHTS = {
     "meaningful_coverage": 20,
@@ -344,8 +344,9 @@ def validate_config_shape(config: dict[str, Any]) -> None:
     require(config.get("audit_mode") in {"full", "pilot"}, "invalid_input_config", "audit_mode must be full or pilot.")
     inputs = config.get("inputs")
     require(isinstance(inputs, dict), "invalid_input_config", "inputs must be an object.")
-    allowed = {"chunk_manifest", "locator_audits", "missing_access_audits", "structure_audit", "migration_supplement"}
-    require(set(inputs).issubset(allowed) and {"locator_audits", "missing_access_audits", "structure_audit"}.issubset(inputs), "invalid_input_config", "inputs has missing or unexpected fields.")
+    allowed = {"policy", "chunk_manifest", "locator_audits", "missing_access_audits", "structure_audit"}
+    required_inputs = {"policy", "locator_audits", "missing_access_audits", "structure_audit"}
+    require(set(inputs).issubset(allowed) and required_inputs.issubset(inputs), "invalid_input_config", "inputs has missing or unexpected fields.")
     require(isinstance(inputs["locator_audits"], list), "invalid_input_config", "locator_audits must be an array.")
     require(isinstance(inputs["missing_access_audits"], list), "invalid_input_config", "missing_access_audits must be an array.")
     require(bool(inputs["locator_audits"]), "invalid_input_config", "locator_audits must contain one frozen artifact per approved source unit.")
@@ -1848,7 +1849,7 @@ def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     measured_locators = [item for item in ledgers["locators"] if item.get("judgment") in {"supported", "partially_supported", "unsupported"}]
     uninspectable_locators = [item for item in ledgers["locators"] if item.get("judgment") == "uninspectable"]
     locator_not_measured = ledgers["locator_not_measured"]
-    precision_denom = component_denominators("strict_locator_precision", ledgers["locator_original"], ledgers["locator_original"], len(measured_locators), len(uninspectable_locators), len(locator_not_measured), {})
+    precision_denom = component_denominators("keep_precision", ledgers["locator_original"], ledgers["locator_original"], len(measured_locators), len(uninspectable_locators), len(locator_not_measured), {})
     measured_treatments = [item for item in ledgers["treatments"] if item.get("status") in {"found", "missed"}]
     uninspectable_treatments = [item for item in ledgers["treatments"] if item.get("status") == "uninspectable"]
     explicit_treatment_not_measured_records = [item for item in ledgers["treatments"] if item.get("status") is None]
@@ -1909,7 +1910,7 @@ def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         return [
             cap_record("reliability.critical_locator", Decimal(2), bool(critical), {"severity": "critical", "defect_kinds": ["fabricated_locator", "nonexistent_locator", "out_of_scope_locator"]}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
             cap_record("reliability.high_value_treatment_recall", high_max, high_triggered, {"table": "pooled_principal_and_synthesis_recall_v1", "band": high_band}, {"found": high_found_value, "expected": high_total, "rate": decimal_text(rate(high_found_value, high_total))}, high_miss_evidence),
-            cap_record("reliability.distributed_unsupported_pattern", pattern_max, pattern_triggered, {"minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band}, {"unsupported_count": pattern_count, "strict_precision_denominator": locator_total, "rate": decimal_text(rate(pattern_count, locator_total)), "affected_source_units": units, "source_unit_denominator": unit_denominator, "source_unit_rate": decimal_text(rate(units, unit_denominator))}, pattern_evidence),
+            cap_record("reliability.distributed_unsupported_pattern", pattern_max, pattern_triggered, {"minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band}, {"unsupported_count": pattern_count, "keep_precision_denominator": locator_total, "rate": decimal_text(rate(pattern_count, locator_total)), "affected_source_units": units, "source_unit_denominator": unit_denominator, "source_unit_rate": decimal_text(rate(units, unit_denominator))}, pattern_evidence),
         ]
 
     known_high_misses = [item["treatment_id"] for item in high_measured if item["status"] == "missed"]
@@ -1941,9 +1942,9 @@ def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         "not_measured_locators": len(locator_not_measured),
         "not_measured_treatments": len(treatment_not_measured),
     }
-    result["credit_mappings"] = {"strict_precision": {"supported": "1", "partially_supported": "0", "unsupported": "0"}, "treatment_recall": {"found": "1", "missed": "0"}}
+    result["credit_mappings"] = {"rating_credit": {"supported": "1", "partially_supported": "0", "unsupported": "0"}, "treatment_recall": {"found": "1", "missed": "0"}}
     result["components"] = [
-        {"component_id": "strict_locator_precision", "raw_numerator": decimal_text(Decimal(supported)), "raw_denominator": decimal_text(Decimal(len(measured_locators))), "normalized_value": decimal_text(p), "weight": "harmonic_mean", "effective_weight": "harmonic_mean", "weight_renormalized": False},
+        {"component_id": "keep_precision", "raw_numerator": decimal_text(Decimal(supported)), "raw_denominator": decimal_text(Decimal(len(measured_locators))), "normalized_value": decimal_text(p), "weight": "harmonic_mean", "effective_weight": "harmonic_mean", "weight_renormalized": False},
         {"component_id": "expected_treatment_recall", "raw_numerator": decimal_text(Decimal(found)), "raw_denominator": decimal_text(Decimal(len(measured_treatments))), "normalized_value": decimal_text(r), "weight": "harmonic_mean", "effective_weight": "harmonic_mean", "weight_renormalized": False},
         {"component_id": "high_value_treatment_recall_safeguard", "raw_numerator": decimal_text(Decimal(high_found)), "raw_denominator": decimal_text(Decimal(len(high_measured))), "normalized_value": decimal_text(rate(high_found, len(high_measured))), "weight": "cap_only", "effective_weight": "cap_only", "weight_renormalized": False},
     ]

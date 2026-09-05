@@ -1,17 +1,20 @@
-# Current V7 JSON contracts
+# Current V8 JSON contracts
 
 The active workflow uses these primary identities:
 
 | Artifact | Schema identity |
 | --- | --- |
-| Evaluation state | `subject-index-evaluation-state-v5` |
+| Evaluation state | `subject-index-evaluation-state-v6` |
 | Locator audit | `locator-audit-v2` |
-| Missing-access audit | current schema declared by the V7 scoring input |
+| Missing-access audit | current schema declared by the V8 scoring input |
 | Structure audit | `structure-audit-v5` |
-| Dimension calculations | `subject-index-dimension-calculations-v4` |
-| Item assessments | `subject-index-item-assessments-v5` |
-| Evaluation result | `subject-index-evaluation-result-v9` |
-| Web report | `subject-index-web-report-v7` |
+| Evaluation policy | `subject-index-evaluation-policy-v4` |
+| Calculation input | `subject-index-dimension-calculation-input-v2` |
+| Dimension calculations | `subject-index-dimension-calculations-v5` |
+| Item assessments | `subject-index-item-assessments-v6` |
+| Evaluation result | `subject-index-evaluation-result-v10` |
+| Projection metadata | `subject-index-v8-projection-metadata-v1` |
+| Web report | `subject-index-web-report-v8` |
 | Checkpoint bundle | `subject-index-bundle-v2` |
 
 ## Contract rules

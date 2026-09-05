@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Deterministic V7 two-axis locator utility derived from frozen evidence.
+"""Deterministic V8 locator diagnostics and binary rating credit.
 
 This module performs no score aggregation and never reads rationale or evidence
-prose.  It validates one combined locator state, assigns independent treatment
-and complete-path-fit ceilings, and combines them with ``min(T, F)``.
+prose. It validates one structured locator state, assigns independent treatment
+and complete-path-fit diagnostics, and derives rating credit from the keep
+decision recorded by ``judgment``.
 """
 
 from __future__ import annotations
@@ -764,7 +765,7 @@ def combined_state_errors(
     defects: Iterable[Mapping[str, Any]] = (),
     legacy_defects: Iterable[Mapping[str, Any]] = (),
 ) -> list[str]:
-    """Return deterministic V7 errors for an incomplete or contradictory state."""
+    """Return deterministic errors for an incomplete or contradictory locator state."""
 
     analysis = locator_fit_state_analysis(record, defects, legacy_defects)
     unresolved_errors = {
@@ -814,8 +815,10 @@ class LocatorUtilityAssignment:
     compatibility_rule_ids: tuple[str, ...]
     supplemental_fit_decision_id: str | None
     supplemental_fit_evidence_ids: tuple[str, ...]
-    combined_credit: Decimal | None
+    diagnostic_credit: Decimal | None
     diagnostic_grade: int | float | None
+    rating_credit: Decimal | None
+    rating_rule_id: str
     disposition: str
     disposition_reason: str
     uncertainty_lower: Decimal
@@ -845,12 +848,13 @@ class LocatorUtilityAssignment:
             "supplemental_fit_evidence_ids": list(
                 self.supplemental_fit_evidence_ids
             ),
-            "combined_credit": decimal_text(self.combined_credit),
+            "diagnostic_credit": decimal_text(self.diagnostic_credit),
             "diagnostic_grade": self.diagnostic_grade,
+            "rating_credit": decimal_text(self.rating_credit),
+            "rating_rule_id": self.rating_rule_id,
             "disposition": self.disposition,
             "disposition_reason": self.disposition_reason,
-            "used_in_precision_numerator": self.disposition == "assessable",
-            "uncertainty_bounds": {
+            "rating_credit_uncertainty_bounds": {
                 "lower": decimal_text(self.uncertainty_lower),
                 "upper": decimal_text(self.uncertainty_upper),
             },
@@ -906,7 +910,7 @@ def assign_locator_utility(
     legacy_defects: Iterable[Mapping[str, Any]] = (),
     supplemental_fit_decision: Mapping[str, Any] | None = None,
 ) -> LocatorUtilityAssignment:
-    """Validate and map one locator under the frozen V7 two-axis rules."""
+    """Validate and map one locator under the frozen V8 rules."""
 
     defects = list(defects)
     legacy_defects = list(legacy_defects)
@@ -1064,17 +1068,30 @@ def assign_locator_utility(
             raise ValueError("incomplete:unsupported_material_treatment_requires_classifying_fit_or_no_fit_state")
         disposition = "assessable"
 
-    combined = (
+    diagnostic_credit = (
         None
         if treatment_score is None or fit_score is None
         else min(treatment_score, fit_score)
     )
     diagnostic_grade: int | float | None
-    if combined is None:
+    if diagnostic_credit is None:
         diagnostic_grade = None
     else:
-        grade_value = combined * Decimal(100)
+        grade_value = diagnostic_credit * Decimal(100)
         diagnostic_grade = int(grade_value) if grade_value == grade_value.to_integral() else float(grade_value)
+    if judgment == "uninspectable":
+        rating_credit = None
+        rating_rule_id = "R-UNINSPECTABLE-BOUND"
+        rating_lower = Decimal("0")
+        rating_upper = Decimal("1")
+    elif judgment == "supported":
+        rating_credit = Decimal("1")
+        rating_rule_id = "R-SUPPORTED-KEEP-100"
+        rating_lower = rating_upper = rating_credit
+    else:
+        rating_credit = Decimal("0")
+        rating_rule_id = "R-NOT-KEPT-000"
+        rating_lower = rating_upper = rating_credit
     rule_parts = [treatment_rule, fit_rule, *compatibility_rule_ids, "MIN"]
     mapping_rule = "+".join(rule_parts)
     return LocatorUtilityAssignment(
@@ -1098,17 +1115,19 @@ def assign_locator_utility(
         compatibility_rule_ids=compatibility_rule_ids,
         supplemental_fit_decision_id=supplemental_decision_id,
         supplemental_fit_evidence_ids=supplemental_evidence_ids,
-        combined_credit=combined,
+        diagnostic_credit=diagnostic_credit,
         diagnostic_grade=diagnostic_grade,
+        rating_credit=rating_credit,
+        rating_rule_id=rating_rule_id,
         disposition=disposition,
         disposition_reason=reason,
-        uncertainty_lower=Decimal("0") if combined is None else combined,
-        uncertainty_upper=Decimal("1") if combined is None else combined,
+        uncertainty_lower=rating_lower,
+        uncertainty_upper=rating_upper,
     )
 
 
 def not_measured_assignment(locator_id: str) -> dict[str, Any]:
-    """Return a neutral V7 ledger row for a pilot-only unmeasured locator."""
+    """Return a neutral V8 ledger row for a pilot-only unmeasured locator."""
 
     return {
         "locator_id": locator_id,
@@ -1131,10 +1150,11 @@ def not_measured_assignment(locator_id: str) -> dict[str, Any]:
         "compatibility_rule_ids": [],
         "supplemental_fit_decision_id": None,
         "supplemental_fit_evidence_ids": [],
-        "combined_credit": None,
+        "diagnostic_credit": None,
         "diagnostic_grade": None,
+        "rating_credit": None,
+        "rating_rule_id": "R-NOT-MEASURED-REJECT",
         "disposition": "not_measured",
         "disposition_reason": "The required locator assignment was not measured.",
-        "used_in_precision_numerator": False,
-        "uncertainty_bounds": {"lower": "0", "upper": "1"},
+        "rating_credit_uncertainty_bounds": {"lower": "0", "upper": "1"},
     }

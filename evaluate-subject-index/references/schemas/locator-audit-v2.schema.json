@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "locator-audit-v2.schema.json",
-  "title": "V7 locator audit batch with explanation metadata",
+  "title": "V8 locator audit batch with explanation metadata",
   "type": "object",
   "required": ["schema_version", "evaluation_id", "candidate_sha256", "chunk_id", "expected_locator_ids", "judgments", "completion"],
   "properties": {
