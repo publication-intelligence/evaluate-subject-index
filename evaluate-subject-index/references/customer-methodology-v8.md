@@ -12,6 +12,14 @@ The evaluation compares a finished subject index with its source using a benchma
 
 Parallel chats may process independent frozen chunks. Their output becomes canonical only after local validation and registration in `evaluation-state.json`.
 
+## What changed in V8
+
+V8 changes Page-reference Reliability arithmetic by replacing weighted locator precision with a binary question: should each locator be kept unchanged? This directly changes the precision input to that dimension; its recall measure and F1 calculation remain the same.
+
+V8 also clarifies several evidence-judgment rules, such as how comparative facts, attributed observations, contentless mentions, and differences in stance are classified. Those policy clarifications do not change a scoring formula, but they may change a locator's treatment classification or keep decision in a new V8 audit. When they do, any dimension that uses the changed judgment may produce a different result. For example, Editorial Selectivity retains its existing formula and credit mapping but may receive different treatment-class inputs.
+
+For that reason, “formula unchanged” does not mean that a new V8 evaluation must reproduce a V7 result. Existing frozen V7 evaluations are not changed or reinterpreted.
+
 ## Reliability method
 
 Each locator receives two diagnostic assessments: how much independently useful information is present and how well the complete index path fits it. Comparative or attributed wording does not reduce treatment by itself. The lower diagnostic score produces the displayed locator grade.

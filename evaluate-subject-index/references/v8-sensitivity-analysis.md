@@ -2,6 +2,8 @@
 
 This analysis uses synthetic mixtures and exact `Decimal` arithmetic. It is not fitted to a candidate. Diagnostic fit values remain 1.00, 0.70, 0.35, 0.15, and 0.
 
+The synthetic cases isolate the arithmetic change by holding structured locator judgments constant. V8 also changes judgment policy: its clarified evidence rules may produce different treatment classifications or keep decisions in a new audit. Those changed inputs can affect downstream results independently of the arithmetic change tested here.
+
 ## Diagnostic sensitivity
 
 The diagnostic minimum preserves visibility into treatment and fit quality without affecting binary rating credit.
@@ -31,4 +33,6 @@ An uninspectable locator contributes no central rating credit and retains a neut
 
 ## Structure and other dimensions
 
-Six displayed locators and a ten-page range do not trigger review; seven and eleven do. Trigger status never changes an architecture grade without structured semantic findings. V8 changes only the Page-reference Reliability precision input and related diagnostic/reporting identities; recall, caps, gates, uncertainty, structure calculations, Editorial Selectivity, and all other dimension formulas remain unchanged.
+Six displayed locators and a ten-page range do not trigger review; seven and eleven do. Trigger status never changes an architecture grade without structured semantic findings.
+
+At the arithmetic level, V8 directly changes only the Page-reference Reliability precision input and related diagnostic/reporting identities. Recall, caps, gates, uncertainty handling, structure calculations, Editorial Selectivity, and all other dimension formulas remain unchanged. At the judgment-policy level, however, V8 may classify source evidence differently. A resulting treatment-class or keep-decision change may flow into Page-reference Reliability, Editorial Selectivity, or another downstream result that consumes that judgment. An unchanged formula is therefore not a guarantee of an unchanged V8 result.
