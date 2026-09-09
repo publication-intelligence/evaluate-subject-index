@@ -9,6 +9,8 @@ The active workflow uses these primary identities:
 | Missing-access audit | current schema declared by the V8 scoring input |
 | Structure audit | `structure-audit-v5` |
 | Evaluation policy | `subject-index-evaluation-policy-v4` |
+| Candidate locator packet | `candidate-locator-chunk-v1` |
+| Locator routing exceptions | `candidate-locator-routing-exceptions-v1` |
 | Calculation input | `subject-index-dimension-calculation-input-v2` |
 | Dimension calculations | `subject-index-dimension-calculations-v5` |
 | Item assessments | `subject-index-item-assessments-v6` |
@@ -27,6 +29,8 @@ The active workflow uses these primary identities:
 - Registered paths are relative to the evaluation root and unique.
 - Stable IDs and content hashes join related records and detect accidental input mix-ups.
 - Current audit denominators must be complete and non-overlapping before a stage is marked complete.
+- Locator-packet preparation registers exactly one packet per frozen manifest chunk plus an empty routing-exception ledger; any unresolved or ownerless assignment prevents the state transition.
+- The candidate's frozen benchmark path and canonical benchmark identity in state are the locator-preparation binding. There is no candidate-benchmark repository-lock contract.
 - Explanation fields are metadata, not calculation inputs.
 - Checkpoint import validates safe ZIP structure, inventory membership, and current state shape; it does not require a previously published checksum.
 

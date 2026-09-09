@@ -23,7 +23,7 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 ## Current command surface
 
 - `scripts/state_cli.py`: initialize, inspect, validate, and advance the single canonical state.
-- `scripts/page_chunk_cli.py`: page mapping and chunk preparation.
+- `scripts/page_chunk_cli.py`: page mapping, source chunking, and registered-state locator-packet preparation.
 - `scripts/policy_cli.py`: instantiate the standard policy.
 - `scripts/parallel_discovery_cli.py`: validate and register source-discovery chunks.
 - `scripts/benchmark_review_cli.py`: benchmark screening, independent review, and freeze validation.
@@ -56,6 +56,8 @@ Parallel work is divided by deterministic chunk ownership. Workers return comple
 Branches, pull requests, and chat attachments may be used for transport or review, but GitHub receipts, blob proofs, merge evidence, recovery receipts, and matching checkpoint hashes are not prerequisites for canonical registration. Registration completes an audit stage only when every frozen chunk denominator is covered exactly once.
 
 Candidate preparation is mechanical and benchmark-blind. Candidate input must match [candidate-layout-extraction.schema.json](references/schemas/candidate-layout-extraction.schema.json); convert it before invoking the skill if necessary. Then run `normalize`, `validate-private`, and `register`. It does not require a publication workflow.
+
+After local registration, run `page_chunk_cli.py prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk plus the routing-exception ledger, then completes `locator_chunk_preparation`. Routing exceptions leave state unchanged.
 
 Read [candidate-preparation.md](references/candidate-preparation.md) and [parallel-candidate-audits.md](references/parallel-candidate-audits.md).
 

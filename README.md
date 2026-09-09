@@ -34,6 +34,7 @@ Important helpers:
 - `state_cli.py` — initialize, validate, inspect, and advance state.
 - `bundle_cli.py` — optional recovery checkpoints and imports.
 - `candidate_preparation_cli.py` — normalize, validate, and register a contract-valid candidate.
+- `page_chunk_cli.py` — prepare the complete registered-state locator-packet batch after candidate registration.
 - `parallel_candidate_audit_cli.py` — validate/register audit chunks returned by separate chats.
 - `dimension_score_v8_cli.py` — current V8 preflight, structure review, and calculation.
 - `item_grade_v8_cli.py` — current V8 item projection.

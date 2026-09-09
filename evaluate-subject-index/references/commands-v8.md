@@ -33,6 +33,21 @@ python scripts/candidate_preparation_cli.py register --benchmark source-benchmar
 
 `normalize` validates the published candidate-layout schema before writing anything. Format-specific conversion is outside the skill. Registration is local and does not require publication evidence.
 
+## Locator-packet preparation
+
+```bash
+python scripts/page_chunk_cli.py prepare-locator-chunks \
+  --state evaluation-state.json \
+  --normalized-candidate candidate/candidate-index.json \
+  --page-map page-map.json \
+  --chunk-manifest chunk-manifest.json \
+  --benchmark source-benchmark.json
+```
+
+All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk and one `candidate-locator-routing-exceptions-v1` ledger, completes `locator_chunk_preparation`, and makes `audit-locators` available. Any validation or routing exception leaves canonical state unchanged.
+
+This command uses the local candidate/benchmark binding recorded by `candidate_preparation_cli.py register`. It accepts no publication, repository, branch, commit, pull-request, blob-proof, preparation-receipt, or legacy benchmark-lock input.
+
 ## Parallel audit chunks
 
 ```bash

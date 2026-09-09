@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "candidate-locator-routing-exceptions.schema.json",
+  "title": "Candidate locator routing exceptions",
+  "type": "object",
+  "required": ["schema_version", "candidate_id", "candidate_sha256", "benchmark_sha256", "page_map_sha256", "chunk_manifest_sha256", "exceptions", "exception_count"],
+  "properties": {
+    "schema_version": {"const": "candidate-locator-routing-exceptions-v1"},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "candidate_sha256": {"$ref": "#/$defs/sha256"},
+    "benchmark_sha256": {"$ref": "#/$defs/sha256"},
+    "page_map_sha256": {"$ref": "#/$defs/sha256"},
+    "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["record_id", "path_id", "heading_path", "locator_assignment", "reason"],
+        "properties": {
+          "record_id": {"type": "string", "pattern": "^REC-"},
+          "path_id": {"type": "string", "pattern": "^PATH-"},
+          "heading_path": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "locator_assignment": {"type": "object"},
+          "reason": {"enum": ["locator_not_resolved_to_one_document_page", "mapped_document_page_has_no_chunk_owner"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "exception_count": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  },
+  "additionalProperties": false
+}

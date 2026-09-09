@@ -76,7 +76,6 @@
       "properties": {
         "source_sha256": {"$ref": "#/$defs/sha256"},
         "benchmark_sha256": {"$ref": "#/$defs/sha256"},
-        "benchmark_lock_sha256": {"$ref": "#/$defs/sha256"},
         "policy_sha256": {"$ref": "#/$defs/sha256"},
         "page_map_sha256": {"$ref": "#/$defs/sha256"},
         "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},

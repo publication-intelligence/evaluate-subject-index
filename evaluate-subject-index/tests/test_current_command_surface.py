@@ -38,6 +38,36 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertNotIn("bind-publication", text)
         self.assertNotIn("integrate", text)
 
+    def test_locator_preparation_uses_registered_state_not_repository_locks(self) -> None:
+        text = help_text("page_chunk_cli.py")
+        self.assertIn("prepare-locator-chunks", text)
+        self.assertNotIn("filter-candidate", text)
+        source = (SCRIPTS / "page_chunk_cli.py").read_text()
+        self.assertNotIn("candidate-benchmark-lock", source)
+        self.assertNotIn("benchmark-lock", source)
+
+    def test_active_v8_runtime_has_no_legacy_lock_or_rubric_v4_requirement(self) -> None:
+        runtime = "\n".join(path.read_text() for path in sorted(SCRIPTS.glob("*.py")))
+        current_schemas = "\n".join(
+            (ROOT / "references" / "schemas" / name).read_text()
+            for name in (
+                "evaluation-state.schema.json",
+                "locator-audit-v2.schema.json",
+                "missing-access-audit.schema.json",
+                "structure-audit-v5.schema.json",
+                "dimension-calculation-input.schema.json",
+                "dimension-calculations-v5.schema.json",
+                "item-assessments-v6.schema.json",
+                "evaluation-result-v10.schema.json",
+                "web-report-v8.schema.json",
+            )
+        )
+        self.assertNotIn("subject-index-rubric-v4", runtime)
+        self.assertNotIn("candidate-benchmark-lock", runtime)
+        self.assertNotIn("benchmark_lock_sha256", runtime)
+        self.assertNotIn("benchmark_lock_sha256", current_schemas)
+        self.assertFalse((ROOT / "references" / "schemas" / "candidate-benchmark-lock.schema.json").exists())
+
     def test_parallel_audits_require_no_github_evidence(self) -> None:
         text = help_text("parallel_candidate_audit_cli.py")
         self.assertIn("validate-audits", text)
