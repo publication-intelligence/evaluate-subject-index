@@ -17,7 +17,7 @@ Convert the supplied subject index mechanically into candidate-layout-extraction
 ## Workflow
 
 1. Confirm that the candidate file and layout artifact match the input contract.
-2. `normalize` preserves every delivered hierarchy level and expands locator assignments through the frozen page map.
+2. `normalize` preserves every delivered hierarchy level and displayed locator form, including locator payloads separated from headings by whitespace, and expands locator assignments through the frozen page map.
 3. `validate-private` checks full fidelity and denominator accounting.
 4. `register` validates the preparation again, records the candidate's frozen benchmark path and canonical benchmark identity in state, and advances `candidate_normalization` in `evaluation-state.json`.
 5. `page_chunk_cli.py prepare-locator-chunks` validates that registered binding and prepares the complete locator-packet batch directly from local artifacts.
