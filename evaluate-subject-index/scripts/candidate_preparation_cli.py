@@ -360,7 +360,11 @@ def split_references(payload: str) -> tuple[str, list[dict[str, str]], bool]:
     return locator_text, references, malformed
 
 
-def looks_like_locator_payload(value: str, lookup: dict[str, dict[str, Any]]) -> bool:
+def looks_like_locator_payload(
+    value: str,
+    lookup: dict[str, dict[str, Any]],
+    require_mapped: bool = False,
+) -> bool:
     stripped = value.strip()
     if re.match(r"(?i)^see(?:\s+also)?\b", stripped):
         return True
@@ -382,7 +386,7 @@ def looks_like_locator_payload(value: str, lookup: dict[str, dict[str, Any]]) ->
     # accepted by the exact lookup above.  The fallback is limited to numeric
     # and Roman forms so prose such as ``continued mechanisms`` cannot create a
     # false heading boundary.
-    return bool(
+    return not require_mapped and bool(
         re.fullmatch(
             r"(?:[0-9]+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:[0-9]+|[ivxlcdm]+))?",
             first,
@@ -392,9 +396,9 @@ def looks_like_locator_payload(value: str, lookup: dict[str, dict[str, Any]]) ->
 
 
 def split_heading_and_payload(text: str, lookup: dict[str, dict[str, Any]]) -> tuple[str, str]:
-    for match in re.finditer(r"[,;:]", text):
+    for match in re.finditer(r"[,;:]|\s+", text):
         tail = text[match.end():].strip()
-        if looks_like_locator_payload(tail, lookup):
+        if looks_like_locator_payload(tail, lookup, require_mapped=match.group().isspace()):
             return text[: match.start()].strip(), tail
     ref = re.search(r"(?i)\bsee(?:\s+also)?\b", text)
     if ref:
@@ -1133,13 +1137,22 @@ def validate_private_preparation(
 
     if candidate.get("page_map_sha256") != identities["page_map_sha256"]:
         errors.append("Normalized candidate does not identify the frozen page map")
+    regenerated_candidate, regenerated_inventory, regenerated_exceptions, _ = normalize_layout(
+        layout, identities["page_map"]
+    )
+    if candidate != regenerated_candidate:
+        errors.append("Normalized candidate is not the exact deterministic projection of the delivered layout and frozen page map")
+    if exceptions != regenerated_exceptions:
+        errors.append("Normalization exceptions are not the exact deterministic projection of the delivered layout and frozen page map")
     try:
-        regenerated_inventory = build_inventory(candidate)
+        candidate_inventory = build_inventory(candidate)
     except SystemExit:
-        regenerated_inventory = None
+        candidate_inventory = None
         errors.append("Normalized candidate cannot regenerate a valid deterministic item inventory")
-    if regenerated_inventory is not None and regenerated_inventory != inventory:
+    if candidate_inventory is not None and candidate_inventory != inventory:
         errors.append("Item inventory is not the exact deterministic projection of the normalized candidate")
+    if inventory != regenerated_inventory:
+        errors.append("Item inventory is not the exact deterministic projection of the delivered layout and frozen page map")
 
     id_groups = {
         "record_id": [record.get("record_id") for record in candidate.get("records", [])],
