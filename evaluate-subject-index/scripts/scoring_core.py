@@ -602,7 +602,6 @@ def reconstruct_locator_count_evidence(documents: Sequence[dict[str, Any]]) -> t
 
 AUDIT_IDENTITY_FIELDS = (
     "source_sha256",
-    "benchmark_lock_sha256",
     "policy_sha256",
     "page_map_sha256",
     "chunk_manifest_sha256",
@@ -614,7 +613,6 @@ CALCULATION_EVIDENCE_IDENTITY_FIELDS = (
     "candidate_sha256",
     "source_sha256",
     "benchmark_sha256",
-    "benchmark_lock_sha256",
     "policy_sha256",
     "page_map_sha256",
     "chunk_manifest_sha256",

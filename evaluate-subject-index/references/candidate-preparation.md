@@ -19,13 +19,14 @@ Convert the supplied subject index mechanically into candidate-layout-extraction
 1. Confirm that the candidate file and layout artifact match the input contract.
 2. `normalize` preserves every delivered hierarchy level and expands locator assignments through the frozen page map.
 3. `validate-private` checks full fidelity and denominator accounting.
-4. `register` validates the preparation again, records the final benchmark lock, copies no publication evidence, and advances `candidate_normalization` in `evaluation-state.json`.
+4. `register` validates the preparation again, records the candidate's frozen benchmark path and canonical benchmark identity in state, and advances `candidate_normalization` in `evaluation-state.json`.
+5. `page_chunk_cli.py prepare-locator-chunks` validates that registered binding and prepares the complete locator-packet batch directly from local artifacts.
 
 The current contract uses `candidate-index-v2`, `subject-index-item-inventory-v2`, and evaluation state V6. Superseded preparation formats are not accepted.
 
 ## Separation from judgment
 
-Preparation may identify extraction uncertainty, malformed layout, and unresolved locators. It must not repair the delivered hierarchy, classify source support, identify omissions, judge structure, or calculate scores. The benchmark is used at registration only to bind the completed preparation to the frozen evaluation, not as extraction evidence.
+Preparation may identify extraction uncertainty, malformed layout, and unresolved locators. It must not repair the delivered hierarchy, classify source support, identify omissions, judge structure, or calculate scores. The benchmark is used at registration only to bind the completed preparation to the frozen evaluation, not as extraction evidence. That state binding replaces the retired candidate-benchmark repository lock; do not create a second manifest or compatibility artifact.
 
 ## Parallel and remote work
 

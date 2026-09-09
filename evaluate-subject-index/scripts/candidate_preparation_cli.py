@@ -39,7 +39,7 @@ PRIVATE_ARTIFACT_KEYS = (
     "normalization_report",
     "normalization_qa",
 )
-FORBIDDEN_PRELOCK_KEYS = {
+FORBIDDEN_PREJUDGMENT_KEYS = {
     "score",
     "rating",
     "density",
@@ -1018,13 +1018,13 @@ def _walk_object(value: Any, path: str = "$") -> Iterable[tuple[str, Any]]:
             yield from _walk_object(item, f"{path}[{index}]")
 
 
-def _check_prelock_separation(artifacts: dict[str, dict[str, Any]]) -> list[str]:
+def _check_prejudgment_separation(artifacts: dict[str, dict[str, Any]]) -> list[str]:
     errors: list[str] = []
     for label, document in artifacts.items():
         for path, _ in _walk_object(document):
             key = path.rsplit(".", 1)[-1].casefold().replace("-", "_")
-            if key in FORBIDDEN_PRELOCK_KEYS:
-                errors.append(f"{label}:{path} contains a prohibited pre-lock judgment field")
+            if key in FORBIDDEN_PREJUDGMENT_KEYS:
+                errors.append(f"{label}:{path} contains a prohibited candidate-judgment field")
         encoded = json.dumps(document, ensure_ascii=False).casefold()
         if '"benchmark_content"' in encoded or '"benchmark_subjects"' in encoded:
             errors.append(f"{label} contains benchmark content rather than a pending identity")
@@ -1288,7 +1288,7 @@ def validate_private_preparation(
         errors.append("Normalization report counts do not recompute exactly")
     if profile != build_layout_profile(layout):
         errors.append("Layout profile is not the exact aggregate projection of the extraction")
-    errors.extend(_check_prelock_separation(documents))
+    errors.extend(_check_prejudgment_separation(documents))
     require(not errors, "private_preparation_invalid", "Candidate preparation failed the private full-QA gate.", errors)
     return {
         "identities": identities,
@@ -1373,8 +1373,9 @@ def command_register(args: argparse.Namespace) -> None:
         state["artifacts"] = [record for record in state.get("artifacts", []) if record.get("path") not in paths]
         state["artifacts"].extend(new_records)
         state["artifacts"].sort(key=lambda record: record["path"])
+        registered_candidate_id = result["documents"]["candidate_index"]["candidate_id"]
         state["candidate"] = {
-            "candidate_id": args.candidate_id,
+            "candidate_id": registered_candidate_id,
             "sha256": result["candidate_sha256"],
             "schema_version": "candidate-index-v2",
             "normalized_path": next(record["path"] for record in new_records if record["artifact_type"] == "candidate_index"),
@@ -1390,7 +1391,7 @@ def command_register(args: argparse.Namespace) -> None:
     action = next_stage(state)
     emit({
         "command": "register-candidate-preparation", "ok": True,
-        "evaluation_id": state["evaluation_id"], "candidate_id": args.candidate_id,
+        "evaluation_id": state["evaluation_id"], "candidate_id": registered_candidate_id,
         "artifacts_written": [record["path"] for record in new_records],
         "next_actions": [] if action is None else [action], "warnings": warnings,
     })

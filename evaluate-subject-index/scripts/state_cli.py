@@ -48,7 +48,7 @@ REQUIRED_INPUTS = {
     "benchmark_review": ["candidate-blind benchmark draft", "independent review"],
     "benchmark_freeze": ["approved benchmark"],
     "candidate_normalization": ["candidate index", "page map"],
-    "locator_chunk_preparation": ["normalized candidate", "chunk manifest"],
+    "locator_chunk_preparation": ["registered normalized candidate", "registered page map", "registered chunk manifest", "registered frozen benchmark"],
     "locator_audit": ["locator packets", "source chunks"],
     "missing_access_audit": ["benchmark", "normalized candidate", "locator audits"],
     "structure_audit": ["complete candidate audits", "normalized index"],

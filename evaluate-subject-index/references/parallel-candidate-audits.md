@@ -4,6 +4,19 @@ Locator and missing-access audits can be divided among chats by frozen chunk own
 
 ## Locator audits
 
+First create the frozen packets from registered local artifacts:
+
+```bash
+python scripts/page_chunk_cli.py prepare-locator-chunks \
+  --state evaluation-state.json \
+  --normalized-candidate candidate/candidate-index.json \
+  --page-map page-map.json \
+  --chunk-manifest chunk-manifest.json \
+  --benchmark source-benchmark.json
+```
+
+This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator remains in the routing-exception ledger and blocks worker registration.
+
 Each chat receives the current checkpoint or equivalent evaluation files plus one locator packet. It returns one `locator-audit-v2` artifact covering every and only the packet's assignments.
 
 Validate without mutation:
