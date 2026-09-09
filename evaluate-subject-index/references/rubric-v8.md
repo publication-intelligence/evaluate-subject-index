@@ -19,6 +19,15 @@
 
 Runtime commands accept the current identities only. A V8 calculation input must bind the self-hashed V8 policy whose hash matches audit provenance. Old state, calculation, result, item, and report artifacts are not rescored or migrated.
 
+## What changed in V8
+
+V8 makes two distinct kinds of change:
+
+- **Arithmetic:** Page-reference Reliability replaces weighted locator-utility precision with binary keep precision. This directly changes that dimension's precision input. Its recall measure, F1 form, caps, gates, uncertainty handling, weighting, and rounding remain unchanged.
+- **Judgment policy:** V8 clarifies how source evidence is classified, including comparative facts, attributed observations, contentless mentions, and complete-path stance. These are not formula changes. They may nevertheless change a locator's treatment class or keep decision in a new V8 audit, which can change any downstream input or result that uses that judgment. In particular, a treatment-class change may affect Editorial Selectivity even though its formula and treatment-credit mapping are unchanged.
+
+An unchanged formula therefore does not guarantee an unchanged result when its underlying V8 judgments differ. Frozen V7 evaluations remain unchanged and are not reinterpreted.
+
 ## Treatment and complete-path fit
 
 Treatment measures independently useful information about the complete heading path. Rhetorical form is not a ceiling: comparative-list facts and attributed observations may be `substantive` or `mixed`. `attribution_only`, `citation_only`, and `incidental_example` mean weak presence only when the passage supplies no independently useful information about the full path.
@@ -89,7 +98,7 @@ Existing caps, gates, uncertainty bounds, weights, and rounding apply unchanged.
 | inclusive range span | long-continuous-range review |
 | `atomic_assignment_count` | locator auditing, precision, recall, and routing |
 
-More than six displayed locators or a range longer than ten pages triggers review; it does not itself create a defect. Structure scoring and all non-reliability dimension calculations remain unchanged.
+More than six displayed locators or a range longer than ten pages triggers review; it does not itself create a defect. Structure scoring and all non-reliability dimension formulas remain unchanged. Their results may still differ when a new V8 audit supplies different policy-governed judgments as inputs.
 
 ## Provenance
 
