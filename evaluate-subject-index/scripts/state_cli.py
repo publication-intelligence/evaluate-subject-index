@@ -34,8 +34,9 @@ COMMANDS = {
     "benchmark_freeze": "benchmark_review_cli.py freeze",
     "candidate_normalization": "normalize-index", "locator_chunk_preparation": "prepare-locator-chunks",
     "locator_audit": "audit-locators", "missing_access_audit": "audit-missing-access",
-    "structure_audit": "audit-index-structure", "scoring": "score-index",
-    "web_report": "build-web-report",
+    "structure_audit": "dimension_score_v8_cli.py register-structure",
+    "scoring": "dimension_score_v8_cli.py score",
+    "web_report": "dimension_score_v8_cli.py build-report",
 }
 
 REQUIRED_INPUTS = {
@@ -362,10 +363,17 @@ def command_next(args: argparse.Namespace) -> None:
 def command_set_stage(args: argparse.Namespace) -> None:
     state_path = Path(args.state)
     state = load_state(state_path)
-    if args.status == "completed" and args.stage in {"benchmark_review", "benchmark_freeze"}:
+    typed_commands = {
+        "benchmark_review": "benchmark_review_cli.py freeze",
+        "benchmark_freeze": "benchmark_review_cli.py freeze",
+        "structure_audit": "dimension_score_v8_cli.py register-structure",
+        "scoring": "dimension_score_v8_cli.py score",
+        "web_report": "dimension_score_v8_cli.py build-report",
+    }
+    if args.status == "completed" and args.stage in typed_commands:
         fail(
             "typed_transition_required",
-            "Use benchmark_review_cli.py freeze to validate and complete benchmark review and freeze atomically.",
+            f"Use {typed_commands[args.stage]} to validate and complete {args.stage} atomically.",
         )
     unmet = [name for name in stage_dependencies(args.stage, STAGES) if state["stages"][name]["status"] != "completed"]
     if args.status in {"in_progress", "completed"} and unmet:

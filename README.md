@@ -36,8 +36,22 @@ Important helpers:
 - `candidate_preparation_cli.py` — normalize, validate, and register a contract-valid candidate.
 - `page_chunk_cli.py` — prepare the complete registered-state locator-packet batch after candidate registration.
 - `parallel_candidate_audit_cli.py` — validate/register audit chunks returned by separate chats.
-- `dimension_score_v8_cli.py` — current V8 preflight and calculation from the native structure audit.
-- `item_grade_v8_cli.py` — current V8 item projection.
+- `dimension_score_v8_cli.py` — register the native structure audit, then assemble, score, and report from canonical state. It also exposes low-level preflight and calculation checks.
+- `item_grade_v8_cli.py` — low-level current V8 item-projection validation.
+
+The final three state transitions are typed and atomic:
+
+```bash
+python evaluate-subject-index/scripts/dimension_score_v8_cli.py register-structure \
+  --state /path/to/evaluation/evaluation-state.json \
+  --input /path/to/evaluation/structure-audit.v5.json
+python evaluate-subject-index/scripts/dimension_score_v8_cli.py score \
+  --state /path/to/evaluation/evaluation-state.json
+python evaluate-subject-index/scripts/dimension_score_v8_cli.py build-report \
+  --state /path/to/evaluation/evaluation-state.json
+```
+
+Each command resolves the exact registered current-schema inputs, validates their bytes and cross-artifact identities before writing, registers its outputs, and advances the one canonical state. Failed validation leaves state unchanged.
 
 See [SKILL.md](evaluate-subject-index/SKILL.md) and [workflow.md](evaluate-subject-index/references/workflow.md) for the operating contract.
 

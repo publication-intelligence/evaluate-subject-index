@@ -29,7 +29,8 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 - `scripts/benchmark_review_cli.py`: temporary benchmark screening and the typed, atomic review/freeze transition.
 - `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
 - `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
-- `scripts/dimension_score_v8_cli.py` and `scripts/item_grade_v8_cli.py`: current deterministic V8 calculation and projection.
+- `scripts/dimension_score_v8_cli.py`: typed structure registration, canonical-state input assembly, deterministic V8 scoring, and web-report projection; low-level preflight and calculation remain available for diagnostics.
+- `scripts/item_grade_v8_cli.py`: low-level current item-projection validation.
 - `scripts/bundle_cli.py`: optional checkpoints, artifact listing, and resume imports.
 
 ## State and artifacts
@@ -63,6 +64,8 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 ## Scoring
 
 Native V8 uses evaluation-policy V4, state V6, `structure-audit-v5`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V6, result V10, and web report V8. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
+
+Complete the final stages with `dimension_score_v8_cli.py register-structure`, `score`, and `build-report`. These commands select exact registered current artifacts from canonical state, validate their bytes and bindings, write current-schema outputs, and advance state atomically. Do not complete these stages with generic `state_cli.py set-stage`.
 
 ## Output contract
 

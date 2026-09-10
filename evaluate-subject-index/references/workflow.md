@@ -44,6 +44,16 @@ Source discovery happens before candidate exposure. Synthesis creates a draft; i
 
 The global structure pass then judges whether individually defensible records form a coherent navigation system.
 
+The final transitions use one current command surface:
+
+```bash
+python scripts/dimension_score_v8_cli.py register-structure --state evaluation-state.json --input structure-audit.v5.json
+python scripts/dimension_score_v8_cli.py score --state evaluation-state.json
+python scripts/dimension_score_v8_cli.py build-report --state evaluation-state.json
+```
+
+These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. Generic stage completion is disabled for these three stages.
+
 ## Chunk ownership
 
 Use intellectual units such as chapters. The user approves every inclusive document-page range. Context pages may overlap, but every in-scope page has exactly one judgment owner. Keep complete heading paths intact and route only the locator assignments owned by the chunk.
