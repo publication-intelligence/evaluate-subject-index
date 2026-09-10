@@ -46,7 +46,7 @@ Create checkpoints at useful milestones and before a likely conversation or netw
 
 A checkpoint contains the canonical state plus accessible registered artifacts. Portable checkpoints omit restricted files. Import validates archive path safety, member inventory, and the current state shape, but does not require an old archive hash or member hashes to match. After import, reconnect unavailable restricted inputs explicitly and continue from `state_cli.py next`.
 
-Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before exporting or resuming.
+Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before checkpointing or resuming.
 
 ## Parallel chats
 
