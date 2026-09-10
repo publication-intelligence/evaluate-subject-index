@@ -45,6 +45,7 @@ RUBRIC_VERSION = "subject-index-rubric-v8"
 CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
 CALCULATION_SCHEMA = "subject-index-dimension-calculations-v5"
 ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
+POLICY_PROFILE = "subject-index-standard-policy-v8"
 SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA = (
     "subject-index-v7-architecture-review-supplement-v1"
 )
@@ -448,6 +449,24 @@ def raw_locator_state_requirements(
     return config.get("evaluation_id"), failures, paths
 
 
+def validate_v8_policy(policy_document: dict[str, Any]) -> None:
+    """Validate the frozen policy itself, independent of Markdown wording."""
+    v5.validate_schema_document(
+        policy_document, "evaluation-policy-v4.schema.json", "policy"
+    )
+    v5.require(
+        policy_document.get("policy_sha256")
+        == v5.canonical_hash(policy_document, "policy_sha256"),
+        "policy_self_hash_mismatch",
+        "The V8 evaluation policy self-hash does not reconstruct.",
+    )
+    v5.require(
+        policy_document.get("policy_profile", {}).get("id") == POLICY_PROFILE,
+        "policy_profile_mismatch",
+        f"The V8 evaluation policy must use profile {POLICY_PROFILE}.",
+    )
+
+
 def load_v8_inputs(config_path: Path) -> dict[str, Any]:
     """Load native V8 inputs while reusing the unchanged structure contract.
 
@@ -468,24 +487,7 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
     policy_path, policy_document, policy_artifact = v5.resolve_input(
         config_path, inputs["policy"], "policy"
     )
-    v5.validate_schema_document(
-        policy_document, "evaluation-policy-v4.schema.json", "policy"
-    )
-    v5.require(
-        policy_document.get("policy_sha256")
-        == v5.canonical_hash(policy_document, "policy_sha256"),
-        "policy_self_hash_mismatch",
-        "The V8 evaluation policy self-hash does not reconstruct.",
-    )
-    standard_policy_path = (
-        Path(__file__).resolve().parents[1] / "references" / "standard-policy-v8.md"
-    )
-    v5.require(
-        policy_document.get("policy_profile", {}).get("standard_policy_sha256")
-        == v5.sha256_file(standard_policy_path),
-        "standard_policy_profile_hash_mismatch",
-        "The V8 policy must bind the exact built-in standard-policy-v8 content.",
-    )
+    validate_v8_policy(policy_document)
     structure_ref = inputs["structure_audit"]
     structure_path, structure_document, structure_artifact = v5.resolve_input(
         config_path, structure_ref, "structure_audit"
@@ -550,6 +552,11 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
         )
         artifacts.append(chunk_artifact)
         paths.append(chunk_path)
+    v5.require(
+        len(paths) == len(set(paths)),
+        "duplicate_input_artifact",
+        "Each calculation input path may select only one artifact.",
+    )
     return {
         "config": config,
         "policy": policy_document,
@@ -559,24 +566,12 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
         "frozen_structure": structure_document,
         "chunk_manifest": chunk_manifest,
         "supplement": None,
+        "locator_input_entries": locator_entries,
+        "missing_input_entries": missing_entries,
         "input_artifacts": artifacts,
         "input_paths": paths,
         "config_path": config_path,
     }
-
-
-def policy_identity_requirements(
-    loaded: Mapping[str, Any], ledgers: Mapping[str, Any]
-) -> list[dict[str, Any]]:
-    if loaded.get("policy", {}).get("policy_sha256") == ledgers["identity"].get(
-        "policy_sha256"
-    ):
-        return []
-    return [{
-        "code": "policy_identity_mismatch",
-        "path": "inputs.policy",
-        "message": "The V8 policy hash must equal the policy hash frozen into every audit ledger.",
-    }]
 
 
 def preflight_loaded(
@@ -587,7 +582,6 @@ def preflight_loaded(
         return None, missing
     missing = [
         *missing,
-        *policy_identity_requirements(loaded, ledgers),
         *locator_state_requirements(
             ledgers,
             loaded["config"]["audit_mode"],
@@ -1387,8 +1381,6 @@ def command_preflight(args: argparse.Namespace) -> None:
             v5.emit(result)
         loaded = load_v8_inputs(config_path)
         ledgers, base_missing = v5.preflight_loaded(loaded)
-        if ledgers is not None:
-            base_missing.extend(policy_identity_requirements(loaded, ledgers))
         fit_report = (
             locator_fit_preflight(
                 ledgers,

@@ -146,20 +146,6 @@
         "concept_coverage_counts": {"$ref": "#/$defs/coverageCounts"},
         "locator_recall": {"$ref": "#/$defs/recallCounts"}
       }
-    },
-    "provenance": {
-      "type": "object",
-      "properties": {
-        "source_sha256": {"$ref": "#/$defs/sha256"},
-        "benchmark_file_sha256": {"$ref": "#/$defs/sha256"},
-        "policy_sha256": {"$ref": "#/$defs/sha256"},
-        "page_map_sha256": {"$ref": "#/$defs/sha256"},
-        "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
-        "normalized_candidate_file_sha256": {"$ref": "#/$defs/sha256"},
-        "item_inventory_file_sha256": {"$ref": "#/$defs/sha256"},
-        "locator_audit_set_sha256": {"$ref": "#/$defs/sha256"}
-      },
-      "additionalProperties": true
     }
   },
   "$defs": {

@@ -219,10 +219,11 @@ def build_v8_assessments(
         raise ValueError("v8_calculation_required")
     if base_items.get("evaluation_id") != calculation.get("evaluation_id"):
         raise ValueError("item_calculation_evaluation_mismatch")
-    if base_items.get("evidence_identity") != calculation.get("evidence_identity"):
-        raise ValueError("item_calculation_evidence_identity_mismatch")
+    if base_items.get("candidate_sha256") != calculation.get("evidence_identity", {}).get("candidate_sha256"):
+        raise ValueError("item_calculation_candidate_identity_mismatch")
 
     result = deepcopy(base_items)
+    result["evidence_identity"] = deepcopy(calculation["evidence_identity"])
     provenance = _reliability(calculation)["reliability_provenance"]
     assignments = {
         item["locator_id"]: item

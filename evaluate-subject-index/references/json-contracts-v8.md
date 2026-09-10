@@ -27,7 +27,12 @@ The active workflow uses these primary identities:
   identity agreement, exact workset coverage, ownership, and recomputed totals.
 - `evaluation-state.json` is the only control inventory.
 - Registered paths are relative to the evaluation root and unique.
-- Stable IDs and content hashes join related records and detect accidental input mix-ups.
+- Stable semantic IDs join worker records. Calculation-input file references and their
+  verified bytes define the selected scoring artifacts.
+- Worker provenance is informational. Repeated source, policy, page-map, manifest,
+  candidate-file, inventory-file, and audit-set hashes are not scoring gates.
+- Locator- and missing-access-audit set hashes are computed deterministically from
+  the selected files and their stable IDs, then recorded in calculation outputs.
 - Current audit denominators must be complete and non-overlapping before a stage is marked complete.
 - Locator-packet preparation registers exactly one packet per frozen manifest chunk plus an empty routing-exception ledger; any unresolved or ownerless assignment prevents the state transition.
 - The candidate's frozen benchmark path and canonical benchmark identity in state are the locator-preparation binding. There is no candidate-benchmark repository-lock contract.

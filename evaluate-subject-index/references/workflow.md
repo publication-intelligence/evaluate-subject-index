@@ -27,7 +27,12 @@ Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage c
 
 State contains the artifact inventory. Writers validate the selected operation, write artifacts, and atomically replace state while holding `.evaluation.lock`. There is no separate manifest and no two-control-file commit order.
 
-Hashes inside policy, benchmark, and audit records provide stable identity joins and catch accidental input mix-ups. A local artifact checksum mismatch is a warning during resume, not proof of tampering and not an automatic stage blocker.
+Policy and benchmark self-hashes provide stable identities. Worker provenance is
+informational; packet/workset ownership and stable IDs bind worker judgments.
+During scoring, calculation-input references select artifacts, their hashes are
+verified against actual bytes, and audit-set hashes are computed from those files.
+A local state-inventory checksum mismatch remains a resume warning rather than an
+automatic stage blocker.
 
 ## Source-first sequence
 

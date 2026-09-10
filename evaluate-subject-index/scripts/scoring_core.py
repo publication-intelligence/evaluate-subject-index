@@ -600,15 +600,6 @@ def reconstruct_locator_count_evidence(documents: Sequence[dict[str, Any]]) -> t
     return chapters, global_path_ids, total_not_measured
 
 
-AUDIT_IDENTITY_FIELDS = (
-    "source_sha256",
-    "policy_sha256",
-    "page_map_sha256",
-    "chunk_manifest_sha256",
-    "normalized_candidate_file_sha256",
-    "item_inventory_file_sha256",
-)
-
 CALCULATION_EVIDENCE_IDENTITY_FIELDS = (
     "candidate_sha256",
     "source_sha256",
@@ -616,8 +607,6 @@ CALCULATION_EVIDENCE_IDENTITY_FIELDS = (
     "policy_sha256",
     "page_map_sha256",
     "chunk_manifest_sha256",
-    "normalized_candidate_file_sha256",
-    "item_inventory_file_sha256",
     "structure_audit_file_sha256",
     "locator_audit_set_sha256",
     "missing_access_audit_set_sha256",
@@ -642,23 +631,22 @@ def canonical_audit_set_hash(documents: Sequence[dict[str, Any]], paths: Sequenc
 
 
 def validate_ledger_set_integrity(loaded: dict[str, Any], *, require_chunk_manifest: bool = True) -> dict[str, Any]:
-    """Bind the complete audit set and reject cross-snapshot ledger mixtures."""
+    """Derive identity from selected inputs and reject semantic mixtures."""
     config = loaded["config"]
     evaluation_id = config["evaluation_id"]
     loc_docs = loaded["locator_documents"]
     missing_docs = loaded["missing_documents"]
     structure = loaded["structure"]
     chunk_manifest = loaded.get("chunk_manifest")
-    supplement = loaded.get("supplement")
+    policy = loaded.get("policy")
+    require(isinstance(policy, dict), "canonical_policy_required", "The referenced evaluation policy is required.")
+    policy_scope = policy.get("source_scope")
+    require(isinstance(policy_scope, dict), "policy_identity_mismatch", "The referenced policy lacks source_scope identity.")
     all_audits = [*loc_docs, *missing_docs]
 
     frozen_audit_mode = structure.get("audit_mode")
-    if frozen_audit_mode is None and isinstance(supplement, dict):
-        frozen_audit_mode = supplement.get("audit_mode")
-    require(frozen_audit_mode in {"full", "pilot"}, "required_v5_ledger_field_missing", "A frozen structure audit or migration supplement must bind audit_mode.")
-    require(frozen_audit_mode == config["audit_mode"], "audit_mode_identity_mismatch", "Calculation audit_mode differs from the frozen audit provenance.", {"calculation": config["audit_mode"], "frozen": frozen_audit_mode})
-    if structure.get("audit_mode") is not None and isinstance(supplement, dict):
-        require(supplement.get("audit_mode") == structure.get("audit_mode"), "audit_mode_identity_mismatch", "Migration supplement audit_mode differs from the historical structure audit.")
+    require(frozen_audit_mode in {"full", "pilot"}, "required_v5_ledger_field_missing", "The structure audit must bind audit_mode.")
+    require(frozen_audit_mode == config["audit_mode"], "audit_mode_identity_mismatch", "Calculation audit_mode differs from the structure audit.", {"calculation": config["audit_mode"], "structure": frozen_audit_mode})
 
     for label, documents in (("locator", loc_docs), ("missing-access", missing_docs)):
         chunk_ids = [document.get("chunk_id") for document in documents]
@@ -666,9 +654,6 @@ def validate_ledger_set_integrity(loaded: dict[str, Any], *, require_chunk_manif
         require(len(chunk_ids) == len(set(chunk_ids)), "duplicate_chunk_id", f"The {label} audit set contains duplicate chunk IDs.", chunk_ids)
         for document in documents:
             require(document.get("evaluation_id") == evaluation_id, "evaluation_identity_mismatch", f"A {label} audit has a different evaluation_id.")
-            require(isinstance(document.get("provenance"), dict), "required_v5_ledger_field_missing", f"{label} audit {document.get('chunk_id')} requires provenance for V5 identity binding.")
-            missing_fields = [field for field in AUDIT_IDENTITY_FIELDS if field not in document["provenance"]]
-            require(not missing_fields, "required_v5_ledger_field_missing", f"{label} audit {document.get('chunk_id')} lacks V5 identity fields.", missing_fields)
 
     locator_chunks = {document["chunk_id"] for document in loc_docs}
     missing_chunks = {document["chunk_id"] for document in missing_docs}
@@ -699,6 +684,15 @@ def validate_ledger_set_integrity(loaded: dict[str, Any], *, require_chunk_manif
             "The canonical chunk manifest must contain unique CHUNK-* identifiers.",
             manifest_chunks,
         )
+        owned_pages: set[int] = set()
+        for item in chunk_manifest["chunks"]:
+            for start, end in item["owned_document_page_ranges"]:
+                pages = set(range(start, end + 1))
+                require(not owned_pages & pages, "overlapping_chunk_coverage", "Canonical manifest chunk ownership overlaps.", sorted(owned_pages & pages))
+                owned_pages.update(pages)
+        first_page, last_page = policy_scope["document_page_span"]
+        expected_pages = set(range(first_page, last_page + 1))
+        require(owned_pages == expected_pages, "incomplete_chunk_coverage", "Canonical manifest ownership must cover the complete policy document-page span.", {"missing_pages": sorted(expected_pages - owned_pages), "foreign_pages": sorted(owned_pages - expected_pages)})
         approved_chunks = set(manifest_chunks)
     require(locator_chunks == missing_chunks == set(density_chunks) == approved_chunks, "incomplete_or_mixed_chunk_set", "Locator audits, missing-access audits, structure density, and the canonical manifest must cover the same complete approved chunk set.", {
         "locator_only": sorted(locator_chunks - missing_chunks - approved_chunks),
@@ -713,36 +707,34 @@ def validate_ledger_set_integrity(loaded: dict[str, Any], *, require_chunk_manif
     candidate_hashes = {document.get("candidate_sha256") for document in all_audits} | {structure.get("candidate_sha256")}
     require(len(candidate_hashes) == 1 and None not in candidate_hashes, "candidate_identity_mismatch", "All audit ledgers must bind the same candidate SHA-256.", sorted(str(item) for item in candidate_hashes))
 
-    identity: dict[str, Any] = {"candidate_sha256": next(iter(candidate_hashes)), "audit_mode": frozen_audit_mode, "approved_chunk_ids": sorted(approved_chunks)}
-    for field in AUDIT_IDENTITY_FIELDS:
-        values = {document["provenance"].get(field) for document in all_audits}
-        require(len(values) == 1 and None not in values, "audit_provenance_mismatch", f"Audit ledgers bind different {field} values.", sorted(str(item) for item in values))
-        identity[field] = next(iter(values))
-
+    require(
+        policy.get("audit_design", {}).get("mode") == frozen_audit_mode,
+        "audit_mode_identity_mismatch",
+        "The referenced policy, calculation input, and structure audit must use the same audit mode.",
+    )
+    identity: dict[str, Any] = {
+        "candidate_sha256": next(iter(candidate_hashes)),
+        "source_sha256": policy_scope.get("source_sha256"),
+        "policy_sha256": policy.get("policy_sha256"),
+        "page_map_sha256": policy_scope.get("page_map_sha256"),
+        "chunk_manifest_sha256": policy_scope.get("chunk_manifest_sha256"),
+        "audit_mode": frozen_audit_mode,
+        "approved_chunk_ids": sorted(approved_chunks),
+    }
     if chunk_manifest is not None:
-        require(chunk_manifest.get("page_map_sha256") == identity["page_map_sha256"], "chunk_manifest_identity_mismatch", "Chunk-manifest page-map identity differs from the audit ledgers.")
-        require(chunk_manifest.get("chunk_manifest_sha256") == identity["chunk_manifest_sha256"], "chunk_manifest_identity_mismatch", "Audit ledgers do not bind the supplied canonical chunk manifest.")
+        require(chunk_manifest.get("page_map_sha256") == identity["page_map_sha256"], "chunk_manifest_identity_mismatch", "The policy and canonical chunk manifest identify different page maps.")
+        require(chunk_manifest.get("chunk_manifest_sha256") == identity["chunk_manifest_sha256"], "chunk_manifest_identity_mismatch", "The policy does not bind the supplied canonical chunk manifest.")
 
-    benchmark_values = {document["provenance"]["benchmark_sha256"] for document in loc_docs}
-    benchmark_values.update(document.get("benchmark_sha256") for document in missing_docs)
-    require(len(benchmark_values) == 1 and None not in benchmark_values, "benchmark_identity_mismatch", "Locator and missing-access audits bind different benchmark SHA-256 values.", sorted(str(item) for item in benchmark_values))
+    benchmark_values = {document.get("benchmark_sha256") for document in missing_docs}
+    require(len(benchmark_values) == 1 and None not in benchmark_values, "benchmark_identity_mismatch", "Missing-access audits bind different benchmark SHA-256 values.", sorted(str(item) for item in benchmark_values))
     identity["benchmark_sha256"] = next(iter(benchmark_values))
 
-    structure_provenance = structure.get("provenance")
-    require(isinstance(structure_provenance, dict), "required_v5_ledger_field_missing", "Structure audit requires provenance for V5 identity binding.")
-    for field in ("benchmark_sha256", "normalized_candidate_file_sha256", "item_inventory_file_sha256"):
-        require(structure_provenance.get(field) == identity[field], "structure_identity_mismatch", f"Structure audit {field} differs from the chunk audit set.", {"structure": structure_provenance.get(field), "audit_set": identity[field]})
-    require(structure.get("item_inventory_sha256") == identity["item_inventory_file_sha256"], "structure_identity_mismatch", "Structure audit item-inventory SHA-256 differs from the chunk audit set.")
-    if structure.get("schema_version") == "structure-audit-v4":
-        for field in AUDIT_IDENTITY_FIELDS:
-            require(structure_provenance.get(field) == identity[field], "structure_identity_mismatch", f"Structure audit {field} differs from the chunk audit set.", {"structure": structure_provenance.get(field), "audit_set": identity[field]})
-
-    locator_count = len(loc_docs)
-    missing_count = len(missing_docs)
-    locator_paths = loaded["input_paths"][:locator_count]
-    missing_paths = loaded["input_paths"][locator_count:locator_count + missing_count]
-    locator_hashes = [item["sha256"] for item in loaded["input_artifacts"][:locator_count]]
-    missing_hashes = [item["sha256"] for item in loaded["input_artifacts"][locator_count:locator_count + missing_count]]
+    locator_entries = loaded["locator_input_entries"]
+    missing_entries = loaded["missing_input_entries"]
+    locator_paths = [item[2] for item in locator_entries]
+    missing_paths = [item[2] for item in missing_entries]
+    locator_hashes = [item[1]["sha256"] for item in locator_entries]
+    missing_hashes = [item[1]["sha256"] for item in missing_entries]
     locator_set_sha256 = canonical_audit_set_hash(loc_docs, locator_paths, locator_hashes, (("judgments", "locator_id", "locator_ids"),))
     missing_set_sha256 = canonical_audit_set_hash(
         missing_docs,
@@ -750,40 +742,6 @@ def validate_ledger_set_integrity(loaded: dict[str, Any], *, require_chunk_manif
         missing_hashes,
         (("subject_judgments", "subject_id", "subject_ids"), ("reader_task_results", "task_id", "reader_task_ids"), ("treatment_judgments", "treatment_id", "treatment_ids")),
     )
-    if structure.get("schema_version") == "structure-audit-v4":
-        for document in missing_docs:
-            require(document["provenance"].get("locator_audit_set_sha256") == locator_set_sha256, "locator_audit_set_identity_mismatch", f"Missing-access audit {document['chunk_id']} does not bind the exact supplied locator-audit set.", {"expected": locator_set_sha256, "actual": document["provenance"].get("locator_audit_set_sha256")})
-        require(structure_provenance.get("locator_audit_set_sha256") == locator_set_sha256, "locator_audit_set_identity_mismatch", "Structure audit does not bind the exact supplied locator-audit set.", {"expected": locator_set_sha256, "actual": structure_provenance.get("locator_audit_set_sha256")})
-        require(structure_provenance.get("missing_access_audit_set_sha256") == missing_set_sha256, "missing_access_audit_set_identity_mismatch", "Structure audit does not bind the exact supplied missing-access audit set.", {"expected": missing_set_sha256, "actual": structure_provenance.get("missing_access_audit_set_sha256")})
-    else:
-        # Historical V3 audits can carry an audit-set identity produced by an
-        # earlier canonicalization scheme. Those frozen values are provenance,
-        # not bytes that V5 may rewrite. A reviewed supplement must bind both
-        # schemes over the exact same frozen input files.
-        for document in missing_docs:
-            require(document["provenance"].get("locator_audit_set_sha256") == locator_set_sha256, "locator_audit_set_identity_mismatch", f"Missing-access audit {document['chunk_id']} does not bind the exact supplied locator-audit set.", {"expected": locator_set_sha256, "actual": document["provenance"].get("locator_audit_set_sha256")})
-        # The historical V3 structure/result checkpoint used a different
-        # aggregate identity scheme even though the later missing-access files
-        # already bind the canonical locator set. Keep that frozen structure
-        # identity separate and reconcile it explicitly in the supplement.
-        historical_locator_sha256 = structure_provenance.get("locator_audit_set_sha256")
-        historical_missing_sha256 = structure_provenance.get("missing_access_audit_set_sha256")
-        if isinstance(supplement, dict):
-            require(supplement.get("locator_audit_set_sha256") == locator_set_sha256, "migration_supplement_binding_mismatch", "Migration supplement does not bind the V5-canonical supplied locator-audit set.", {"expected": locator_set_sha256, "actual": supplement.get("locator_audit_set_sha256")})
-            require(supplement.get("missing_access_audit_set_sha256") == missing_set_sha256, "migration_supplement_binding_mismatch", "Migration supplement does not bind the V5-canonical supplied missing-access audit set.", {"expected": missing_set_sha256, "actual": supplement.get("missing_access_audit_set_sha256")})
-            if historical_locator_sha256 is not None:
-                require(supplement.get("historical_locator_audit_set_sha256") == historical_locator_sha256, "migration_supplement_binding_mismatch", "Migration supplement does not preserve the locator-audit-set identity recorded by the historical ledgers.", {"expected": historical_locator_sha256, "actual": supplement.get("historical_locator_audit_set_sha256")})
-            if historical_missing_sha256 is not None:
-                require(supplement.get("historical_missing_access_audit_set_sha256") == historical_missing_sha256, "migration_supplement_binding_mismatch", "Migration supplement does not preserve the missing-access-audit-set identity recorded by the historical structure audit.", {"expected": historical_missing_sha256, "actual": supplement.get("historical_missing_access_audit_set_sha256")})
-            historical_locator_sha256 = supplement["historical_locator_audit_set_sha256"]
-            historical_missing_sha256 = supplement["historical_missing_access_audit_set_sha256"]
-            require(
-                supplement.get("audit_set_reconciliation_basis") == "same_frozen_files_rehashed_with_subject_index_canonical_audit_set_v1",
-                "migration_supplement_binding_mismatch",
-                "Migration supplement lacks the required historical-to-canonical audit-set reconciliation basis.",
-            )
-        identity["historical_locator_audit_set_sha256"] = historical_locator_sha256
-        identity["historical_missing_access_audit_set_sha256"] = historical_missing_sha256
     identity["locator_audit_set_sha256"] = locator_set_sha256
     identity["missing_access_audit_set_sha256"] = missing_set_sha256
     structure_artifact = next(item for item in loaded["input_artifacts"] if item["role"] == "structure_audit")
@@ -912,6 +870,29 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
             "invalid_ledger",
             f"Structure metric {field} must be a nonnegative integer.",
         )
+    total_paths = metrics.get("total_paths")
+    if total_paths is not None:
+        require(
+            isinstance(total_paths, int) and not isinstance(total_paths, bool) and total_paths >= 0,
+            "invalid_ledger",
+            "Structure metric total_paths must be a nonnegative integer.",
+        )
+        require(
+            total_paths >= metrics["page_bearing_paths"],
+            "recomputable_aggregate_mismatch",
+            "Structure total_paths cannot be smaller than page_bearing_paths.",
+            {"total_paths": total_paths, "page_bearing_paths": metrics["page_bearing_paths"]},
+        )
+    total_nodes = metrics.get("total_nodes")
+    if total_nodes is not None:
+        require(
+            isinstance(total_nodes, int) and not isinstance(total_nodes, bool) and total_nodes == len(expected_nodes),
+            "recomputable_aggregate_mismatch",
+            "Structure total_nodes must equal its complete stable node-ID denominator.",
+            {"field": "metrics.total_nodes", "expected": len(expected_nodes), "actual": total_nodes},
+        )
+        if total_paths is not None:
+            require(total_paths <= total_nodes, "recomputable_aggregate_mismatch", "Structure total_paths cannot exceed total_nodes.")
     require(
         metrics["expanded_locators"] == locator_original,
         "recomputable_aggregate_mismatch",
@@ -1081,7 +1062,7 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
     if not approved_structural_sections:
         approved_structural_sections = set(expected_nodes)
     high_priority_subjects = {item["subject_id"] for item in subjects if item.get("priority") in {"essential", "major"}}
-    path_denominator = metrics["page_bearing_paths"]
+    path_denominator = total_paths if total_paths is not None else metrics["page_bearing_paths"]
     defect_family_denominators = {
         "locator": locator_original,
         "path": path_denominator,

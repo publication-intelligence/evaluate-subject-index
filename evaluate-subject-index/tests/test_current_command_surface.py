@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import hashlib
 import subprocess
 import sys
 import tempfile
@@ -123,10 +122,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             policy = json.loads(output.read_text())
             self.assertEqual("subject-index-evaluation-policy-v4", policy["schema_version"])
             self.assertEqual("subject-index-standard-policy-v8", policy["policy_profile"]["id"])
-            self.assertEqual(
-                hashlib.sha256((ROOT / "references" / "standard-policy-v8.md").read_bytes()).hexdigest(),
-                policy["policy_profile"]["standard_policy_sha256"],
-            )
+            self.assertNotIn("standard_policy_sha256", policy["policy_profile"])
 
 
 if __name__ == "__main__":

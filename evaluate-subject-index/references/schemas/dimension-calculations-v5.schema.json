@@ -12,7 +12,7 @@
     "calculation_profile": {"const": "subject-index-dimension-calculation-v4"},
     "audit_mode": {"enum": ["full", "pilot"]},
     "status": {"enum": ["scored", "not_scored_insufficient_evidence"]},
-    "evidence_identity": {"$ref": "dimension-calculations.schema.json#/properties/evidence_identity"},
+    "evidence_identity": {"$ref": "#/$defs/evidenceIdentity"},
     "input_artifacts": {"type": "array", "minItems": 3, "items": {"$ref": "dimension-calculations.schema.json#/$defs/inputArtifact"}, "uniqueItems": true},
     "diagnostic_item_grades": {
       "type": "object",
@@ -111,6 +111,22 @@
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidenceIdentity": {
+      "type": "object",
+      "required": ["candidate_sha256", "source_sha256", "benchmark_sha256", "policy_sha256", "page_map_sha256", "chunk_manifest_sha256", "structure_audit_file_sha256", "locator_audit_set_sha256", "missing_access_audit_set_sha256"],
+      "properties": {
+        "candidate_sha256": {"$ref": "#/$defs/sha256"},
+        "source_sha256": {"$ref": "#/$defs/sha256"},
+        "benchmark_sha256": {"$ref": "#/$defs/sha256"},
+        "policy_sha256": {"$ref": "#/$defs/sha256"},
+        "page_map_sha256": {"$ref": "#/$defs/sha256"},
+        "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "structure_audit_file_sha256": {"$ref": "#/$defs/sha256"},
+        "locator_audit_set_sha256": {"$ref": "#/$defs/sha256"},
+        "missing_access_audit_set_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
     "decimal": {"type": "string", "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
     "compatibilityClassification": {
       "type": "object",

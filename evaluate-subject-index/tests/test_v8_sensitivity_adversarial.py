@@ -151,7 +151,7 @@ class V8SensitivityTests(unittest.TestCase):
         self.assertEqual(25, assignment["diagnostic_grade"])
         self.assertEqual("0", assignment["rating_credit"])
 
-    def test_policy_hash_must_match_frozen_audit_provenance(self) -> None:
+    def test_policy_hash_copy_in_worker_provenance_is_not_a_gate(self) -> None:
         frozen_ledgers = {
             "identity": {"policy_sha256": "a" * 64},
         }
@@ -162,8 +162,8 @@ class V8SensitivityTests(unittest.TestCase):
         with mock.patch.object(v8.v5, "preflight_loaded", return_value=(frozen_ledgers, [])), \
              mock.patch.object(v8, "locator_state_requirements", return_value=[]):
             ledgers, missing = v8.preflight_loaded(loaded)
-        self.assertIsNone(ledgers)
-        self.assertEqual(["policy_identity_mismatch"], [item["code"] for item in missing])
+        self.assertIs(ledgers, frozen_ledgers)
+        self.assertEqual([], missing)
 
 
 @unittest.skipUnless(HAS_SCORING_DEPENDENCIES, "scoring runtime dependencies are unavailable")

@@ -70,20 +70,6 @@
         "severity_counts": {"$ref": "#/$defs/severityCounts"},
         "error_code_counts": {"$ref": "#/$defs/errorCodeCounts"}
       }
-    },
-    "provenance": {
-      "type": "object",
-      "properties": {
-        "source_sha256": {"$ref": "#/$defs/sha256"},
-        "benchmark_sha256": {"$ref": "#/$defs/sha256"},
-        "policy_sha256": {"$ref": "#/$defs/sha256"},
-        "page_map_sha256": {"$ref": "#/$defs/sha256"},
-        "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
-        "normalized_candidate_file_sha256": {"$ref": "#/$defs/sha256"},
-        "item_inventory_file_sha256": {"$ref": "#/$defs/sha256"},
-        "locator_packet_file_sha256": {"$ref": "#/$defs/sha256"}
-      },
-      "additionalProperties": true
     }
   },
   "$defs": {
