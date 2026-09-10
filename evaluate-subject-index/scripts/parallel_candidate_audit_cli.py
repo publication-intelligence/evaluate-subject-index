@@ -42,6 +42,7 @@ LOCATOR_STATUSES = {"supported", "partially_supported", "unsupported", "uninspec
 SEVERITIES = {"none", "cosmetic", "minor", "major", "critical"}
 COVERAGE_STATUSES = {"complete", "partial", "missing", "uninspectable"}
 TASK_STATUSES = {"succeeds", "partially_succeeds", "fails", "uninspectable"}
+ACCESS_MODES = {"direct", "cross_reference", "mixed", "none", "uninspectable"}
 TREATMENT_RECALL_STATUSES = {"found", "missed", "uninspectable"}
 PRIORITIES = {"essential", "major", "optional"}
 LOCATOR_CLASS_RANK = {"principal": 0, "synthesis_or_conclusion": 1, "supporting": 2, "incidental": 3}
