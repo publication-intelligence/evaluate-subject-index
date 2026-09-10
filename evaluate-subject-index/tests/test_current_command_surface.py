@@ -37,6 +37,18 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertNotIn("bind-publication", text)
         self.assertNotIn("integrate", text)
 
+    def test_candidate_preparation_has_no_success_only_artifact_schemas(self) -> None:
+        schemas = ROOT / "references" / "schemas"
+        self.assertTrue((schemas / "candidate-normalization-issues.schema.json").is_file())
+        for name in (
+            "candidate-ref.schema.json",
+            "candidate-layout-profile.schema.json",
+            "candidate-normalization-exceptions.schema.json",
+            "candidate-normalization-report.schema.json",
+            "candidate-normalization-qa.schema.json",
+        ):
+            self.assertFalse((schemas / name).exists())
+
     def test_locator_preparation_uses_registered_state_not_repository_locks(self) -> None:
         text = help_text("page_chunk_cli.py")
         self.assertIn("prepare-locator-chunks", text)

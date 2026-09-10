@@ -13,7 +13,7 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | benchmark_synthesis | benchmark draft |
 | benchmark_review | independent review ledger |
 | benchmark_freeze | frozen benchmark |
-| candidate_normalization | normalized candidate and inventory |
+| candidate_normalization | normalized candidate, fidelity layout, inventory, and optional issues |
 | locator_chunk_preparation | all locator packets |
 | locator_audit | all locator-audit V2 chunks |
 | missing_access_audit | all missing-access chunks |
@@ -51,7 +51,7 @@ Parallel chats may work on independent chunks. A coordinator validates the selec
 
 ## Candidate preparation
 
-Candidate preparation is mechanical and may run separately, provided it does not expose benchmark content to extraction or normalization. It preserves the original hierarchy, records uncertainty, expands locators, builds the item inventory, and accounts for all delivered items. Local registration after benchmark freeze fulfills `candidate_normalization`.
+Candidate preparation is mechanical and may run separately, provided it does not expose benchmark content to extraction or normalization. It preserves the original hierarchy, records uncertainty only when present, expands locators, builds the item inventory, and computes exact layout, line, item, and locator denominator checks. Clean validation produces no report artifact. Local registration after benchmark freeze fulfills `candidate_normalization` with three required artifacts and at most one non-empty issues report.
 
 ## Locator-packet preparation
 

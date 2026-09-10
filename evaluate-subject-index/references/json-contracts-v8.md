@@ -10,6 +10,7 @@ The active workflow uses these primary identities:
 | Structure audit | `structure-audit-v5` |
 | Evaluation policy | `subject-index-evaluation-policy-v4` |
 | Candidate locator packet | `candidate-locator-chunk-v1` |
+| Candidate normalization issues | `candidate-normalization-issues-v1` (only when non-empty) |
 | Locator routing exceptions | `candidate-locator-routing-exceptions-v1` |
 | Calculation input | `subject-index-dimension-calculation-input-v2` |
 | Dimension calculations | `subject-index-dimension-calculations-v5` |
@@ -35,6 +36,8 @@ The active workflow uses these primary identities:
   the selected files and their stable IDs, then recorded in calculation outputs.
 - The structure audit binds complete stable-ID denominators for nodes, cross-references, and locator-bearing paths. Full mode stores only exceptions plus a complete-scope pass attestation; pilot mode lists observed passes and preserves every unlisted denominator identity as `not_measured`.
 - Every locator judgment states `complete_path_fit`; scoring does not infer it from prose or another artifact.
+- Current audit denominators must be complete and non-overlapping before a stage is marked complete.
+- Candidate preparation computes its exact-set fidelity checks and registers no empty or pass-only report artifact.
 - Locator-packet preparation registers exactly one packet per frozen manifest chunk plus an empty routing-exception ledger; any unresolved or ownerless assignment prevents the state transition.
 - The candidate's frozen benchmark path and canonical benchmark identity in state are the locator-preparation binding. There is no candidate-benchmark repository-lock contract.
 - Explanation fields are metadata, not calculation inputs.

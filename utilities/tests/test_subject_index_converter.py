@@ -305,11 +305,11 @@ class TextRuntimeTests(unittest.TestCase):
             "validation": {"all_document_pages_covered": True, "unique_indexable_locator_keys": True},
             "page_map_sha256": "1" * 64,
         }
-        candidate, _, exceptions, _ = normalize_layout(layout, page_map)
+        candidate, _, exceptions = normalize_layout(layout, page_map)
         reference = next(record for record in candidate["records"] if record["cross_references"])
         self.assertEqual(["Alpha"], reference["heading_path"])
         self.assertEqual("Beta", reference["cross_references"][0]["target"])
-        self.assertFalse(any(item["type"] == "missing_heading" for item in exceptions["exceptions"]))
+        self.assertFalse(any(item["type"] == "missing_heading" for item in exceptions["issues"]))
 
     def test_plain_text_does_not_invent_unexpressed_hierarchy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

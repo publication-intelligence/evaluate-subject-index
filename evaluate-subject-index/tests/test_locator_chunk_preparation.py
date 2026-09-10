@@ -81,7 +81,7 @@ class LocatorFixture:
         self.manifest_path = root / "chunk-manifest.json"
         self.benchmark_path = root / "source-benchmark.json"
         self.candidate_path = root / "preparation" / "candidate-index.json"
-        self.candidate_ref_path = root / "preparation" / "candidate_ref.json"
+        self.layout_path = root / "preparation" / "candidate-layout-extraction.json"
         self.inventory_path = root / "preparation" / "item-inventory.json"
         self.state_path = root / "evaluation-state.json"
         self.output_dir = root / "preparation" / "locator-packets"
@@ -210,35 +210,6 @@ class LocatorFixture:
             },
         }
 
-    def _candidate_ref(self) -> dict:
-        finding = {"status": "verified", "rationale": "Synthetic current-workflow fixture."}
-        return {
-            "schema_version": "candidate-ref-v1",
-            "candidate_id": "candidate-current",
-            "candidate_sha256": self.candidate_sha,
-            "candidate_filename": "candidate.pdf",
-            "file_origin": "delivered_pdf",
-            "source": {"sha256": self.source_sha, "edition": "Test edition"},
-            "page_map_sha256": self.page_map["page_map_sha256"],
-            "chunk_manifest_sha256": self.manifest["chunk_manifest_sha256"],
-            "policy": {
-                "profile": "subject-index-standard-policy-v8",
-                "sha256": self.policy_sha,
-                "rubric_version": "subject-index-rubric-v8",
-                "audit_mode": "full",
-            },
-            "pdf": {"page_count": 1, "producer": None, "has_embedded_text": True},
-            "provenance": {
-                "candidate_bytes": finding,
-                "internal_pdf_completeness": finding,
-                "structural_continuity": finding,
-                "source_edition_compatibility": finding,
-                "locator_page_map_compatibility": finding,
-                "authoritative_copy_fidelity": {**finding, "claimed_original_publisher_pdf": True},
-            },
-            "created_at": "2026-09-09T00:00:00Z",
-        }
-
     def _write_state(self) -> None:
         completed = set(STAGES[:STAGES.index("candidate_normalization")])
         stages = {
@@ -302,18 +273,13 @@ class LocatorFixture:
         documents = {}
         paths = {}
         schemas = {
-            "candidate_ref": "candidate-ref-v1",
-            "layout_profile": "candidate-layout-profile-v1",
             "layout_extraction": "candidate-layout-extraction-v1",
             "candidate_index": "candidate-index-v2",
             "item_inventory": "subject-index-item-inventory-v2",
-            "normalization_exceptions": "candidate-normalization-exceptions-v1",
-            "normalization_report": "candidate-normalization-report-v1",
-            "normalization_qa": "candidate-normalization-qa-v1",
         }
         for name, schema_version in schemas.items():
-            path = self.candidate_path if name == "candidate_index" else self.inventory_path if name == "item_inventory" else self.root / "preparation" / f"{name}.json"
-            document = self.candidate if name == "candidate_index" else self._candidate_ref() if name == "candidate_ref" else {"schema_version": schema_version, "candidate_id": "candidate-current"}
+            path = self.candidate_path if name == "candidate_index" else self.inventory_path if name == "item_inventory" else self.layout_path
+            document = self.candidate if name == "candidate_index" else {"schema_version": schema_version, "candidate_id": "candidate-current"}
             write_json(path, document)
             documents[name] = document
             paths[name] = path
@@ -329,7 +295,7 @@ class LocatorFixture:
         args = argparse.Namespace(
             state=str(self.state_path), preparation_dir=str(self.root / "preparation"), candidate_id="Candidate Current",
             candidate_file=str(candidate_file), page_map=str(self.page_map_path), chunk_manifest=str(self.manifest_path),
-            policy=str(self.root / "policy.json"), qa=None, source_edition=None, benchmark=str(self.benchmark_path),
+            policy=str(self.root / "policy.json"), source_edition=None, benchmark=str(self.benchmark_path),
         )
         with patch.object(candidate_preparation_cli, "validate_private_preparation", return_value=result):
             stream = io.StringIO()
@@ -364,16 +330,33 @@ class LocatorFixture:
         record = next(item for item in state["artifacts"] if item["path"] == relative)
         record["sha256"] = file_sha256(path)
         record["artifact_id"] = artifact_record(self.root, path, record["stage"], record["artifact_type"], record["schema_version"])["artifact_id"]
+        if path == self.candidate_path:
+            state["candidate"]["normalized_sha256"] = record["sha256"]
         write_json(self.state_path, state)
 
 
 class LocatorChunkPreparationTests(unittest.TestCase):
+    def test_state_validates_canonical_candidate_path_and_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = LocatorFixture(Path(temporary))
+            fixture.register_candidate()
+            state = json.loads(fixture.state_path.read_text())
+            state["candidate"]["normalized_sha256"] = "0" * 64
+            write_json(fixture.state_path, state)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPTS / "state_cli.py"), "validate", "--state", str(fixture.state_path), "--skip-files"],
+                text=True, capture_output=True, check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertTrue(any("canonical candidate" in error for error in json.loads(result.stdout)["errors"]))
+
     def test_local_registration_prepares_complete_17_packet_batch_and_advances(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             fixture = LocatorFixture(Path(temporary))
             registration = fixture.register_candidate()
             self.assertTrue(registration["ok"])
             self.assertEqual("candidate-current", registration["candidate_id"])
+            self.assertEqual(3, len(registration["artifacts_written"]))
             before = subprocess.run(
                 [sys.executable, str(SCRIPTS / "state_cli.py"), "next", "--state", str(fixture.state_path)],
                 text=True, capture_output=True, check=True,
@@ -474,9 +457,6 @@ class LocatorChunkPreparationTests(unittest.TestCase):
                     fixture.manifest["chunks"][1]["owned_document_page_ranges"] = [[1, 2]]
                 fixture.manifest["chunk_manifest_sha256"] = canonical_hash(fixture.manifest, "chunk_manifest_sha256")
                 fixture.update_registered_file(fixture.manifest_path, fixture.manifest)
-                candidate_ref = json.loads(fixture.candidate_ref_path.read_text())
-                candidate_ref["chunk_manifest_sha256"] = fixture.manifest["chunk_manifest_sha256"]
-                fixture.update_registered_file(fixture.candidate_ref_path, candidate_ref)
                 fixture.benchmark["chunk_manifest_sha256"] = fixture.manifest["chunk_manifest_sha256"]
                 fixture.benchmark["benchmark_sha256"] = canonical_hash(fixture.benchmark, "benchmark_sha256")
                 fixture.update_registered_file(fixture.benchmark_path, fixture.benchmark)
@@ -504,9 +484,6 @@ class LocatorChunkPreparationTests(unittest.TestCase):
                     fixture.manifest["validation"]["scope_coverage_complete"] = False
                     fixture.manifest["chunk_manifest_sha256"] = canonical_hash(fixture.manifest, "chunk_manifest_sha256")
                     fixture.update_registered_file(fixture.manifest_path, fixture.manifest)
-                    candidate_ref = json.loads(fixture.candidate_ref_path.read_text())
-                    candidate_ref["chunk_manifest_sha256"] = fixture.manifest["chunk_manifest_sha256"]
-                    fixture.update_registered_file(fixture.candidate_ref_path, candidate_ref)
                     fixture.benchmark["chunk_manifest_sha256"] = fixture.manifest["chunk_manifest_sha256"]
                     fixture.benchmark["benchmark_sha256"] = canonical_hash(fixture.benchmark, "benchmark_sha256")
                     fixture.update_registered_file(fixture.benchmark_path, fixture.benchmark)

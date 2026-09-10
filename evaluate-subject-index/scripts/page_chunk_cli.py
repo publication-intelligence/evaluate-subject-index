@@ -461,22 +461,6 @@ def require_registered_artifact(
     return record
 
 
-def registered_candidate_reference(state: dict[str, Any], state_path: Path, candidate: dict[str, Any]) -> dict[str, Any]:
-    matches: list[tuple[dict[str, Any], Path]] = []
-    for record in state["artifacts"]:
-        if record.get("stage") != "candidate_normalization" or record.get("artifact_type") != "candidate_ref":
-            continue
-        path = resolve_artifact_path(state_path, record["path"])
-        document = load_json(path)
-        if document.get("candidate_id") == candidate["candidate_id"] and document.get("candidate_sha256") == candidate["candidate_sha256"]:
-            matches.append((document, path))
-    require(len(matches) == 1, "candidate_reference_not_registered", "Expected one registered current candidate reference matching state.candidate.")
-    document, path = matches[0]
-    require_current_schema(document, "candidate-ref.schema.json", "Candidate reference")
-    require_registered_artifact(state, state_path, path, stage="candidate_normalization", schema_version="candidate-ref-v1")
-    return document
-
-
 def validated_chunk_owners(manifest: dict[str, Any], page_map: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[int, str]]:
     page_records = page_map["pages"]
     page_numbers = [record["document_page"] for record in page_records]
@@ -663,9 +647,10 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
         candidate_state = state.get("candidate")
         require(isinstance(candidate_state, dict), "candidate_not_registered", "Canonical state has no registered candidate.")
         require(candidate_state.get("candidate_id") == candidate["candidate_id"], "candidate_identity_mismatch", "Selected candidate ID differs from state.candidate.")
-        require(candidate_state.get("sha256") == candidate["candidate_sha256"], "candidate_identity_mismatch", "Selected candidate SHA-256 differs from state.candidate.")
+        require(candidate_state.get("candidate_sha256") == candidate["candidate_sha256"], "candidate_identity_mismatch", "Selected candidate SHA-256 differs from state.candidate.")
         require(candidate_state.get("schema_version") == candidate["schema_version"], "candidate_identity_mismatch", "Selected candidate schema differs from state.candidate.")
         require(resolve_artifact_path(state_path, candidate_state["normalized_path"]).resolve() == candidate_path, "candidate_path_mismatch", "Selected candidate is not the registered current normalized artifact.")
+        require(candidate_state.get("normalized_sha256") == sha256_file(candidate_path), "candidate_identity_mismatch", "Selected normalized candidate hash differs from state.candidate.")
         require(resolve_artifact_path(state_path, candidate_state["benchmark_path"]).resolve() == benchmark_path, "benchmark_path_mismatch", "Selected benchmark is not the candidate's registered frozen benchmark.")
         require(candidate_state.get("benchmark_sha256") == benchmark["benchmark_sha256"], "benchmark_identity_mismatch", "Candidate benchmark identity differs from the selected frozen benchmark.")
 
@@ -673,14 +658,9 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
         require_registered_artifact(state, state_path, page_map_path, stage="page_mapping", schema_version="page-map-v1")
         require_registered_artifact(state, state_path, manifest_path, stage="chunk_definition", schema_version="chunk-manifest-v1")
         require_registered_artifact(state, state_path, benchmark_path, stage="benchmark_freeze", schema_version="source-subject-benchmark-v2")
-        candidate_ref = registered_candidate_reference(state, state_path, candidate)
         source_sha = state["source"]["sha256"]
         require(page_map["source_sha256"] == source_sha, "page_map_identity_mismatch", "Page map source identity differs from canonical state.")
         require(candidate["page_map_sha256"] == page_map["page_map_sha256"], "candidate_page_map_mismatch", "Candidate references a different page map.")
-        require(candidate_ref["page_map_sha256"] == page_map["page_map_sha256"], "candidate_page_map_mismatch", "Candidate reference identifies a different page map.")
-        require(candidate_ref["chunk_manifest_sha256"] == manifest["chunk_manifest_sha256"], "candidate_chunk_manifest_mismatch", "Candidate reference identifies a different chunk manifest.")
-        require(candidate_ref["source"]["sha256"] == source_sha, "candidate_source_mismatch", "Candidate reference identifies a different source.")
-        require(candidate_ref["policy"]["rubric_version"] == state["configuration"]["rubric_version"], "candidate_rubric_mismatch", "Candidate reference does not identify the current V8 rubric.")
         require(manifest["page_map_sha256"] == page_map["page_map_sha256"], "chunk_manifest_identity_mismatch", "Chunk manifest references a different page map.")
         for field, expected in (
             ("evaluation_id", state["evaluation_id"]),

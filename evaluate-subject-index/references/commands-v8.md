@@ -32,6 +32,7 @@ python scripts/candidate_preparation_cli.py register --benchmark source-benchmar
 ```
 
 `normalize` validates the published candidate-layout schema before writing anything. Format-specific conversion is outside the skill. Registration is local and does not require publication evidence.
+Clean normalization writes only the normalized candidate, fidelity layout extraction, and item inventory. `validate-private` computes the full exact-set QA gate without writing a pass artifact. A fourth, non-empty issues report exists only when normalization found issues and must be dispositioned before registration.
 
 ## Locator-packet preparation
 

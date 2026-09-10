@@ -223,6 +223,19 @@ def validate_state(
         elif check_files and artifact.get("sha256") and sha256_file(local) != artifact.get("sha256"):
             warnings.append(f"Artifact bytes changed since registration: {stored}")
 
+    candidate = state.get("candidate")
+    if isinstance(candidate, dict):
+        candidate_records = {item["path"]: item for item in artifacts if item.get("stage") == "candidate_normalization"}
+        normalized = candidate_records.get(candidate["normalized_path"])
+        inventory = candidate_records.get(candidate["item_inventory_path"])
+        benchmark = next((item for item in artifacts if item.get("path") == candidate["benchmark_path"]), None)
+        if not normalized or normalized.get("artifact_type") != "candidate_index" or normalized.get("sha256") != candidate["normalized_sha256"]:
+            errors.append("state.candidate normalized path and hash must identify the registered canonical candidate.")
+        if not inventory or inventory.get("artifact_type") != "item_inventory":
+            errors.append("state.candidate item_inventory_path must identify the registered item inventory.")
+        if not benchmark or benchmark.get("stage") != "benchmark_freeze":
+            errors.append("state.candidate benchmark_path must identify the registered frozen benchmark.")
+
     for name in STAGES[1:]:
         if stages.get(name, {}).get("status") == "completed" and not any(
             artifact_is_active_for_stage(state, item, name) for item in artifacts if isinstance(item, dict)
