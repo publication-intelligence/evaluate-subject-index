@@ -57,11 +57,11 @@ Candidate preparation is mechanical and may run separately, provided it does not
 
 Run `page_chunk_cli.py prepare-locator-chunks` directly after local candidate registration. The command validates the canonical state and the exact registered normalized candidate, page map, chunk manifest, and frozen benchmark; no repository, publication, commit, pull-request, blob, or preparation-receipt evidence participates in this transition.
 
-Preparation recomputes chunk identity and page ownership, creates one `candidate-locator-chunk-v1` packet for every frozen chunk, routes each resolved locator assignment exactly once, and writes `candidate-locator-routing-exceptions-v1`. It registers the complete frozen batch and completes `locator_chunk_preparation` only when the exception ledger is empty. Validation failures or unresolved/ownerless assignments do not advance state. The next canonical action is `audit-locators`.
+Preparation recomputes chunk identity and page ownership, creates one `candidate-locator-chunk-v1` packet for every frozen chunk, and routes each resolved locator assignment exactly once. With complete routing, it writes and registers the packet batch and completes `locator_chunk_preparation`. An unresolved or ownerless assignment writes only an unregistered `candidate-locator-routing-exceptions-v1` diagnostic; other validation failures write nothing. Neither failure advances state. The next canonical action after success is `audit-locators`.
 
 ## Checkpoints
 
-Checkpoint, export, and import are persistence operations rather than stages. Create checkpoints when interruption risk justifies them. They do not advance state and do not require a previous checkpoint hash. Import performs archive-safety and current-state validation, then resume proceeds from the earliest unfinished stage.
+Checkpoint and import are persistence operations rather than stages. Create checkpoints when interruption risk justifies them. They do not advance state and do not require a previous checkpoint hash. Import performs archive-safety and current-state validation, then resume proceeds from the earliest unfinished stage.
 
 ## Invalidation
 

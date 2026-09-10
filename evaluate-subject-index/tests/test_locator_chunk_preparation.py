@@ -368,6 +368,8 @@ class LocatorChunkPreparationTests(unittest.TestCase):
             self.assertEqual(17, result["counts"]["packets"])
             self.assertEqual(17, result["counts"]["routed_assignments"])
             self.assertEqual(0, result["counts"]["routing_exceptions"])
+            self.assertNotIn("routing_exception_ledger", result)
+            self.assertFalse((fixture.output_dir / "candidate-locator-routing-exceptions.json").exists())
             locator_ids = []
             for packet_record in result["locator_packets"]:
                 packet = json.loads((fixture.root / packet_record["path"]).read_text())
@@ -382,7 +384,7 @@ class LocatorChunkPreparationTests(unittest.TestCase):
             state = json.loads(fixture.state_path.read_text())
             self.assertEqual("completed", state["stages"]["locator_chunk_preparation"]["status"])
             registered = [item for item in state["artifacts"] if item["stage"] == "locator_chunk_preparation"]
-            self.assertEqual(18, len(registered))
+            self.assertEqual(17, len(registered))
             self.assertTrue(all(item["frozen"] and item["retention"] == "required" and item["visibility"] == "private" for item in registered))
             after = subprocess.run(
                 [sys.executable, str(SCRIPTS / "state_cli.py"), "next", "--state", str(fixture.state_path)],
@@ -468,7 +470,7 @@ class LocatorChunkPreparationTests(unittest.TestCase):
                 self.assertIn(result["error"]["code"], {"duplicate_chunk_identity", "overlapping_chunk_ownership"})
                 self.assertEqual(original, fixture.state_path.read_bytes())
 
-    def test_unresolved_or_ownerless_assignments_write_exceptions_without_advancing_state(self) -> None:
+    def test_unresolved_or_ownerless_assignments_write_only_a_diagnostic(self) -> None:
         for kind in ("unresolved", "ownerless"):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
                 fixture = LocatorFixture(Path(temporary))
@@ -493,11 +495,50 @@ class LocatorChunkPreparationTests(unittest.TestCase):
                 original = fixture.state_path.read_bytes()
                 result, exit_code = run_cli(*fixture.command(), ok=False)
                 self.assertEqual(2, exit_code)
+                self.assertEqual("locator_routing_exceptions", result["error"]["code"])
+                self.assertEqual(0, result["counts"]["packets"])
                 self.assertEqual(1, result["counts"]["routing_exceptions"])
-                ledger = json.loads((fixture.root / result["routing_exception_ledger"]["path"]).read_text())
+                ledger = json.loads((fixture.root / result["routing_diagnostic"]["path"]).read_text())
                 self.assertEqual(1, ledger["exception_count"])
+                self.assertFalse(any(fixture.output_dir.glob("candidate-locator-CHUNK-*.json")))
                 self.assertEqual(original, fixture.state_path.read_bytes())
                 self.assertEqual("not_started", json.loads(original)["stages"]["locator_chunk_preparation"]["status"])
+
+
+class SourceChunkPreparationTests(unittest.TestCase):
+    def test_split_pdf_returns_chunk_files_without_writing_an_inventory(self) -> None:
+        from pypdf import PdfWriter
+
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = LocatorFixture(Path(temporary))
+            source = fixture.root / "source.pdf"
+            writer = PdfWriter()
+            for _ in range(17):
+                writer.add_blank_page(width=72, height=72)
+            with source.open("wb") as handle:
+                writer.write(handle)
+            fixture.page_map["source_sha256"] = file_sha256(source)
+            fixture.page_map["page_map_sha256"] = canonical_hash(fixture.page_map, "page_map_sha256")
+            write_json(fixture.page_map_path, fixture.page_map)
+            fixture.manifest["page_map_sha256"] = fixture.page_map["page_map_sha256"]
+            fixture.manifest["chunk_manifest_sha256"] = canonical_hash(fixture.manifest, "chunk_manifest_sha256")
+            write_json(fixture.manifest_path, fixture.manifest)
+            output_dir = fixture.root / "source-chunks"
+
+            result, _ = run_cli(
+                "split-pdf", "--source", source,
+                "--page-map", fixture.page_map_path,
+                "--chunks", fixture.manifest_path,
+                "--output-dir", output_dir,
+            )
+
+            self.assertEqual(17, result["chunk_count"])
+            self.assertEqual(34, len(result["artifacts_written"]))
+            self.assertTrue(all(Path(path).is_file() for path in result["artifacts_written"]))
+            self.assertFalse((output_dir / "source-chunk-inventory.json").exists())
+            sidecar = json.loads((output_dir / "CHUNK-001.pages.json").read_text())
+            self.assertEqual(fixture.page_map["page_map_sha256"], sidecar["page_map_sha256"])
+            self.assertEqual(fixture.manifest["chunk_manifest_sha256"], sidecar["chunk_manifest_sha256"])
 
 
 if __name__ == "__main__":

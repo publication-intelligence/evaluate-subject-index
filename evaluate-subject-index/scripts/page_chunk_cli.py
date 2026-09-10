@@ -422,19 +422,14 @@ def command_split_pdf(args: argparse.Namespace) -> None:
             "owned_page_count": len(owned),
             "context_page_count": len(context - owned),
         })
-    inventory = {
-        "schema_version": "source-chunk-inventory-v1",
-        "source_filename": source_path.name,
-        "page_map_sha256": page_map.get("page_map_sha256"),
-        "chunk_manifest_sha256": manifest.get("chunk_manifest_sha256"),
-        "chunks": chunk_files,
-    }
-    inventory_path = output_dir / "source-chunk-inventory.json"
-    save_json(inventory_path, inventory)
     emit({
         "ok": True,
         "command": "split-pdf",
-        "artifact_written": str(inventory_path.resolve()),
+        "artifacts_written": [
+            path
+            for chunk in chunk_files
+            for path in (chunk["pdf"], chunk["sidecar"])
+        ],
         "chunk_count": len(chunk_files),
         "chunks": chunk_files,
     })
@@ -589,7 +584,7 @@ def prepare_locator_documents(
         "exceptions": exceptions,
         "exception_count": len(exceptions),
     }
-    require_current_schema(ledger, "candidate-locator-routing-exceptions.schema.json", "Locator routing-exception ledger")
+    require_current_schema(ledger, "candidate-locator-routing-exceptions.schema.json", "Locator routing failure diagnostic")
     return packets, ledger
 
 
@@ -679,50 +674,51 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
             path = output_dir / f"candidate-locator-{packet['chunk_id']}.json"
             require_safe_output_path(path, root, "Candidate locator packet")
             packet_outputs.append((packet, path, json_bytes(packet)))
-        ledger_path = output_dir / "candidate-locator-routing-exceptions.json"
-        require_safe_output_path(ledger_path, root, "Locator routing-exception ledger")
-        ledger_bytes = json_bytes(ledger)
-        output_paths = {
-            path.resolve().relative_to(root.resolve()).as_posix()
-            for _, path, _ in packet_outputs
-        } | {ledger_path.resolve().relative_to(root.resolve()).as_posix()}
+        artifact_details = [
+            {"chunk_id": packet["chunk_id"], "path": path.resolve().relative_to(root.resolve()).as_posix(), "sha256": hashlib.sha256(payload).hexdigest(), **packet["summary"]}
+            for packet, path, payload in packet_outputs
+        ]
+        if ledger["exceptions"]:
+            diagnostic_path = output_dir / "candidate-locator-routing-exceptions.json"
+            require_safe_output_path(diagnostic_path, root, "Locator routing diagnostic")
+            diagnostic_relative = diagnostic_path.resolve().relative_to(root.resolve()).as_posix()
+            collision = next((item["path"] for item in state["artifacts"] if item.get("path") == diagnostic_relative), None)
+            require(collision is None, "registered_output_collision", "Locator routing diagnostic would overwrite a registered artifact.", [collision] if collision else [])
+            diagnostic_bytes = json_bytes(ledger)
+            replace_bytes_atomic(diagnostic_path, diagnostic_bytes)
+            diagnostic = {
+                "path": diagnostic_relative,
+                "sha256": hashlib.sha256(diagnostic_bytes).hexdigest(),
+                "exception_count": ledger["exception_count"],
+            }
+            emit({
+                "command": "prepare-locator-chunks", "ok": False,
+                "error": {
+                    "code": "locator_routing_exceptions",
+                    "message": "Resolve every routing exception before preparing locator packets.",
+                },
+                "evaluation_id": state["evaluation_id"], "candidate_id": candidate["candidate_id"],
+                "artifacts_written": [diagnostic["path"]],
+                "routing_diagnostic": diagnostic,
+                "counts": {"frozen_chunks": len(packets), "packets": 0, "routed_assignments": sum(item["locator_assignment_count"] for item in artifact_details), "routing_exceptions": ledger["exception_count"]},
+                "stage_status": stages["locator_chunk_preparation"]["status"],
+                "warnings": ["Resolve every routing exception before completing locator_chunk_preparation."],
+            }, 2)
+
+        output_paths = {item["path"] for item in artifact_details}
         collisions = sorted(
             item["path"] for item in state["artifacts"]
             if item.get("path") in output_paths and item.get("stage") != "locator_chunk_preparation"
         )
         require(not collisions, "registered_output_collision", "Locator output would overwrite an artifact registered to another stage.", collisions)
-
         for _, path, payload in packet_outputs:
             replace_bytes_atomic(path, payload)
-        replace_bytes_atomic(ledger_path, ledger_bytes)
-        artifact_details = [
-            {"chunk_id": packet["chunk_id"], "path": path.resolve().relative_to(root.resolve()).as_posix(), "sha256": hashlib.sha256(payload).hexdigest(), **packet["summary"]}
-            for packet, path, payload in packet_outputs
-        ]
-        ledger_detail = {
-            "path": ledger_path.resolve().relative_to(root.resolve()).as_posix(),
-            "sha256": hashlib.sha256(ledger_bytes).hexdigest(),
-            "exception_count": ledger["exception_count"],
-        }
-        if ledger["exceptions"]:
-            emit({
-                "command": "prepare-locator-chunks", "ok": False,
-                "evaluation_id": state["evaluation_id"], "candidate_id": candidate["candidate_id"],
-                "artifacts_written": [item["path"] for item in artifact_details] + [ledger_detail["path"]],
-                "locator_packets": artifact_details, "routing_exception_ledger": ledger_detail,
-                "counts": {"frozen_chunks": len(packets), "packets": len(packets), "routed_assignments": sum(item["locator_assignment_count"] for item in artifact_details), "routing_exceptions": ledger["exception_count"]},
-                "stage_status": stages["locator_chunk_preparation"]["status"],
-                "next_actions": [{"command": "resolve-locator-routing-exceptions", "available": True}],
-                "warnings": ["Resolve every routing exception before completing locator_chunk_preparation."],
-            }, 2)
-
         updated = deepcopy(state)
         stamp = utc_now()
         records = [
             locator_artifact_record(path, root, "candidate_locator_chunk", packet["schema_version"], stamp)
             for packet, path, _ in packet_outputs
         ]
-        records.append(locator_artifact_record(ledger_path, root, "candidate_locator_routing_exceptions", ledger["schema_version"], stamp))
         updated["artifacts"] = [item for item in updated["artifacts"] if item.get("stage") != "locator_chunk_preparation"] + records
         updated["artifacts"].sort(key=lambda item: item["path"])
         updated["stages"]["locator_chunk_preparation"] = {
@@ -737,8 +733,8 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
     emit({
         "command": "prepare-locator-chunks", "ok": True,
         "evaluation_id": updated["evaluation_id"], "candidate_id": candidate["candidate_id"],
-        "artifacts_written": [item["path"] for item in artifact_details] + [ledger_detail["path"]],
-        "locator_packets": artifact_details, "routing_exception_ledger": ledger_detail,
+        "artifacts_written": [item["path"] for item in artifact_details],
+        "locator_packets": artifact_details,
         "counts": {"frozen_chunks": len(packets), "packets": len(packets), "routed_assignments": sum(item["locator_assignment_count"] for item in artifact_details), "routing_exceptions": 0},
         "stage_status": "completed", "next_actions": [] if action is None else [action],
         "warnings": [*warnings, *final_warnings],

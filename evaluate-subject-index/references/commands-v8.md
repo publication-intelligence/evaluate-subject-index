@@ -45,7 +45,7 @@ python scripts/page_chunk_cli.py prepare-locator-chunks \
   --benchmark source-benchmark.json
 ```
 
-All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk and one `candidate-locator-routing-exceptions-v1` ledger, completes `locator_chunk_preparation`, and makes `audit-locators` available. Any validation or routing exception leaves canonical state unchanged.
+All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk, completes `locator_chunk_preparation`, and makes `audit-locators` available. A routing exception writes an unregistered `candidate-locator-routing-exceptions-v1` diagnostic instead of packet files and leaves canonical state unchanged. Other validation failures write nothing.
 
 This command uses the local candidate/benchmark binding recorded by `candidate_preparation_cli.py register`. It accepts no publication, repository, branch, commit, pull-request, blob-proof, preparation-receipt, or benchmark-lock input.
 

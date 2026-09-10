@@ -15,7 +15,7 @@ python scripts/page_chunk_cli.py prepare-locator-chunks \
   --benchmark source-benchmark.json
 ```
 
-This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator remains in the routing-exception ledger and blocks worker registration.
+This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator produces an unregistered routing diagnostic and blocks worker registration.
 
 Each chat receives the current checkpoint or equivalent evaluation files plus one locator packet. It returns one `locator-audit-v2` artifact covering every and only the packet's assignments.
 

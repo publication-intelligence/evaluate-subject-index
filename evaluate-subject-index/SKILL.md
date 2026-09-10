@@ -30,8 +30,7 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 - `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
 - `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
 - `scripts/dimension_score_v8_cli.py` and `scripts/item_grade_v8_cli.py`: current deterministic V8 calculation and projection.
-- `scripts/bundle_cli.py`: optional checkpoints, exports, artifact listing, and resume imports.
-- `scripts/worker_prompt_cli.py`: render locator-worker prompt packs from a structurally valid checkpoint.
+- `scripts/bundle_cli.py`: optional checkpoints, artifact listing, and resume imports.
 
 ## State and artifacts
 
@@ -57,7 +56,7 @@ Branches, pull requests, and chat attachments may be used for transport or revie
 
 Candidate preparation is mechanical and benchmark-blind. Candidate input must match [candidate-layout-extraction.schema.json](references/schemas/candidate-layout-extraction.schema.json); convert it before invoking the skill if necessary. Then run `normalize`, disposition the optional non-empty issues report if one was created, run computed `validate-private`, and `register`. Clean preparation permanently registers only the normalized candidate, fidelity layout extraction, and currently required item inventory. It does not require a publication workflow.
 
-After local registration, run `page_chunk_cli.py prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk plus the routing-exception ledger, then completes `locator_chunk_preparation`. Routing exceptions leave state unchanged.
+After local registration, run `page_chunk_cli.py prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk, then completes `locator_chunk_preparation`. Routing exceptions write an unregistered diagnostic and leave state unchanged.
 
 Read [candidate-preparation.md](references/candidate-preparation.md) and [parallel-candidate-audits.md](references/parallel-candidate-audits.md).
 
