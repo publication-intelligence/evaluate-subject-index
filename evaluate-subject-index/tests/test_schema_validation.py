@@ -44,6 +44,18 @@ class SharedSchemaValidationTests(unittest.TestCase):
         self.assertNotIn("migration_comparison", report_schema["required"])
         self.assertNotIn("migration_comparison", report_schema["properties"])
 
+    def test_current_worker_schemas_do_not_publish_redundant_provenance_contracts(self) -> None:
+        schema_root = ROOT / "references" / "schemas"
+        policy = json.loads((schema_root / "evaluation-policy-v4.schema.json").read_text())
+        locator = json.loads((schema_root / "locator-audit-v2.schema.json").read_text())
+        missing = json.loads((schema_root / "missing-access-audit.schema.json").read_text())
+        structure = json.loads((schema_root / "structure-audit-v5.schema.json").read_text())
+        self.assertEqual(["id"], policy["properties"]["policy_profile"]["required"])
+        self.assertNotIn("provenance", locator["properties"])
+        self.assertNotIn("provenance", missing["properties"])
+        self.assertNotIn("provenance", structure["required"])
+        self.assertNotIn("item_inventory_sha256", structure["required"])
+
     def test_locator_audit_nested_shape_is_owned_by_schema(self) -> None:
         audit = {
             "schema_version": "locator-audit-v2",

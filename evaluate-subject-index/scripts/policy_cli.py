@@ -144,14 +144,6 @@ def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def canonical_hash(payload: dict[str, Any], own_hash_field: str) -> str:
     clone = dict(payload)
     clone.pop(own_hash_field, None)
@@ -179,7 +171,7 @@ def read_input(path: Path) -> dict[str, Any]:
     return value
 
 
-def build_policy(source: dict[str, Any], standard_path: Path) -> dict[str, Any]:
+def build_policy(source: dict[str, Any]) -> dict[str, Any]:
     scope = source.get("source_scope", {})
     audience = source.get("audience", {})
     audit = source.get("audit_design", {})
@@ -194,7 +186,6 @@ def build_policy(source: dict[str, Any], standard_path: Path) -> dict[str, Any]:
         "policy_id": source.get("policy_id") or "subject-index-policy",
         "policy_profile": {
             "id": POLICY_PROFILE,
-            "standard_policy_sha256": sha256_file(standard_path),
         },
         "source_scope": {
             "source_sha256": scope["source_sha256"],
@@ -252,10 +243,9 @@ def build_policy(source: dict[str, Any], standard_path: Path) -> dict[str, Any]:
 def command_build(args: argparse.Namespace) -> None:
     input_path = Path(args.input)
     output_path = Path(args.output)
-    standard_path = Path(args.standard_policy) if args.standard_policy else Path(__file__).resolve().parents[1] / "references" / "standard-policy-v8.md"
     try:
         source = read_input(input_path)
-        policy = build_policy(source, standard_path)
+        policy = build_policy(source)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
         raise SystemExit(1)
@@ -280,7 +270,6 @@ def build_parser() -> argparse.ArgumentParser:
     build = subparsers.add_parser("build")
     build.add_argument("--input", required=True)
     build.add_argument("--output", required=True)
-    build.add_argument("--standard-policy")
     build.add_argument("--force", action="store_true")
     build.set_defaults(func=command_build)
     return parser

@@ -13,3 +13,8 @@ Use displayed locators for locator-string review and atomic assignments for reli
 A trigger is not a scored defect. A defect requires structured evidence that the entry combines conceptually distinct treatments, a useful subdivision or alternative access route exists, and the current presentation materially harms retrieval. The audit must preserve the display-to-atomic mapping, evidence IDs, review decision, and applicable defect IDs.
 
 Current validation rejects missing range ownership, inconsistent counts, trigger-only defects, and triggered cases that are silently treated as pass or fail without review.
+
+When `metrics.total_paths` is present, it is the denominator for path-scoped
+structure defects; it must cover every page-bearing path and cannot exceed a
+declared, fully covered `total_nodes` set. Locator-only density checks continue to
+use `page_bearing_paths`.

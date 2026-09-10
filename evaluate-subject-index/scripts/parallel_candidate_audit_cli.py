@@ -200,6 +200,15 @@ def load_frozen_inputs(args: argparse.Namespace, audit_kind: str) -> dict[str, A
         ("chunk_manifest_sha256", chunks.get("chunk_manifest_sha256")),
     ):
         require(scope.get(field) == expected, "policy_identity_mismatch", f"Policy {field} differs from canonical input.")
+    first_page, last_page = scope["document_page_span"]
+    owned_pages = set(page_owner_map(chunks))
+    expected_pages = set(range(first_page, last_page + 1))
+    require(
+        owned_pages == expected_pages,
+        "incomplete_chunk_coverage",
+        "Chunk ownership must cover the complete policy document-page span.",
+        {"missing_pages": sorted(expected_pages - owned_pages), "foreign_pages": sorted(owned_pages - expected_pages)},
+    )
     for field, expected in (
         ("source_sha256", source_sha),
         ("page_map_sha256", page_map.get("page_map_sha256")),

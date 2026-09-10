@@ -17,7 +17,10 @@
 - locator-fit preflight: `subject-index-v8-locator-fit-preflight-v1`
 - locator audit: `locator-audit-v2`
 
-Runtime commands accept the current identities only. A V8 calculation input must bind the self-hashed V8 policy whose hash matches audit provenance. Old state, calculation, result, item, and report artifacts are not rescored or migrated.
+Runtime commands accept the current identities only. A V8 calculation input must
+bind a self-hashed V8 policy with the versioned standard-policy profile ID. The
+profile ID and schema, not the current Markdown bytes, determine compatibility.
+Old state, calculation, result, item, and report artifacts are not rescored or migrated.
 
 ## What changed in V8
 

@@ -12,7 +12,7 @@
     "candidate_sha256": {"$ref": "#/$defs/sha256"},
     "item_inventory_sha256": {"$ref": "#/$defs/sha256"},
     "item_inventory_artifact": {"$ref": "item-assessments-v2.schema.json#/properties/item_inventory_artifact"},
-    "evidence_identity": {"$ref": "item-assessments-v2.schema.json#/properties/evidence_identity"},
+    "evidence_identity": {"$ref": "dimension-calculations-v5.schema.json#/$defs/evidenceIdentity"},
     "assessment_completeness": {"$ref": "item-assessments-v2.schema.json#/properties/assessment_completeness"},
     "audit_mode": {"enum": ["full", "pilot"]},
     "scope_complete": {"type": "boolean"},

@@ -19,6 +19,11 @@ This command must complete `locator_chunk_preparation`; an unresolved or ownerle
 
 Each chat receives the current checkpoint or equivalent evaluation files plus one locator packet. It returns one `locator-audit-v2` artifact covering every and only the packet's assignments.
 
+Worker output does not need to repeat global source, policy, page-map, manifest,
+candidate-file, inventory-file, or audit-set hashes. If older V8 artifacts retain
+those values in `provenance`, they are informational only; registration validates
+the packet, candidate, evaluation, stable IDs, and exact owned denominator.
+
 Validate without mutation:
 
 ```bash
@@ -36,6 +41,10 @@ Use `register-audits` with the same inputs to copy validated files to the canoni
 Missing-access work starts only after locator auditing is complete. Each worker uses the frozen benchmark, normalized candidate and inventory, and complete registered locator-audit set. Source PDFs are not routine inputs.
 
 Pass `--audit-kind missing_access`, the audit files being registered, and one `--locator-audit` for every frozen chunk. Completion requires exact coverage of owned subjects, reader tasks, and treatments.
+
+The coordinator derives each missing-access workset from the canonical inputs and
+computes global audit-set identities from the files selected for calculation.
+Workers do not predict or copy either global audit-set hash.
 
 ## Recovery and collaboration
 

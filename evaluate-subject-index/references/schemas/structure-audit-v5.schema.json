@@ -3,12 +3,11 @@
   "$id": "structure-audit-v5.schema.json",
   "title": "V7 global structure audit with explicit architecture-review determinations",
   "type": "object",
-  "required": ["schema_version", "evaluation_id", "candidate_sha256", "item_inventory_sha256", "audit_mode", "scope_complete", "metrics", "density", "expected_node_ids", "node_judgments", "expected_cross_reference_ids", "cross_reference_judgments", "defects", "strengths", "completion", "provenance", "v5_scoring_context", "v7_architecture_review_decisions"],
+  "required": ["schema_version", "evaluation_id", "candidate_sha256", "audit_mode", "scope_complete", "metrics", "density", "expected_node_ids", "node_judgments", "expected_cross_reference_ids", "cross_reference_judgments", "defects", "strengths", "completion", "v5_scoring_context", "v7_architecture_review_decisions"],
   "properties": {
     "schema_version": {"const": "structure-audit-v5"},
     "evaluation_id": {"$ref": "structure-audit-v4.schema.json#/properties/evaluation_id"},
     "candidate_sha256": {"$ref": "structure-audit-v4.schema.json#/properties/candidate_sha256"},
-    "item_inventory_sha256": {"$ref": "structure-audit-v4.schema.json#/properties/item_inventory_sha256"},
     "audit_mode": {"$ref": "structure-audit-v4.schema.json#/properties/audit_mode"},
     "scope_complete": {"$ref": "structure-audit-v4.schema.json#/properties/scope_complete"},
     "metrics": {"$ref": "structure-audit-v4.schema.json#/properties/metrics"},
@@ -20,7 +19,6 @@
     "defects": {"$ref": "structure-audit-v4.schema.json#/properties/defects"},
     "strengths": {"$ref": "structure-audit-v4.schema.json#/properties/strengths"},
     "completion": {"$ref": "structure-audit-v4.schema.json#/properties/completion"},
-    "provenance": {"$ref": "structure-audit-v4.schema.json#/properties/provenance"},
     "v5_scoring_context": {"$ref": "structure-audit-v4.schema.json#/properties/v5_scoring_context"},
     "v7_architecture_review_decisions": {
       "type": "array",
