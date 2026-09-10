@@ -30,7 +30,8 @@ COMMANDS = {
     "source_chunk_preparation": "prepare-source-chunks",
     "source_subject_discovery": "discover-source-subjects",
     "benchmark_synthesis": "synthesize-source-benchmark",
-    "benchmark_review": "review-source-benchmark", "benchmark_freeze": "freeze-source-benchmark",
+    "benchmark_review": "benchmark_review_cli.py freeze",
+    "benchmark_freeze": "benchmark_review_cli.py freeze",
     "candidate_normalization": "normalize-index", "locator_chunk_preparation": "prepare-locator-chunks",
     "locator_audit": "audit-locators", "missing_access_audit": "audit-missing-access",
     "structure_audit": "audit-index-structure", "scoring": "score-index",
@@ -45,8 +46,8 @@ REQUIRED_INPUTS = {
     "source_chunk_preparation": ["source PDF", "page map", "chunk manifest"],
     "source_subject_discovery": ["source chunks", "sidecars", "policy"],
     "benchmark_synthesis": ["all source-subject chunks"],
-    "benchmark_review": ["candidate-blind benchmark draft", "independent review"],
-    "benchmark_freeze": ["approved benchmark"],
+    "benchmark_review": ["registered benchmark draft", "temporary review inventory", "independent review ledger", "approved final benchmark"],
+    "benchmark_freeze": ["registered benchmark draft", "temporary review inventory", "independent review ledger", "approved final benchmark"],
     "candidate_normalization": ["candidate index", "page map"],
     "locator_chunk_preparation": ["registered normalized candidate", "registered page map", "registered chunk manifest", "registered frozen benchmark"],
     "locator_audit": ["locator packets", "source chunks"],
@@ -162,7 +163,10 @@ def stage_dependencies(stage: str, stage_order: list[str]) -> list[str]:
 
 
 def _completion_schema(stage: str) -> str | None:
-    return {"scoring": SCORING_COMPLETION_SCHEMA, "web_report": WEB_REPORT_COMPLETION_SCHEMA}.get(stage)
+    return {
+        "scoring": SCORING_COMPLETION_SCHEMA,
+        "web_report": WEB_REPORT_COMPLETION_SCHEMA,
+    }.get(stage)
 
 
 def artifact_is_active_for_stage(state: dict[str, Any], artifact: dict[str, Any], stage: str) -> bool:
@@ -358,6 +362,11 @@ def command_next(args: argparse.Namespace) -> None:
 def command_set_stage(args: argparse.Namespace) -> None:
     state_path = Path(args.state)
     state = load_state(state_path)
+    if args.status == "completed" and args.stage in {"benchmark_review", "benchmark_freeze"}:
+        fail(
+            "typed_transition_required",
+            "Use benchmark_review_cli.py freeze to validate and complete benchmark review and freeze atomically.",
+        )
     unmet = [name for name in stage_dependencies(args.stage, STAGES) if state["stages"][name]["status"] != "completed"]
     if args.status in {"in_progress", "completed"} and unmet:
         fail("unmet_dependencies", f"Cannot set {args.stage} to {args.status}.", unmet)

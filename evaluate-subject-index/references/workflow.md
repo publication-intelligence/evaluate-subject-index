@@ -11,8 +11,8 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | source_chunk_preparation | chunk PDFs and sidecars |
 | source_subject_discovery | all source-subject chunks |
 | benchmark_synthesis | benchmark draft |
-| benchmark_review | independent review ledger |
-| benchmark_freeze | frozen benchmark |
+| benchmark_review | independently validated review ledger, registered by typed freeze |
+| benchmark_freeze | approved frozen benchmark, registered atomically with review |
 | candidate_normalization | normalized candidate, fidelity layout, inventory, and optional issues |
 | locator_chunk_preparation | all locator packets |
 | locator_audit | all locator-audit V2 chunks |
@@ -32,11 +32,12 @@ informational; packet/workset ownership and stable IDs bind worker judgments.
 During scoring, calculation-input references select artifacts, their hashes are
 verified against actual bytes, and audit-set hashes are computed from those files.
 A local state-inventory checksum mismatch remains a resume warning rather than an
-automatic stage blocker.
+automatic stage blocker. Benchmark freeze is stricter at its trust boundary: the
+supplied draft must be the exact registered synthesis artifact.
 
 ## Source-first sequence
 
-Source discovery happens before candidate exposure. Synthesis creates a draft; independent candidate-blind review authorizes benchmark freeze. The two candidate audit directions remain separate:
+Source discovery happens before candidate exposure. Synthesis creates a draft; independent candidate-blind review authorizes benchmark freeze. The deterministic screen is a temporary review queue, not a registered artifact. One typed operation validates the full review package, registers only the review ledger and final benchmark, and completes both stages atomically. The two candidate audit directions remain separate:
 
 - Index to source asks whether each proposed complete path and locator is supported.
 - Benchmark to index asks whether every required subject and reader task has useful access.

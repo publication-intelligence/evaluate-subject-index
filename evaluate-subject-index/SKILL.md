@@ -26,7 +26,7 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 - `scripts/page_chunk_cli.py`: page mapping, source chunking, and registered-state locator-packet preparation.
 - `scripts/policy_cli.py`: instantiate the standard policy.
 - `scripts/parallel_discovery_cli.py`: validate and register source-discovery chunks.
-- `scripts/benchmark_review_cli.py`: benchmark screening, independent review, and freeze validation.
+- `scripts/benchmark_review_cli.py`: temporary benchmark screening and the typed, atomic review/freeze transition.
 - `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
 - `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
 - `scripts/dimension_score_v8_cli.py` and `scripts/item_grade_v8_cli.py`: current deterministic V8 calculation and projection.

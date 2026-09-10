@@ -30,6 +30,8 @@ The active workflow uses these primary identities:
 - Registered paths are relative to the evaluation root and unique.
 - Stable semantic IDs join worker records. Calculation-input file references and their
   verified bytes define the selected scoring artifacts.
+- Benchmark review uses one draft artifact SHA-256, exact stable-ID coverage, and an exact normalized `approved_changes` ledger. Its deterministic screen is recomputed as a temporary queue and is not registered.
+- `benchmark_review_cli.py freeze` is the normal completion path for `benchmark_review` and `benchmark_freeze`; it registers the review and final benchmark in one atomic state replacement.
 - Worker provenance is informational. Repeated source, policy, page-map, manifest,
   candidate-file, inventory-file, and audit-set hashes are not scoring gates.
 - Locator- and missing-access-audit set hashes are computed deterministically from

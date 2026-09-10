@@ -12,7 +12,17 @@ python scripts/state_cli.py validate --state evaluation-state.json
 python scripts/state_cli.py set-stage --state evaluation-state.json ...
 ```
 
-State V6 is the only control inventory.
+State V6 is the only control inventory. Generic `set-stage` does not complete benchmark review or freeze.
+
+## Benchmark review and freeze
+
+```bash
+python scripts/benchmark_review_cli.py screen --draft benchmark/source-benchmark.draft.v1.json --output validation/source-benchmark-review-inventory.json
+python scripts/benchmark_review_cli.py validate-review --draft benchmark/source-benchmark.draft.v1.json --inventory validation/source-benchmark-review-inventory.json --review validation/source-benchmark-review.v1.json
+python scripts/benchmark_review_cli.py freeze --state evaluation-state.json --draft benchmark/source-benchmark.draft.v1.json --inventory validation/source-benchmark-review-inventory.json --review validation/source-benchmark-review.v1.json --final benchmark/source-benchmark.v1.json
+```
+
+The inventory is a temporary deterministic queue. Freeze recomputes it, validates exact review coverage and approved changes, registers only the review ledger and final benchmark, and completes both stages atomically.
 
 ## Checkpoint and resume
 

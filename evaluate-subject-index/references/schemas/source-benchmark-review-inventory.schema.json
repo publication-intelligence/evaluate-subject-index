@@ -9,14 +9,13 @@
     "evaluation_id": {"type": "string", "minLength": 1},
     "draft": {
       "type": "object",
-      "required": ["path", "version", "file_sha256", "canonical_sha256", "candidate_blindness"],
+      "required": ["version", "sha256", "candidate_blindness"],
       "properties": {
-        "path": {"type": "string"},
         "version": {"type": "integer", "minimum": 1},
-        "file_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-        "canonical_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
         "candidate_blindness": {"enum": ["preserved", "compromised", "not_claimed"]}
-      }
+      },
+      "additionalProperties": false
     },
     "denominators": {
       "type": "object",
