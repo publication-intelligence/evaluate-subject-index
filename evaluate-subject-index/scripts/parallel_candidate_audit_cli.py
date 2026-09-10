@@ -720,9 +720,12 @@ def canonical_candidate_parent(frozen: dict[str, Any]) -> Path:
     return resolve_state_path(frozen["root"], normalized).parent
 
 
-def artifact_record(path: Path, root: Path, stage: str, artifact_type: str, visibility: str, stamp: str) -> dict[str, Any]:
+def artifact_record(
+    path: Path, root: Path, stage: str, artifact_type: str, visibility: str,
+    stamp: str, digest: str | None = None,
+) -> dict[str, Any]:
     relative = path.resolve().relative_to(root.resolve()).as_posix()
-    digest = sha256_file(path)
+    digest = digest or sha256_file(path)
     return {
         "artifact_id": artifact_id(relative, digest),
         "stage": stage,
@@ -795,62 +798,138 @@ def _registered_chunks(state: dict[str, Any], state_path: Path, artifact_type: s
     return chunks
 
 
+def _replace_complete_batch(
+    args: argparse.Namespace, frozen: dict[str, Any],
+    packets: dict[str, dict[str, Any]], locator_set: dict[str, Any] | None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str], list[str]]:
+    """Validate a complete replacement in memory before touching canonical files."""
+    stage_name = audit_stage(args.audit_kind)
+    stage_index = STAGES.index(stage_name)
+    expected_chunks = set(frozen["chunks"])
+    require(len(args.audit) == len(expected_chunks), "replacement_batch_incomplete", "Replacement requires exactly one audit for every frozen chunk.")
+    if args.audit_kind == "locator":
+        require(set(packets) == expected_chunks, "replacement_packet_set_incomplete", "Replacement requires exactly one locator packet for every frozen chunk.")
+
+    parent = canonical_candidate_parent(frozen) / ("locator-audits" if args.audit_kind == "locator" else "missing-access-audits")
+    artifact_type = "locator_audit" if args.audit_kind == "locator" else "missing_access_audit"
+    suffix = "v2" if args.audit_kind == "locator" else "v1"
+    stem = "locator-audit" if args.audit_kind == "locator" else "missing-access-audit"
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    stamp = now()
+    for raw_path in args.audit:
+        source = Path(raw_path).resolve()
+        audit, payload, digest = load_json_snapshot(source, "Candidate audit")
+        chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
+        require(chunk_id not in seen, "duplicate_chunk", f"More than one replacement audit was supplied for {chunk_id}.")
+        seen.add(chunk_id)
+        destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
+        require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")
+        record = artifact_record(destination, frozen["root"], stage_name, artifact_type, "private", stamp, digest)
+        record["schema_version"] = audit["schema_version"]
+        selected.append({
+            "chunk_id": chunk_id, "destination": destination, "payload": payload,
+            "record": record, "completion": result["completion"],
+        })
+    require(seen == expected_chunks, "replacement_batch_incomplete", "Replacement audits do not cover the exact frozen chunk set.", {"missing": sorted(expected_chunks - seen), "foreign": sorted(seen - expected_chunks)})
+    selected.sort(key=lambda item: item["chunk_id"])
+
+    state = deepcopy(frozen["state"])
+    unmet = [name for name in STAGES[:stage_index] if state["stages"][name]["status"] != "completed"]
+    require(not unmet, "stage_dependencies_incomplete", f"Complete these stages before {stage_name}: {', '.join(unmet)}")
+    invalidated = STAGES[stage_index + 1:]
+    replaced_stages = {stage_name, *invalidated}
+    state["artifacts"] = [item for item in state["artifacts"] if item.get("stage") not in replaced_stages]
+    state["artifacts"].extend(item["record"] for item in selected)
+    state["artifacts"].sort(key=lambda item: item["path"])
+    state["stages"][stage_name] = {
+        "status": "completed", "updated_at": stamp,
+        "notes": [f"Replaced the complete {args.audit_kind} audit batch for all {len(expected_chunks)} frozen chunks."],
+    }
+    for name in invalidated:
+        state["stages"][name] = {
+            "status": "not_started", "updated_at": stamp,
+            "notes": [f"Invalidated by complete {stage_name} batch replacement."],
+        }
+    state["updated_at"] = stamp
+    errors, _ = validate_state(state, state_path=Path(args.state).resolve(), check_files=False)
+    require(not errors, "canonical_validation_failed", "Replacement would leave invalid evaluation state.", errors)
+
+    for item in selected:
+        replace_bytes_atomic(item["destination"], item["payload"])
+    save_state(Path(args.state).resolve(), state)
+    registered = [
+        {"chunk_id": item["chunk_id"], "path": str(item["destination"]), "completion": item["completion"]}
+        for item in selected
+    ]
+    return state, registered, invalidated, frozen["warnings"]
+
+
 def command_register_local(args: argparse.Namespace) -> None:
     state_path = Path(args.state).resolve()
     with evaluation_mutation_lock(state_path):
         args.allow_completed_boundary = True
         frozen = load_frozen_inputs(args, args.audit_kind)
         packets, locator_set = load_local_validation_inputs(args, frozen, args.audit_kind)
-        state = deepcopy(frozen["state"])
         stage_name = audit_stage(args.audit_kind)
-        stage_index = STAGES.index(stage_name)
-        unmet = [name for name in STAGES[:stage_index] if state["stages"][name]["status"] != "completed"]
-        require(not unmet, "stage_dependencies_incomplete", f"Complete these stages before {stage_name}: {', '.join(unmet)}")
-        active = [name for name, value in state["stages"].items() if value.get("status") == "in_progress" and name != stage_name]
-        require(not active, "another_stage_in_progress", f"Another stage is in progress: {', '.join(active)}")
+        replacing = getattr(args, "replace_complete_batch", False)
+        if replacing:
+            state, registered, invalidated, warnings = _replace_complete_batch(args, frozen, packets, locator_set)
+            missing: list[str] = []
+        else:
+            state = deepcopy(frozen["state"])
+            stage_index = STAGES.index(stage_name)
+            unmet = [name for name in STAGES[:stage_index] if state["stages"][name]["status"] != "completed"]
+            require(not unmet, "stage_dependencies_incomplete", f"Complete these stages before {stage_name}: {', '.join(unmet)}")
+            active = [name for name, value in state["stages"].items() if value.get("status") == "in_progress" and name != stage_name]
+            require(not active, "another_stage_in_progress", f"Another stage is in progress: {', '.join(active)}")
 
-        parent = canonical_candidate_parent(frozen) / ("locator-audits" if args.audit_kind == "locator" else "missing-access-audits")
-        artifact_type = "locator_audit" if args.audit_kind == "locator" else "missing_access_audit"
-        registered: list[dict[str, Any]] = []
-        for raw_path in args.audit:
-            source = Path(raw_path).resolve()
-            audit, payload, digest = load_json_snapshot(source, "Candidate audit")
-            chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
-            suffix = "v2" if args.audit_kind == "locator" else "v1"
-            stem = "locator-audit" if args.audit_kind == "locator" else "missing-access-audit"
-            destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
-            require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")
-            if destination.is_file():
-                require(sha256_file(destination) == digest, "canonical_chunk_exists", f"A different audit is already registered for {chunk_id}: {destination}")
-            else:
-                replace_bytes_atomic(destination, payload)
+            parent = canonical_candidate_parent(frozen) / ("locator-audits" if args.audit_kind == "locator" else "missing-access-audits")
+            artifact_type = "locator_audit" if args.audit_kind == "locator" else "missing_access_audit"
+            registered = []
+            for raw_path in args.audit:
+                source = Path(raw_path).resolve()
+                audit, payload, digest = load_json_snapshot(source, "Candidate audit")
+                chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
+                suffix = "v2" if args.audit_kind == "locator" else "v1"
+                stem = "locator-audit" if args.audit_kind == "locator" else "missing-access-audit"
+                destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
+                require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")
+                if destination.is_file():
+                    require(sha256_file(destination) == digest, "canonical_chunk_exists", f"A different audit is already registered for {chunk_id}: {destination}")
+                else:
+                    replace_bytes_atomic(destination, payload)
+                stamp = now()
+                record = artifact_record(destination, frozen["root"], stage_name, artifact_type, "private", stamp)
+                record["schema_version"] = audit["schema_version"]
+                existing = [item for item in state["artifacts"] if item.get("path") == record["path"]]
+                if not existing:
+                    state["artifacts"].append(record)
+                registered.append({"chunk_id": chunk_id, "path": str(destination), "completion": result["completion"]})
+
+            chunks = _registered_chunks(state, state_path, artifact_type)
+            missing = sorted(set(frozen["chunks"]) - chunks)
             stamp = now()
-            record = artifact_record(destination, frozen["root"], stage_name, artifact_type, "private", stamp)
-            record["schema_version"] = audit["schema_version"]
-            existing = [item for item in state["artifacts"] if item.get("path") == record["path"]]
-            if not existing:
-                state["artifacts"].append(record)
-            registered.append({"chunk_id": chunk_id, "path": str(destination), "completion": result["completion"]})
-
-        chunks = _registered_chunks(state, state_path, artifact_type)
-        missing = sorted(set(frozen["chunks"]) - chunks)
-        stamp = now()
-        state["artifacts"].sort(key=lambda item: item["path"])
-        state["stages"][stage_name] = {
-            "status": "in_progress" if missing else "completed",
-            "updated_at": stamp,
-            "notes": [f"Registered {len(chunks)}/{len(frozen['chunks'])} current audit chunks."],
-        }
-        state["updated_at"] = stamp
-        errors, warnings = validate_state(state, state_path=state_path, check_files=True)
-        require(not errors, "canonical_validation_failed", "Updated evaluation state failed validation.", errors)
-        save_state(state_path, state)
-    emit({
+            state["artifacts"].sort(key=lambda item: item["path"])
+            state["stages"][stage_name] = {
+                "status": "in_progress" if missing else "completed",
+                "updated_at": stamp,
+                "notes": [f"Registered {len(chunks)}/{len(frozen['chunks'])} current audit chunks."],
+            }
+            state["updated_at"] = stamp
+            errors, warnings = validate_state(state, state_path=state_path, check_files=True)
+            require(not errors, "canonical_validation_failed", "Updated evaluation state failed validation.", errors)
+            save_state(state_path, state)
+            invalidated = []
+    response = {
         "ok": True, "operation": "register-audits", "audit_kind": args.audit_kind,
         "registered": registered, "stage_status": state["stages"][stage_name]["status"],
         "missing_chunk_ids": missing, "warnings": warnings,
         "checkpoint_required": False,
-    })
+    }
+    if replacing:
+        response["invalidated_stages"] = invalidated
+    emit(response)
 
 
 def add_frozen_arguments(parser: argparse.ArgumentParser) -> None:
@@ -877,6 +956,8 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--audit", action="append", required=True, help="Audit JSON; repeat for any chunks handled in this invocation.")
         command.add_argument("--locator-packet", action="append", help="For locator audits, provide the corresponding packet for each supplied chunk.")
         command.add_argument("--locator-audit", action="append", help="For missing-access audits, provide the complete registered locator-audit set.")
+        if name == "register-audits":
+            command.add_argument("--replace-complete-batch", action="store_true", help="Replace the complete audit batch and invalidate all later stages; requires exactly one valid audit per frozen chunk.")
         command.set_defaults(handler=handler)
     return parser
 

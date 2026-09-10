@@ -88,6 +88,12 @@ Invalidate from the earliest changed substantive input:
 
 Registering an updated judgment artifact makes it the current version in state. Recompute dependent outputs from the earliest affected stage.
 
+For locator or missing-access corrections, use `register-audits` with
+`--replace-complete-batch` and exactly one valid artifact for every frozen chunk.
+The command replaces that canonical audit batch and rewinds all later stages
+under the evaluation lock; stale later output files are retained but their state
+registrations are removed.
+
 ## Current contract
 
 Runtime commands accept the current V8 artifacts listed in `json-contracts-v8.md`.

@@ -92,6 +92,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         text = help_text("parallel_candidate_audit_cli.py")
         self.assertIn("validate-audits", text)
         self.assertIn("register-audits", text)
+        self.assertIn("--replace-complete-batch", help_text("parallel_candidate_audit_cli.py", "register-audits"))
         self.assertNotIn("merge-evidence", text)
         self.assertNotIn("build-locator-worker", text)
 

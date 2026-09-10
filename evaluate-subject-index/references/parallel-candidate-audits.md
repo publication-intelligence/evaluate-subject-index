@@ -38,6 +38,14 @@ python scripts/parallel_candidate_audit_cli.py validate-audits \
 
 Use `register-audits` with the same inputs to copy validated files to the canonical candidate audit directory and update the single state. Partial batches leave `locator_audit` in progress. Full frozen-chunk coverage completes it.
 
+To correct an already registered audit batch, rerun `register-audits` with
+`--replace-complete-batch`. This explicit mode requires exactly one valid audit
+and, for locator audits, exactly one valid packet for every frozen chunk. It
+validates the entire selected set before replacing canonical audit files, marks
+the selected audit stage complete, and resets every later stage while removing
+its artifact registrations. Later output files remain on disk but are no longer
+current.
+
 ## Missing-access audits
 
 Missing-access work starts only after locator auditing is complete. Each worker uses the frozen benchmark, normalized candidate and inventory, and complete registered locator-audit set. Source PDFs are not routine inputs.
@@ -59,5 +67,5 @@ Workers may return files through attachments, shared storage, branches, or pull 
 - Validate all selected files before mutating state.
 - Do not assign a document page or judgment ID to multiple chunks.
 - Do not publish restricted source or candidate material.
-- Do not silently overwrite a different already-registered audit; resolve that content conflict explicitly.
+- Do not overwrite a different already-registered audit without the explicit complete-batch replacement mode.
 - Keep checkpointing separate from registration so checkpoint failure cannot roll back accepted work.
