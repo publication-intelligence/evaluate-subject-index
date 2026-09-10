@@ -3,7 +3,7 @@
   "$id": "v8-projection-metadata-v1.schema.json",
   "title": "V8 result, web, and score-view projection metadata",
   "type": "object",
-  "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_locator_review", "projection_metadata_sha256"],
+  "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_audit", "projection_metadata_sha256"],
   "properties": {
     "schema_version": {"const": "subject-index-v8-projection-metadata-v1"},
     "candidate_label": {"type": "string", "minLength": 1},
@@ -20,20 +20,18 @@
     "examples": {"type": "array", "items": {"type": "object"}},
     "limitations": {"type": "array", "items": {"type": "string"}},
     "canonical_calculation": {"$ref": "#/$defs/calculationReference"},
-    "canonical_structure_locator_review": {"$ref": "#/$defs/reviewReference"},
-    "canonical_locator_fit_supplement": {"$ref": "#/$defs/fitSupplementReference"},
+    "canonical_structure_audit": {"$ref": "#/$defs/structureAuditReference"},
     "counterfactual_score_views": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["view_id", "label", "calculation", "structure_locator_review", "provenance_artifacts"],
+        "required": ["view_id", "label", "calculation", "structure_audit", "provenance_artifacts"],
         "properties": {
           "view_id": {"type": "string", "minLength": 1, "not": {"const": "canonical_as_delivered"}},
           "label": {"type": "string", "minLength": 1},
           "calculation": {"$ref": "#/$defs/calculationReference"},
-          "structure_locator_review": {"$ref": "#/$defs/reviewReference"},
-          "locator_fit_supplement": {"$ref": "#/$defs/fitSupplementReference"},
+          "structure_audit": {"$ref": "#/$defs/structureAuditReference"},
           "provenance_artifacts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/artifactReference"}}
         },
         "additionalProperties": false
@@ -67,29 +65,13 @@
       },
       "additionalProperties": false
     },
-    "reviewReference": {
+    "structureAuditReference": {
       "type": "object",
-      "required": ["schema_version", "artifact_path", "sha256", "review_sha256"],
+      "required": ["schema_version", "artifact_path", "sha256"],
       "properties": {
-        "schema_version": {"const": "subject-index-structure-locator-review-v1"},
+        "schema_version": {"const": "structure-audit-v5"},
         "artifact_path": {"$ref": "#/$defs/portablePath"},
-        "sha256": {"$ref": "#/$defs/sha256"},
-        "review_sha256": {"$ref": "#/$defs/sha256"}
-      },
-      "additionalProperties": false
-    },
-    "fitSupplementReference": {
-      "type": "object",
-      "description": "Projection reference to an exact-scope, score-free complete-path-fit supplement; the supplement may resolve an eligible legacy structured fit conflict without modifying historical records.",
-      "required": ["schema_version", "artifact_path", "sha256", "supplement_id", "supplement_sha256", "unresolved_set_sha256", "decision_count"],
-      "properties": {
-        "schema_version": {"enum": ["subject-index-v7-locator-fit-supplement-v1", "subject-index-v7-locator-fit-supplement-v2"]},
-        "artifact_path": {"$ref": "#/$defs/portablePath"},
-        "sha256": {"$ref": "#/$defs/sha256"},
-        "supplement_id": {"type": "string", "pattern": "^FITSUP-[A-F0-9]{12}$"},
-        "supplement_sha256": {"$ref": "#/$defs/sha256"},
-        "unresolved_set_sha256": {"$ref": "#/$defs/sha256"},
-        "decision_count": {"type": "integer", "minimum": 1}
+        "sha256": {"$ref": "#/$defs/sha256"}
       },
       "additionalProperties": false
     },

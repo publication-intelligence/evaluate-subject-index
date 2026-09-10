@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from schema_validation import schema_errors
+from structure_audit import StructureAuditError, materialize_structure_records
 
 
 CALCULATION_PROFILE = "subject-index-dimension-calculation-v1"
@@ -645,7 +646,7 @@ def validate_ledger_set_integrity(loaded: dict[str, Any], *, require_chunk_manif
     all_audits = [*loc_docs, *missing_docs]
 
     frozen_audit_mode = structure.get("audit_mode")
-    require(frozen_audit_mode in {"full", "pilot"}, "required_v5_ledger_field_missing", "The structure audit must bind audit_mode.")
+    require(frozen_audit_mode in {"full", "pilot"}, "required_current_ledger_field_missing", "The structure audit must bind audit_mode.")
     require(frozen_audit_mode == config["audit_mode"], "audit_mode_identity_mismatch", "Calculation audit_mode differs from the structure audit.", {"calculation": config["audit_mode"], "structure": frozen_audit_mode})
 
     for label, documents in (("locator", loc_docs), ("missing-access", missing_docs)):
@@ -792,7 +793,7 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
             ("expected_reader_task_ids", "reader_task_results", "task_id", "reader_task_completion"),
             ("expected_treatment_ids", "treatment_judgments", "treatment_id", "treatment_completion"),
         ):
-            require(expected_field in document and collection in document and completion_field in document, "required_v5_ledger_field_missing", f"Missing-access audit {document.get('chunk_id')} lacks V5-required {expected_field}, {collection}, or {completion_field}.")
+            require(expected_field in document and collection in document and completion_field in document, "required_current_ledger_field_missing", f"Missing-access audit {document.get('chunk_id')} lacks required {expected_field}, {collection}, or {completion_field}.")
             expected_items = document[expected_field]
             actual_items = document[collection]
             exact_completion = document[completion_field]
@@ -806,7 +807,7 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
                 "ledger_completion_mismatch",
                 f"{completion_field} does not reconstruct for {document.get('chunk_id')}.",
             )
-    require(structure.get("schema_version") in {"structure-audit-v3", "structure-audit-v4"}, "unsupported_ledger_version", "Structure audit must use v3 or v4.")
+    require(structure.get("schema_version") == "structure-audit-v5", "unsupported_ledger_version", "Structure audit must use the current native V8 contract.")
     require(structure.get("evaluation_id") == evaluation_id, "evaluation_identity_mismatch", "Structure audit has a different evaluation_id.")
 
     locators, locator_original, locator_not_measured, locator_not_measured_units = flatten_unique(loc_docs, "judgments", "locator_id", "expected_locator_ids")
@@ -835,31 +836,13 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
         require(unit not in treatment_units, "duplicate_treatment_unit", "Expected-treatment recall requires unique (subject_id, document_page, locator_class) units.", {"subject_id": unit[0], "document_page": unit[1], "locator_class": unit[2]})
         treatment_units.add(unit)
 
-    nodes = structure.get("node_judgments", [])
-    expected_nodes = structure.get("expected_node_ids", [])
-    references = structure.get("cross_reference_judgments", [])
-    expected_references = structure.get("expected_cross_reference_ids", [])
-    require(isinstance(nodes, list) and isinstance(expected_nodes, list), "invalid_ledger", "Structure nodes and expected IDs must be arrays.")
-    require(isinstance(references, list) and isinstance(expected_references, list), "invalid_ledger", "Cross references and expected IDs must be arrays.")
-    node_ids = [item.get("node_id") for item in nodes]
-    reference_ids = [item.get("reference_id") for item in references]
-    require(all(isinstance(item, str) for item in node_ids) and len(node_ids) == len(set(node_ids)), "duplicate_or_invalid_id", "Structure node IDs must be unique strings.")
-    require(all(isinstance(item, str) for item in reference_ids) and len(reference_ids) == len(set(reference_ids)), "duplicate_or_invalid_id", "Cross-reference IDs must be unique strings.")
-    require(set(node_ids).issubset(set(expected_nodes)), "unexpected_ledger_items", "Structure audit contains unexpected node IDs.")
-    require(set(reference_ids).issubset(set(expected_references)), "unexpected_ledger_items", "Structure audit contains unexpected cross-reference IDs.")
-    node_not_measured = sorted(set(expected_nodes) - set(node_ids))
-    reference_not_measured = sorted(set(expected_references) - set(reference_ids))
-    structure_completion = structure.get("completion", {})
-    structure_exact = not node_not_measured and not reference_not_measured
-    require(
-        structure_completion.get("expected_nodes") == len(expected_nodes)
-        and structure_completion.get("judged_nodes") == len(nodes)
-        and structure_completion.get("expected_cross_references") == len(expected_references)
-        and structure_completion.get("judged_cross_references") == len(references)
-        and structure_completion.get("complete") is structure_exact,
-        "ledger_completion_mismatch",
-        "Structure-audit completion fields do not reconstruct from expected and judged IDs.",
-    )
+    try:
+        nodes, references, node_not_measured, reference_not_measured = materialize_structure_records(structure)
+    except StructureAuditError as exc:
+        raise CalculationError(exc.code, exc.message, exc.details) from exc
+    denominator = structure["candidate_denominator"]
+    expected_nodes = [item["node_id"] for item in denominator["nodes"]]
+    expected_references = denominator["cross_reference_ids"]
 
     locator_count_evidence, known_global_path_ids, not_measured_locator_count = reconstruct_locator_count_evidence(loc_docs)
     metrics = structure.get("metrics")
@@ -973,30 +956,10 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
             "occurrence_count_basis": "recomputed_from_expected_locator_ids",
         }
 
-    supplement = loaded["supplement"]
-    if structure.get("schema_version") == "structure-audit-v4":
-        require(supplement is None, "unexpected_migration_supplement", "A current structure-audit-v4 calculation must not use a historical migration supplement.")
-        context = structure.get("v5_scoring_context")
-    else:
-        require(supplement is not None, "migration_supplement_required", "Historical structure-audit-v3 requires a hash-bound V5 migration supplement.")
-        require(supplement.get("schema_version") == "subject-index-v5-migration-supplement-v1", "unsupported_ledger_version", "Unsupported migration supplement version.")
-        structure_hash = next(item["sha256"] for item in loaded["input_artifacts"] if item["role"] == "structure_audit")
-        require(supplement.get("structure_audit_sha256") == structure_hash, "migration_supplement_binding_mismatch", "Migration supplement does not bind the supplied historical structure audit.")
-        require(supplement.get("evaluation_id") == evaluation_id, "evaluation_identity_mismatch", "Migration supplement has a different evaluation_id.")
-        context = supplement.get("scoring_context")
+    context = deepcopy(structure.get("scoring_context"))
+    require(isinstance(context, dict), "invalid_scoring_context", "The structure audit requires scoring_context.")
+    context["defects"] = deepcopy(structure.get("defects"))
     validate_scoring_context(context)
-    if structure.get("schema_version") == "structure-audit-v4":
-        top_defects = structure.get("defects", [])
-        context_defects = context["defects"]
-        top_by_id = {item.get("defect_id"): item for item in top_defects if isinstance(item, dict)}
-        context_by_id = {item["defect_id"]: item for item in context_defects}
-        require(
-            len(top_by_id) == len(top_defects)
-            and top_by_id == context_by_id,
-            "structure_defect_projection_mismatch",
-            "structure-audit-v4 defects and v5_scoring_context.defects must contain exactly the same structured records, independent of order.",
-            {"top_level_ids": sorted(str(item) for item in top_by_id), "scoring_context_ids": sorted(context_by_id)},
-        )
     reference_context = context["cross_reference_applicability"]
     require(
         reference_context["delivered_reference_count"] == len(expected_references),
@@ -1004,13 +967,6 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
         "Frozen delivered-reference count does not match the structure-audit denominator.",
         {"context_count": reference_context["delivered_reference_count"], "structure_count": len(expected_references)},
     )
-    completion = structure.get("completion", {}) if isinstance(structure.get("completion"), dict) else {}
-    if completion.get("complete") is False or structure.get("scope_complete") is False:
-        require(
-            context["candidate_attempt"]["status"] in {"structurally_incomplete", "unparseable"},
-            "scoring_context_ledger_mismatch",
-            "An incomplete structure audit must freeze the corresponding non-attempt status.",
-        )
     optional_map = {item["subject_id"]: item["scored"] for item in context["optional_subject_scoring"]}
     optional_ids = {item["subject_id"] for item in subjects if item.get("priority") == "optional"}
     require(optional_ids == set(optional_map), "optional_subject_scoring_incomplete", "Every and only optional audited subject must have a frozen scored/unscored decision.", {"missing": sorted(optional_ids - set(optional_map)), "unexpected": sorted(set(optional_map) - optional_ids)})
@@ -1030,7 +986,7 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
     if attempt_status == "empty":
         require(locator_original == 0 and len(expected_nodes) == 0 and structure.get("metrics", {}).get("expanded_locators") == 0, "scoring_context_ledger_mismatch", "candidate_attempt empty must reconstruct from zero locator and node denominators.")
     elif attempt_status in {"structurally_incomplete", "unparseable"}:
-        require(structure.get("scope_complete") is False or structure_completion.get("complete") is False, "scoring_context_ledger_mismatch", "A structurally incomplete or unparseable attempt requires an incomplete structure ledger.")
+        require(structure["full_scope_attestation"]["complete"] is False, "scoring_context_ledger_mismatch", "A structurally incomplete or unparseable attempt requires an incomplete structure ledger.")
     else:
         require(locator_original > 0 or len(expected_nodes) > 0, "scoring_context_ledger_mismatch", "A meaningful attempt requires locator-bearing output or a non-empty navigation structure.")
 
@@ -1401,7 +1357,7 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         caps(lower_max, lower_band, essential_missing + len(essential_unknown) + len(missing_ids), lower_essential_total, [item["subject_id"] for item in essential_measured if item["coverage"] == "missing"] + [item["subject_id"] for item in essential_unknown] + missing_ids),
         caps(upper_max, upper_band, essential_missing, essential_total, [item["subject_id"] for item in essential_measured if item["coverage"] == "missing"]), audit_mode,
     )
-    result["input_roles"] = ["missing_access_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["missing_access_audit", "structure_audit"]
     result["raw_status_counts"] = dict(Counter(item.get("coverage") for item in applicable_records)) | {"not_measured_expected_ids": len(missing_ids)}
     result["credit_mappings"] = {"coverage": {key: decimal_text(value) for key, value in COVERAGE_CREDIT.items()}, "priority": {key: decimal_text(value) for key, value in PRIORITY_CREDIT.items()}}
     result["components"] = [{
@@ -1441,7 +1397,7 @@ def calculate_density(ledgers: dict[str, Any]) -> tuple[Decimal, dict[str, Any]]
     structure = ledgers["structure"]
     density = structure.get("density") if isinstance(structure.get("density"), dict) else {}
     chapters = density.get("chapter_measurements")
-    require(isinstance(chapters, list) and chapters, "density_inputs_missing", "V5 density requires non-empty chapter measurements with raw word and count fields.")
+    require(isinstance(chapters, list) and chapters, "density_inputs_missing", "Density scoring requires non-empty chapter measurements with raw word and count fields.")
     count_reconstruction = ledgers.get("density_count_reconstruction")
     if not isinstance(count_reconstruction, dict):
         actual_by_chunk: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1521,7 +1477,7 @@ def calculate_density(ledgers: dict[str, Any]) -> tuple[Decimal, dict[str, Any]]
     raw = weighted / Decimal(total_words)
     final = round_half_step(raw)
     return final, {
-        "profile_id": "subject-index-standard-density-v1-v5-edge-correction",
+        "profile_id": "subject-index-standard-density-v8",
         "aggregation": "indexable_source_word_weighted_mean",
         "metric_weights": {"paths": "0.5", "occurrences": "0.5"},
         "fit_rating_unrounded": decimal_text(raw),
@@ -1678,7 +1634,7 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     result["missing_data_bounds"]["upper"]["post_cap_rating"] = decimal_text(upper_post_unrounded_equivalent)
     result["missing_data_bounds"]["stable_cap_outcome"] = cap_stable
     result["rounding"] = {"mode": "ROUND_HALF_UP", "quantum": "substantive_0.5_then_points_0.01", "input": decimal_text(central_sub_post), "output": result["final_rating"]}
-    result["input_roles"] = ["locator_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["locator_audit", "structure_audit"]
     result["raw_status_counts"] = dict(Counter(item.get("treatment_class") for item in measured)) | {"uninspectable": len(uninspectable), "not_measured": len(not_measured)}
     result["credit_mappings"] = {"treatment_class": {key: decimal_text(value) for key, value in SELECTIVITY_CREDIT.items()}}
     result["components"] = [
@@ -1782,7 +1738,7 @@ def calculate_concept(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any
         caps(len(major_fail), applicable, major_fail_ids),
         audit_mode,
     )
-    result["input_roles"] = ["structure_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["structure_audit"]
     result["raw_status_counts"] = dict(Counter(item["_status"] for item in measured)) | {"uninspectable": len(uninspectable), "not_measured": len(not_measured_ids)}
     result["credit_mappings"] = {"node_status": {key: decimal_text(value) for key, value in NODE_CREDIT.items()}}
     result["components"] = [{"component_id": "conceptual_stance_nodes", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_base / FIVE), "weight": "1", "effective_weight": "1", "weight_renormalized": False}]
@@ -1914,7 +1870,7 @@ def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         known_pattern_ids,
     )
     result = finish_dimension("page_reference_reliability", [precision_denom, recall_denom], central_base, lower_base, upper_base, central_caps, lower_caps, upper_caps, audit_mode)
-    result["input_roles"] = ["locator_audit", "missing_access_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["locator_audit", "missing_access_audit", "structure_audit"]
     result["raw_status_counts"] = {
         "locator_support": dict(Counter(item["judgment"] for item in ledgers["locators"])),
         "treatment_recall": dict(Counter(item.get("status") or "not_measured" for item in ledgers["treatments"])),
@@ -2156,7 +2112,7 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     lower_caps = caps(task_bounds["lower_failures"], task_bounds["lower_total"], len(arch_major_fail) + arch_unknown_count, len(architecture) + arch_unknown_count, len(unsupported_refs) + ref_unknown_count, len(refs_measured) + ref_unknown_count, lower_task_evidence, lower_arch_evidence, lower_ref_evidence)
     upper_caps = caps(task_bounds["upper_failures"], task_bounds["upper_total"], len(arch_major_fail), len(architecture) + arch_unknown_count, len(unsupported_refs), len(refs_measured) + ref_unknown_count, upper_task_evidence, central_arch_evidence, central_ref_evidence)
     result = finish_dimension("findability_navigation", [task_denom, arch_denom, ref_denom], central_base, lower_base, upper_base, central_caps, lower_caps, upper_caps, audit_mode)
-    result["input_roles"] = ["missing_access_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["missing_access_audit", "structure_audit"]
     result["raw_status_counts"] = {
         "tasks": dict(Counter(item.get("result") for item in ledgers["tasks"])),
         "tasks_excluded_due_to_coverage": task_denom["exclusion_reasons"].get("excluded_due_to_missing_access", 0),
@@ -2252,7 +2208,7 @@ def calculate_mechanics(ledgers: dict[str, Any], audit_mode: str) -> dict[str, A
     lower_caps = caps(len(aggregate), applicable)
     upper_caps = caps(len(aggregate), applicable)
     result = finish_dimension("mechanics_consistency", [denominator], central_base, lower_base, upper_base, central_caps, lower_caps, upper_caps, audit_mode)
-    result["input_roles"] = ["structure_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["structure_audit"]
     result["raw_status_counts"] = dict(Counter(item["_status"] for item in measured)) | {"uninspectable": len(uninspectable), "not_measured": len(not_measured_ids)}
     result["credit_mappings"] = {"node_status": {key: decimal_text(value) for key, value in MECHANICS_CREDIT.items()}}
     result["components"] = [{"component_id": "mechanics_nodes", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_base / FIVE if FIVE else ZERO), "weight": "1", "effective_weight": "1", "weight_renormalized": False}]
@@ -2272,39 +2228,6 @@ def preflight_loaded(loaded: dict[str, Any]) -> tuple[dict[str, Any] | None, lis
         validate_ledger_set_integrity(loaded, require_chunk_manifest=not manifest_missing)
     except CalculationError as exc:
         missing.append({"code": exc.code, "path": None, "message": exc.message, "details": exc.details})
-    if loaded["structure"].get("schema_version") == "structure-audit-v3" and loaded.get("supplement") is None:
-        missing.append({
-            "code": "migration_supplement_required",
-            "path": "inputs.migration_supplement",
-            "message": "Historical structure-audit-v3 requires a hash-bound supplement; the historical audit itself must remain byte-identical.",
-            "required_fields": [
-                "audit_mode",
-                "historical_locator_audit_set_sha256",
-                "historical_missing_access_audit_set_sha256",
-                "locator_audit_set_sha256",
-                "missing_access_audit_set_sha256",
-                "audit_set_reconciliation_basis",
-                "scoring_context.candidate_attempt",
-                "scoring_context.cross_reference_applicability",
-                "scoring_context.cross_reference_applicability.warranted_reference_obligation_ids",
-                "scoring_context.optional_subject_scoring",
-                "scoring_context.node_component_applicability",
-                "scoring_context.defects[].dimension_owner",
-                "scoring_context.defects[].severity_basis",
-                "scoring_context.defects[].retrieval_consequence",
-                "scoring_context.defects[].affected_item_ids",
-                "scoring_context.defects[].affected_source_sections",
-                "scoring_context.defects[].affected_structural_sections",
-                "scoring_context.defects[].root_cause_family",
-                "scoring_context.defects[].affected_count",
-                "scoring_context.defects[].applicable_count",
-                "scoring_context.defects[].affected_rate",
-                "scoring_context.defects[].source_section_denominator",
-                "scoring_context.defects[].source_section_rate",
-                "scoring_context.defects[].structural_section_denominator",
-                "scoring_context.defects[].structural_section_rate",
-            ],
-        })
     if missing:
         return None, missing
     try:

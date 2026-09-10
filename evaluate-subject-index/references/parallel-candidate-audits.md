@@ -15,9 +15,11 @@ python scripts/page_chunk_cli.py prepare-locator-chunks \
   --benchmark source-benchmark.json
 ```
 
-This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator remains in the routing-exception ledger and blocks worker registration.
+This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator produces an unregistered routing diagnostic and blocks worker registration.
 
 Each chat receives the current checkpoint or equivalent evaluation files plus one locator packet. It returns one `locator-audit-v2` artifact covering every and only the packet's assignments.
+
+Every locator row must state `complete_path_fit` as one of `exact_fit`, `material_partial_fit`, `material_mismatch`, `severe_mismatch`, `no_fit`, or `uninspectable`. It is a native judgment field and is never reconstructed from prose.
 
 Worker output does not need to repeat global source, policy, page-map, manifest,
 candidate-file, inventory-file, or audit-set hashes. If older V8 artifacts retain

@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
 
-def help_text(script: str) -> str:
+def help_text(script: str, *arguments: str) -> str:
     result = subprocess.run(
-        [sys.executable, str(SCRIPTS / script), "--help"],
+        [sys.executable, str(SCRIPTS / script), *arguments, "--help"],
         text=True,
         capture_output=True,
         check=False,
@@ -27,8 +27,17 @@ def help_text(script: str) -> str:
 class CurrentCommandSurfaceTests(unittest.TestCase):
     def test_checkpoint_cli_has_no_migration_command(self) -> None:
         text = help_text("bundle_cli.py")
+        self.assertIn("checkpoint", text)
         self.assertIn("import-bundle", text)
+        self.assertNotIn("export-bundle", text)
         self.assertNotIn("migrate-publication-profile", text)
+        checkpoint_help = help_text("bundle_cli.py", "checkpoint")
+        self.assertIn("portable", checkpoint_help)
+        self.assertIn("private-complete", checkpoint_help)
+
+    def test_worker_prompt_wrapper_is_not_part_of_the_runtime(self) -> None:
+        self.assertFalse((SCRIPTS / "worker_prompt_cli.py").exists())
+        self.assertFalse((ROOT / "references" / "schemas" / "locator-worker-prompt-pack.schema.json").exists())
 
     def test_candidate_preparation_is_local(self) -> None:
         text = help_text("candidate_preparation_cli.py")
@@ -36,6 +45,18 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertNotIn("extract", text)
         self.assertNotIn("bind-publication", text)
         self.assertNotIn("integrate", text)
+
+    def test_candidate_preparation_has_no_success_only_artifact_schemas(self) -> None:
+        schemas = ROOT / "references" / "schemas"
+        self.assertTrue((schemas / "candidate-normalization-issues.schema.json").is_file())
+        for name in (
+            "candidate-ref.schema.json",
+            "candidate-layout-profile.schema.json",
+            "candidate-normalization-exceptions.schema.json",
+            "candidate-normalization-report.schema.json",
+            "candidate-normalization-qa.schema.json",
+        ):
+            self.assertFalse((schemas / name).exists())
 
     def test_locator_preparation_uses_registered_state_not_repository_locks(self) -> None:
         text = help_text("page_chunk_cli.py")
@@ -85,8 +106,16 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         text = help_text("dimension_score_v8_cli.py")
         self.assertIn("preflight", text)
         self.assertIn("calculate", text)
-        self.assertNotIn("migrate", text)
+        self.assertNotIn("derive-structure-review", text)
         self.assertNotIn("validate-artifact", text)
+        scoring_runtime = "\n".join(
+            (SCRIPTS / name).read_text()
+            for name in ("scoring_core.py", "dimension_score_v8_cli.py", "item_grade_v8_cli.py", "locator_utility.py", "structure_audit.py")
+        )
+        for forbidden in ("structure_locator_review", "migration_supplement", "locator_fit_supplement", "locator_fit_compatibility"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, scoring_runtime)
+        self.assertFalse((SCRIPTS / "structure_locator_review.py").exists())
 
     def test_policy_builder_uses_the_current_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -11,12 +11,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import item_projection_core as items
-import scoring_core as v5
-from structure_locator_review import (
-    StructureReviewError,
-    canonical_hash as structure_review_hash,
-    validate_structure_locator_review_semantics,
-)
+import scoring_core as core
+from structure_audit import validate_structure_audit_semantics
 
 
 SCHEMA_VERSION = "subject-index-item-assessments-v6"
@@ -24,7 +20,7 @@ GRADING_POLICY = "subject-index-item-grading-v4"
 
 
 def _decimal(value: Any) -> Decimal | None:
-    return None if value is None else v5.decimal_value(value)
+    return None if value is None else core.decimal_value(value)
 
 
 def _grade_score(value: Decimal | None) -> int | float | None:
@@ -57,9 +53,6 @@ def _fit_rationale_required(assignment: Mapping[str, Any]) -> bool:
     return bool(
         treatment_score != fit_score
         or fit_score != Decimal("1")
-        or assignment.get("supplemental_fit_decision_id")
-        or "F-COMPAT-LEGACY-FIT-CONFLICT-TO-SUPPLEMENT-V1"
-        in assignment.get("compatibility_rule_ids", [])
     )
 
 
@@ -76,28 +69,18 @@ def _locator_explanation(
     assessment: Mapping[str, Any],
     assignment: Mapping[str, Any],
     judgment: Mapping[str, Any] | None,
-    supplemental_rationale: Mapping[str, Any] | None,
-) -> tuple[dict[str, Any], bool]:
+) -> dict[str, Any]:
     evidence_summary = str(
         (judgment or {}).get("evidence_summary", assessment.get("summary", ""))
     ).strip()
     if not evidence_summary:
         raise ValueError(f"locator_evidence_summary_required:{assignment['locator_id']}")
     rationale_required = _fit_rationale_required(assignment)
-    legacy_compatibility = False
-    if supplemental_rationale is not None:
-        fit_rationale = str(supplemental_rationale["rationale"]).strip()
-        fit_rationale_source = str(supplemental_rationale["source"])
-    elif judgment is not None and str(judgment.get("fit_rationale", "")).strip():
+    if judgment is not None and str(judgment.get("fit_rationale", "")).strip():
         fit_rationale = str(judgment["fit_rationale"]).strip()
         fit_rationale_source = "authored_locator_audit"
     elif rationale_required:
-        schema_version = None if judgment is None else judgment.get("_audit_schema_version")
-        if schema_version == "locator-audit-v2":
-            raise ValueError(f"fit_rationale_required:{assignment['locator_id']}")
-        fit_rationale = None
-        fit_rationale_source = "historical_contract_not_available"
-        legacy_compatibility = True
+        raise ValueError(f"fit_rationale_required:{assignment['locator_id']}")
     else:
         fit_rationale = _mechanical_fit_rationale(assignment)
         fit_rationale_source = "mechanical_structured_category_rule"
@@ -110,11 +93,9 @@ def _locator_explanation(
             *assessment.get("evidence_ids", []),
             assignment["locator_id"],
             *assignment["applicable_structured_defect_ids"],
-            *assignment.get("supplemental_fit_evidence_ids", []),
         }
     )
-    return (
-        {
+    return {
             "locator_id": assignment["locator_id"],
             "path_id": assessment["path_id"],
             "evidence_summary": evidence_summary,
@@ -151,9 +132,7 @@ def _locator_explanation(
                 assignment["applicable_structured_defect_ids"]
             ),
             "fit_rationale_required": rationale_required,
-        },
-        legacy_compatibility,
-    )
+        }
 
 
 def _locator_factor(
@@ -207,9 +186,8 @@ def _structure_metric_summary(review: Mapping[str, Any]) -> str:
 def build_v8_assessments(
     base_items: Mapping[str, Any],
     calculation: Mapping[str, Any],
-    structure_review: Mapping[str, Any],
+    structure_audit: Mapping[str, Any],
     locator_documents: list[Mapping[str, Any]] | None = None,
-    supplemental_fit_rationales: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Project locator grades and structure metrics without changing evidence."""
 
@@ -221,6 +199,16 @@ def build_v8_assessments(
         raise ValueError("item_calculation_evaluation_mismatch")
     if base_items.get("candidate_sha256") != calculation.get("evidence_identity", {}).get("candidate_sha256"):
         raise ValueError("item_calculation_candidate_identity_mismatch")
+    if structure_audit.get("schema_version") != "structure-audit-v5":
+        raise ValueError("native_structure_audit_required")
+    if structure_audit.get("candidate_sha256") != calculation.get("evidence_identity", {}).get("candidate_sha256"):
+        raise ValueError("structure_calculation_candidate_identity_mismatch")
+    expected_structure_projection = {
+        key: deepcopy(structure_audit[key])
+        for key in ("schema_version", "candidate_denominator", "full_scope_attestation", "locator_architecture", "uncertainties")
+    }
+    if calculation.get("structure_audit") != expected_structure_projection:
+        raise ValueError("structure_calculation_projection_mismatch")
 
     result = deepcopy(base_items)
     result["evidence_identity"] = deepcopy(calculation["evidence_identity"])
@@ -242,17 +230,13 @@ def build_v8_assessments(
             if enriched.get("locator_id") in judgments:
                 raise ValueError("duplicate_locator_explanation_source")
             judgments[enriched["locator_id"]] = enriched
-    supplemental_fit_rationales = supplemental_fit_rationales or {}
-    legacy_compatibility_mode = False
     for assessment in result["locator_assessments"]:
         assignment = assignments[assessment["locator_id"]]
-        explanation, legacy_compatibility = _locator_explanation(
+        explanation = _locator_explanation(
             assessment,
             assignment,
             judgments.get(assessment["locator_id"]),
-            supplemental_fit_rationales.get(assessment["locator_id"]),
         )
-        legacy_compatibility_mode = legacy_compatibility_mode or legacy_compatibility
         score = assignment["diagnostic_grade"]
         assessment["grade"] = items.grade(score)
         assessment["dimension_reliability_credit"] = assignment["rating_credit"]
@@ -267,7 +251,8 @@ def build_v8_assessments(
         assessment.pop("disqualifying_defect_ids", None)
 
     review_by_path = {
-        item["path_id"]: item for item in structure_review.get("path_reviews", [])
+        item["path_id"]: item
+        for item in structure_audit.get("locator_architecture", {}).get("triggered_reviews", [])
     }
     for path in result.get("path_assessments", []):
         page_component = next(
@@ -310,10 +295,9 @@ def build_v8_assessments(
             )
         metric = review_by_path.get(path.get("path_id"))
         if metric is not None:
-            path["locator_string_review"] = {
+            path["locator_architecture_review"] = {
                 key: deepcopy(metric[key])
                 for key in (
-                    "delivered_displayed_locator_ids",
                     "displayed_locator_count",
                     "displayed_locators",
                     "expanded_atomic_locator_ids",
@@ -321,25 +305,22 @@ def build_v8_assessments(
                     "maximum_range_span",
                     "long_displayed_locator_string_review_trigger",
                     "long_continuous_range_review_trigger",
-                    "independent_architecture_evidence",
-                    "final_architecture_disposition",
-                    "applicable_structured_defect_ids",
-                    "deterministic_derivation_rule_ids",
-                    "deterministic_mapping_rule_id",
+                    "review_status",
+                    "defect_ids",
                 )
             }
             path["popover"]["factors"].append(
                 {
                     "factor_id": "locator_string_and_range_review",
                     "label": "Locator-string and range review",
-                    "status": metric["final_architecture_disposition"],
+                    "status": metric["review_status"],
                     "score": None,
                     "weight": 0,
                     "explanation": _structure_metric_summary(metric),
                     "evidence_ids": [
-                        *metric["delivered_displayed_locator_ids"],
+                        *(item["display_id"] for item in metric["displayed_locators"]),
                         *metric["expanded_atomic_locator_ids"],
-                        *metric["applicable_structured_defect_ids"],
+                        *metric["defect_ids"],
                     ],
                 }
             )
@@ -350,7 +331,6 @@ def build_v8_assessments(
         "contract_version": "locator-explanations-v2",
         "authored_evidence_is_primary": True,
         "prose_used_in_scoring": False,
-        "legacy_compatibility_mode": legacy_compatibility_mode,
     }
     result["grade_disclosure"] = (
         "V8 locator grades equal 100 times min(page-treatment score, complete-path-fit score) and remain diagnostic. "
@@ -378,7 +358,7 @@ def build_v8_assessments(
         "diagnostic_combination_rule": "min(page_treatment_score, complete_path_fit_score)",
         "diagnostic_grade_rule": "100 * diagnostic_credit",
         "rating_credit_rule": "supported=1; partially_supported=0; unsupported=0; uninspectable/not_measured=null",
-        "calculation_locator_utility_ledger_sha256": v5.canonical_hash(
+        "calculation_locator_utility_ledger_sha256": core.canonical_hash(
             {"locator_utility_assignments": provenance["locator_utility_assignments"]}
         ),
         "diagnostic_grades_used_in_dimension_arithmetic": False,
@@ -393,19 +373,13 @@ def build_v8_assessments(
             provenance["counts_by_rating_credit_value"]
         ),
     }
-    result["structure_locator_review_binding"] = {
-        "schema_version": structure_review["schema_version"],
-        "review_id": structure_review["review_id"],
-        "review_sha256": structure_review["review_sha256"],
+    result["structure_audit_binding"] = {
+        "schema_version": structure_audit["schema_version"],
+        "candidate_sha256": structure_audit["candidate_sha256"],
+        "node_id_set_sha256": structure_audit["candidate_denominator"]["node_id_set_sha256"],
+        "cross_reference_id_set_sha256": structure_audit["candidate_denominator"]["cross_reference_id_set_sha256"],
+        "locator_bearing_path_id_set_sha256": structure_audit["candidate_denominator"]["locator_bearing_path_id_set_sha256"],
     }
-    if "locator_fit_compatibility" in calculation:
-        result["locator_fit_compatibility"] = deepcopy(
-            calculation["locator_fit_compatibility"]
-        )
-    if "locator_fit_supplement" in calculation:
-        result["locator_fit_supplement"] = deepcopy(
-            calculation["locator_fit_supplement"]
-        )
     items.rebuild_summary(result)
     def credit_tier(item: Mapping[str, Any], field: str) -> str:
         if item["disposition"] == "bounded":
@@ -427,75 +401,74 @@ def command_build_assessments(args: argparse.Namespace) -> None:
     try:
         items_path = Path(args.base_items).resolve()
         calculation_path = Path(args.calculation).resolve()
-        review_path = Path(args.structure_locator_review).resolve()
+        structure_path = Path(args.structure_audit).resolve()
         output_path = Path(args.output).resolve()
-        base_items = v5.load_json(items_path, "Base item assessments")
-        calculation = v5.load_json(calculation_path, "V8 calculation")
-        review = v5.load_json(review_path, "V8 structure-locator review")
+        base_items = core.load_json(items_path, "Base item assessments")
+        calculation = core.load_json(calculation_path, "V8 calculation")
+        structure = core.load_json(structure_path, "V8 structure audit")
         locator_documents = []
         for index, stored in enumerate(args.locator_audit or []):
-            document = v5.load_json(Path(stored).resolve(), f"Locator audit {index}")
+            document = core.load_json(Path(stored).resolve(), f"Locator audit {index}")
             schema_name = {"locator-audit-v2": "locator-audit-v2.schema.json"}.get(document.get("schema_version"))
-            v5.require(
+            core.require(
                 schema_name is not None,
                 "unsupported_locator_audit_schema",
                 "V8 item projection accepts current locator-audit-v2 only.",
             )
-            v5.validate_schema_document(document, schema_name, f"Locator audit {index}")
+            core.validate_schema_document(document, schema_name, f"Locator audit {index}")
             locator_documents.append(document)
-        v5.validate_schema_document(
+        core.validate_schema_document(
             base_items, "item-assessments-v3.schema.json", "Base item assessments"
         )
-        v5.validate_schema_document(
+        core.validate_schema_document(
             calculation, "dimension-calculations-v5.schema.json", "V8 calculation"
         )
-        v5.validate_schema_document(
-            review,
-            "structure-locator-review-v1.schema.json",
-            "V8 structure-locator review",
+        core.validate_schema_document(
+            structure,
+            "structure-audit-v5.schema.json",
+            "V8 structure audit",
         )
-        v5.require(
+        core.require(
             calculation.get("calculation_sha256")
-            == v5.canonical_hash(calculation, "calculation_sha256"),
+            == core.canonical_hash(calculation, "calculation_sha256"),
             "calculation_self_hash_mismatch",
             "The V8 calculation self-hash does not reconstruct.",
         )
-        v5.require(
-            review.get("review_sha256")
-            == structure_review_hash(review, "review_sha256"),
-            "structure_review_hash_mismatch",
-            "The V8 structure-locator review self-hash does not reconstruct.",
-        )
-        validate_structure_locator_review_semantics(review)
-        v5.require(
-            not review.get("summary", {}).get("removed_historical_defect_ids"),
-            "score_only_migration_item_projection_required",
-            "Current item projection cannot consume a structure review that removes historical defects.",
+        validate_structure_audit_semantics(structure)
+        structure_inputs = [
+            item for item in calculation.get("input_artifacts", [])
+            if item.get("role") == "structure_audit"
+        ]
+        core.require(
+            len(structure_inputs) == 1
+            and structure_inputs[0].get("sha256") == core.sha256_file(structure_path),
+            "structure_calculation_artifact_mismatch",
+            "The supplied structure audit must be the exact artifact bound into the calculation.",
         )
         result = build_v8_assessments(
             base_items,
             calculation,
-            review,
+            structure,
             locator_documents=locator_documents,
         )
-        v5.validate_schema_document(
+        core.validate_schema_document(
             result, "item-assessments-v6.schema.json", "Generated V8 item assessments"
         )
-        v5.require(
-            not v5.aliases_existing_file(
+        core.require(
+            not core.aliases_existing_file(
                 output_path,
                 {
                     items_path,
                     calculation_path,
-                    review_path,
+                    structure_path,
                     *(Path(path).resolve() for path in (args.locator_audit or [])),
                 },
             ),
             "output_aliases_frozen_input",
             "V8 item assessments must not overwrite a bound input artifact.",
         )
-        v5.write_json(output_path, result)
-        v5.emit(
+        core.write_json(output_path, result)
+        core.emit(
             {
                 "command": "build-v8-item-assessments",
                 "ok": True,
@@ -505,12 +478,12 @@ def command_build_assessments(args: argparse.Namespace) -> None:
                 "artifact_written": str(output_path),
             }
         )
-    except (OSError, ValueError, v5.CalculationError, StructureReviewError) as exc:
-        if isinstance(exc, (v5.CalculationError, StructureReviewError)):
+    except (OSError, ValueError, core.CalculationError) as exc:
+        if isinstance(exc, core.CalculationError):
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
         else:
             error = {"code": "item_projection_error", "message": str(exc)}
-        v5.emit(
+        core.emit(
             {"command": "build-v8-item-assessments", "ok": False, "error": error},
             1,
         )
@@ -525,7 +498,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build.add_argument("--base-items", required=True)
     build.add_argument("--calculation", required=True)
-    build.add_argument("--structure-locator-review", required=True)
+    build.add_argument("--structure-audit", required=True)
     build.add_argument(
         "--locator-audit",
         action="append",

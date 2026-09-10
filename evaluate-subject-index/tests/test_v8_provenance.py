@@ -56,7 +56,7 @@ class PolicyIdentityTests(unittest.TestCase):
             "deviations": [],
         }
 
-    def test_markdown_wording_hash_is_ignored_legacy_metadata(self) -> None:
+    def test_markdown_wording_hash_is_ignored_noncontract_metadata(self) -> None:
         policy = policy_cli.build_policy(self.policy_input())
         policy["policy_profile"]["standard_policy_sha256"] = "a" * 64
         policy["policy_sha256"] = policy_cli.canonical_hash(policy, "policy_sha256")
@@ -138,7 +138,7 @@ class LedgerIdentityTests(unittest.TestCase):
             missing_entries.append(self.write_entry(f"missing-{number}.json", missing, f"missing_access_audit[{number - 1}]"))
 
         structure = {
-            "schema_version": "structure-audit-v4",
+            "schema_version": "structure-audit-v5",
             "evaluation_id": "EVAL-TEST",
             "candidate_sha256": SHA["candidate"],
             "audit_mode": "full",

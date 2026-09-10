@@ -20,7 +20,7 @@ Calibration:
 - “For example, Young (1794),” with no useful information about Young remains `incidental_example` or `attribution_only` weak presence.
 - Strong treatment does not cure a fit failure. A heading stating an established conclusion is nonexact when the source says only “may suggest.”
 
-Use only structured current-audit fields for calculation. Evidence prose explains judgments but does not directly generate scores. Malformed, incomplete, identity-inconsistent, or contradictory states fail validation.
+Each locator row states `complete_path_fit` directly as `exact_fit`, `material_partial_fit`, `material_mismatch`, `severe_mismatch`, `no_fit`, or `uninspectable`. Use only structured current-audit fields for calculation. Evidence prose explains judgments but does not directly generate scores. Malformed, incomplete, identity-inconsistent, or contradictory states fail validation.
 
 ## Locator diagnostics and rating credit
 

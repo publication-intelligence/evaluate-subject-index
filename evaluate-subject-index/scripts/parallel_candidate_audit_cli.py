@@ -34,6 +34,7 @@ from state_cli import (
     validate_state,
 )
 from schema_validation import schema_errors
+from locator_utility import combined_state_errors
 
 
 AUDIT_KINDS = {"locator", "missing_access"}
@@ -189,7 +190,8 @@ def load_frozen_inputs(args: argparse.Namespace, audit_kind: str) -> dict[str, A
         require(isinstance(stored, str) and resolve_state_path(run["root"], stored).resolve() == supplied, "canonical_checkpoint_path_mismatch", f"Supplied {label} is not the exact path recorded by the integrated candidate checkpoint.")
     candidate_id = require_nonempty_string(candidate.get("candidate_id"), "candidate.candidate_id", 128)
     candidate_sha = require_sha256(candidate.get("candidate_sha256"), "candidate.candidate_sha256")
-    require(candidate_state.get("candidate_id") == candidate_id and candidate_state.get("sha256") == candidate_sha, "candidate_identity_mismatch", "State and normalized candidate identities differ.")
+    require(candidate_state.get("candidate_id") == candidate_id and candidate_state.get("candidate_sha256") == candidate_sha, "candidate_identity_mismatch", "State and normalized candidate identities differ.")
+    require(candidate_state.get("normalized_sha256") == candidate_file_sha, "candidate_identity_mismatch", "State and normalized candidate file hashes differ.")
     require(inventory.get("candidate_id") == candidate_id and inventory.get("candidate_sha256") == candidate_sha, "inventory_identity_mismatch", "Item inventory and candidate identities differ.")
     require(candidate.get("page_map_sha256") == page_map.get("page_map_sha256"), "page_map_identity_mismatch", "Normalized candidate references a different page map.")
     require(chunks.get("page_map_sha256") == page_map.get("page_map_sha256"), "chunk_identity_mismatch", "Chunk manifest references a different page map.")
@@ -466,6 +468,8 @@ def validate_locator_audit(artifact: dict[str, Any], frozen: dict[str, Any], pac
         status = judgment["judgment"]
         severity = judgment["severity"]
         codes = judgment["error_codes"]
+        utility_errors = combined_state_errors(judgment)
+        require(not utility_errors, "locator_utility_state_invalid", f"Locator judgment {locator_id} has contradictory native utility fields.", utility_errors)
         judgment_counts[status] += 1
         severity_counts[severity] += 1
         error_counts.update(codes)

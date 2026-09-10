@@ -12,7 +12,17 @@ python scripts/state_cli.py validate --state evaluation-state.json
 python scripts/state_cli.py set-stage --state evaluation-state.json ...
 ```
 
-State V6 is the only control inventory.
+State V6 is the only control inventory. Generic `set-stage` does not complete benchmark review or freeze.
+
+## Benchmark review and freeze
+
+```bash
+python scripts/benchmark_review_cli.py screen --draft benchmark/source-benchmark.draft.v1.json --output validation/source-benchmark-review-inventory.json
+python scripts/benchmark_review_cli.py validate-review --draft benchmark/source-benchmark.draft.v1.json --inventory validation/source-benchmark-review-inventory.json --review validation/source-benchmark-review.v1.json
+python scripts/benchmark_review_cli.py freeze --state evaluation-state.json --draft benchmark/source-benchmark.draft.v1.json --inventory validation/source-benchmark-review-inventory.json --review validation/source-benchmark-review.v1.json --final benchmark/source-benchmark.v1.json
+```
+
+The inventory is a temporary deterministic queue. Freeze recomputes it, validates exact review coverage and approved changes, registers only the review ledger and final benchmark, and completes both stages atomically.
 
 ## Checkpoint and resume
 
@@ -32,6 +42,7 @@ python scripts/candidate_preparation_cli.py register --benchmark source-benchmar
 ```
 
 `normalize` validates the published candidate-layout schema before writing anything. Format-specific conversion is outside the skill. Registration is local and does not require publication evidence.
+Clean normalization writes only the normalized candidate, fidelity layout extraction, and item inventory. `validate-private` computes the full exact-set QA gate without writing a pass artifact. A fourth, non-empty issues report exists only when normalization found issues and must be dispositioned before registration.
 
 ## Locator-packet preparation
 
@@ -44,9 +55,9 @@ python scripts/page_chunk_cli.py prepare-locator-chunks \
   --benchmark source-benchmark.json
 ```
 
-All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk and one `candidate-locator-routing-exceptions-v1` ledger, completes `locator_chunk_preparation`, and makes `audit-locators` available. Any validation or routing exception leaves canonical state unchanged.
+All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk, completes `locator_chunk_preparation`, and makes `audit-locators` available. A routing exception writes an unregistered `candidate-locator-routing-exceptions-v1` diagnostic instead of packet files and leaves canonical state unchanged. Other validation failures write nothing.
 
-This command uses the local candidate/benchmark binding recorded by `candidate_preparation_cli.py register`. It accepts no publication, repository, branch, commit, pull-request, blob-proof, preparation-receipt, or legacy benchmark-lock input.
+This command uses the local candidate/benchmark binding recorded by `candidate_preparation_cli.py register`. It accepts no publication, repository, branch, commit, pull-request, blob-proof, preparation-receipt, or benchmark-lock input.
 
 ## Parallel audit chunks
 
@@ -70,22 +81,15 @@ python scripts/parallel_discovery_cli.py register-discoveries ...
 
 ```bash
 python scripts/dimension_score_v8_cli.py preflight --input dimension-calculation-input.json
-python scripts/dimension_score_v8_cli.py derive-structure-review \
-  --normalized-candidate candidate-index.json \
-  --item-inventory item-inventory.json \
-  --structure-audit structure-audit.json \
-  --audit-mode full \
-  --output structure-locator-review.json
 python scripts/dimension_score_v8_cli.py calculate \
   --input dimension-calculation-input.json \
-  --structure-locator-review structure-locator-review.json \
   --output dimension-calculations.json
 python scripts/item_grade_v8_cli.py build-assessments \
   --base-items base-item-assessments.json \
   --calculation dimension-calculations.json \
-  --structure-locator-review structure-locator-review.json \
+  --structure-audit structure-audit.json \
   --locator-audit locator-audit.CHUNK-001.v2.json \
   --output item-assessments.json
 ```
 
-Historical migration and compatibility commands are intentionally absent.
+The calculation input binds `structure_audit` directly; no intermediate structure artifact or derivation command is needed.
