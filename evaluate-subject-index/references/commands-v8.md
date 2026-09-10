@@ -12,7 +12,7 @@ python scripts/state_cli.py validate --state evaluation-state.json
 python scripts/state_cli.py set-stage --state evaluation-state.json ...
 ```
 
-State V6 is the only control inventory. Generic `set-stage` does not complete benchmark review or freeze.
+State V6 is the only control inventory. Generic `set-stage` does not complete benchmark review, benchmark freeze, structure audit, scoring, or web report.
 
 ## Benchmark review and freeze
 
@@ -80,6 +80,20 @@ python scripts/parallel_discovery_cli.py register-discoveries ...
 ## Scoring
 
 ```bash
+python scripts/dimension_score_v8_cli.py register-structure \
+  --state evaluation-state.json \
+  --input structure-audit.v5.json
+python scripts/dimension_score_v8_cli.py score \
+  --state evaluation-state.json
+python scripts/dimension_score_v8_cli.py build-report \
+  --state evaluation-state.json
+```
+
+`register-structure` validates the native V5 ledger and its exact candidate denominator before registering it. `score` resolves and verifies the registered policy, manifest, candidate, inventory, locator audits, missing-access audits, and structure audit; it then writes and registers calculation input V2, calculations V5, item assessments V6, projection metadata V1, and result V10. `build-report` validates the registered scoring set and writes web report V8. Each successful command advances canonical state under its mutation lock. Validation failure writes no output and leaves state unchanged.
+
+For isolated calculation diagnostics, the lower-level commands remain available:
+
+```bash
 python scripts/dimension_score_v8_cli.py preflight --input dimension-calculation-input.json
 python scripts/dimension_score_v8_cli.py calculate \
   --input dimension-calculation-input.json \
@@ -92,4 +106,4 @@ python scripts/item_grade_v8_cli.py build-assessments \
   --output item-assessments.json
 ```
 
-The calculation input binds `structure_audit` directly; no intermediate structure artifact or derivation command is needed.
+The calculation input binds `structure_audit` directly; no intermediate structure artifact or derivation command is needed. The canonical `score` command assembles that input from state, so hand-authoring it is unnecessary in a normal run.

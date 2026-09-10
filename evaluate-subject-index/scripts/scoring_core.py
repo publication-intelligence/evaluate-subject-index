@@ -475,10 +475,10 @@ def validate_scoring_context(context: Any) -> None:
     require(isinstance(optional, list), "invalid_scoring_context", "optional_subject_scoring must be an array.")
     optional_ids: set[str] = set()
     for index, item in enumerate(optional):
-        require(isinstance(item, dict) and set(item) == {"subject_id", "scored", "benchmark_evidence_ids"}, "invalid_scoring_context", f"optional_subject_scoring[{index}] has an invalid shape.")
+        require(isinstance(item, dict) and set(item) == {"subject_id", "scored", "rule_id"}, "invalid_scoring_context", f"optional_subject_scoring[{index}] has an invalid shape.")
         require(isinstance(item["subject_id"], str) and item["subject_id"].startswith("SUBJ-") and item["subject_id"] not in optional_ids, "invalid_scoring_context", f"optional_subject_scoring[{index}].subject_id is invalid or duplicated.")
         require(isinstance(item["scored"], bool), "invalid_scoring_context", f"optional_subject_scoring[{index}].scored must be boolean.")
-        require(isinstance(item["benchmark_evidence_ids"], list) and bool(item["benchmark_evidence_ids"]), "invalid_scoring_context", f"optional_subject_scoring[{index}] requires frozen benchmark evidence IDs.")
+        require(isinstance(item["rule_id"], str) and bool(item["rule_id"]), "invalid_scoring_context", f"optional_subject_scoring[{index}].rule_id is required.")
         optional_ids.add(item["subject_id"])
     applicability = context["node_component_applicability"]
     require(isinstance(applicability, list), "invalid_scoring_context", "node_component_applicability must be an array.")
@@ -488,7 +488,7 @@ def validate_scoring_context(context: Any) -> None:
         require(isinstance(item, dict) and set(item) == {"node_id", "component_id", "basis_code", "evidence_ids"}, "invalid_scoring_context", f"{label} has an invalid shape.")
         require(isinstance(item["node_id"], str) and item["node_id"].startswith("NODE-"), "invalid_scoring_context", f"{label}.node_id is invalid.")
         require(item["component_id"] in {"conceptual_stance_fidelity", "heading_access_architecture", "mechanics_consistency"}, "invalid_scoring_context", f"{label}.component_id is invalid.")
-        require(item["basis_code"] == "benchmark_genuinely_inapplicable", "invalid_scoring_context", f"{label}.basis_code must establish genuine benchmark inapplicability.")
+        require(item["basis_code"] == "benchmark_genuine_inapplicability", "invalid_scoring_context", f"{label}.basis_code must establish genuine benchmark inapplicability.")
         require(isinstance(item["evidence_ids"], list) and bool(item["evidence_ids"]) and all(isinstance(value, str) and value for value in item["evidence_ids"]) and len(item["evidence_ids"]) == len(set(item["evidence_ids"])), "invalid_scoring_context", f"{label}.evidence_ids must contain unique frozen evidence IDs.")
         key = (item["node_id"], item["component_id"])
         require(key not in applicability_keys, "invalid_scoring_context", "node_component_applicability contains a duplicate node/component decision.", key)
