@@ -260,6 +260,68 @@ class CurrentV8CompletionTests(unittest.TestCase):
         }
         self.state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
 
+    def test_major_node_exceptions_score_without_duplicate_defects(self) -> None:
+        structure = json.loads(self.structure_path.read_text())
+        components = structure["node_judgments"][0]["component_judgments"]
+        for component_id in ("conceptual_stance_fidelity", "mechanics_consistency"):
+            components[component_id] = {
+                "status": "major_issues",
+                "summary": "Evidence-bound major synthetic exception.",
+                "evidence_ids": ["EVID-NODE-001"],
+            }
+        structure["node_judgments"][0]["summary"] = "Evidence-bound major exceptions with no duplicate defect rows."
+        self.write("structure-audit.v5.json", structure)
+
+        registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
+        self.assertEqual(0, registered.returncode, registered.stdout + registered.stderr)
+        scored = self.run_cli("score", "--state", str(self.state_path))
+        self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
+
+        calculations = json.loads((self.root / "scoring/dimension-calculations.v5.json").read_text())
+        dimensions = {item["dimension_id"]: item for item in calculations["dimensions"]}
+        for component_id in ("conceptual_stance_fidelity", "mechanics_consistency"):
+            self.assertEqual("scored", dimensions[component_id]["status"])
+            self.assertEqual(1, dimensions[component_id]["raw_status_counts"]["major_issues"])
+        self.assertEqual([], structure["defects"])
+
+    def test_explicit_major_defect_still_triggers_concept_cap(self) -> None:
+        structure = json.loads(self.structure_path.read_text())
+        concept = structure["node_judgments"][0]["component_judgments"]["conceptual_stance_fidelity"]
+        concept.update({"status": "major_issues", "evidence_ids": ["EVID-NODE-001", "DEFECT-001"]})
+        structure["defects"] = [{
+            "defect_id": "DEFECT-001",
+            "code": "STA",
+            "dimension_owner": "conceptual_stance_fidelity",
+            "severity": "major",
+            "severity_basis": "materially_misleading",
+            "retrieval_consequence": "misleads",
+            "defect_kind": "stance_reversal",
+            "affected_item_ids": ["NODE-001"],
+            "affected_source_sections": [],
+            "affected_structural_sections": ["NODE-001"],
+            "root_cause_family": "synthetic_stance_reversal",
+            "affected_count": 1,
+            "applicable_count": 1,
+            "affected_rate": 1,
+            "source_section_denominator": 1,
+            "source_section_rate": 0,
+            "structural_section_denominator": 1,
+            "structural_section_rate": 1,
+            "high_priority_access_destroyed": False,
+        }]
+        self.write("structure-audit.v5.json", structure)
+
+        registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
+        self.assertEqual(0, registered.returncode, registered.stdout + registered.stderr)
+        scored = self.run_cli("score", "--state", str(self.state_path))
+        self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
+
+        calculations = json.loads((self.root / "scoring/dimension-calculations.v5.json").read_text())
+        concept_dimension = next(item for item in calculations["dimensions"] if item["dimension_id"] == "conceptual_stance_fidelity")
+        localized_cap = next(item for item in concept_dimension["cap_evaluations"] if item["cap_id"] == "concept.localized_major_defect")
+        self.assertTrue(localized_cap["triggered"])
+        self.assertEqual(["DEFECT-001"], localized_cap["affected_evidence_ids"])
+
     def test_registered_audits_reach_valid_result_report_and_complete_state(self) -> None:
         original_state = self.state_path.read_bytes()
         missing = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.root / "missing-structure.json"))

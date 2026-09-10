@@ -1652,7 +1652,7 @@ def node_component(ledgers: dict[str, Any], component: str, mapping: dict[str, D
     for node in ledgers["nodes"]:
         judgment = node.get("component_judgments", {}).get(component, {})
         status = judgment.get("status")
-        decorated = {**node, "_status": status, "_component_evidence_ids": judgment.get("evidence_ids", [])}
+        decorated = {**node, "_status": status}
         if status in mapping:
             measured.append(decorated)
         elif status == "uninspectable":
@@ -1685,23 +1685,6 @@ def prevalence_caps(prefix: str, major_fail: int, denominator: int, evidence_ids
     return records
 
 
-def require_node_defect_binding(node: dict[str, Any], ledgers: dict[str, Any], owner: str, component_label: str) -> None:
-    evidence_ids = set(node.get("_component_evidence_ids", []))
-    matches = [
-        defect
-        for defect in ledgers["defects"]
-        if defect["dimension_owner"] == owner
-        and defect["defect_id"] in evidence_ids
-        and node["node_id"] in defect["affected_item_ids"]
-        and defect["severity"] in {"major", "critical"}
-    ]
-    require(
-        bool(matches),
-        "unstructured_major_or_fail_node",
-        f"Major/fail {component_label} node {node['node_id']} must cite a same-dimension structured major/critical defect that names the node.",
-    )
-
-
 def calculate_concept(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
     measured, uninspectable, _, not_measured_ids, denominator = node_component(ledgers, "conceptual_stance_fidelity", NODE_CREDIT, "conceptual_stance_nodes")
     credit = sum((NODE_CREDIT[item["_status"]] for item in measured), ZERO)
@@ -1716,8 +1699,6 @@ def calculate_concept(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any
         mark_defined_zero(denominator, f"candidate_attempt:{attempt}", non_attempt=True)
     major_fail = [item for item in measured if item["_status"] in {"major_issues", "fails"}]
     major_fail_ids = [item["node_id"] for item in major_fail]
-    for node in major_fail:
-        require_node_defect_binding(node, ledgers, "conceptual_stance_fidelity", "conceptual/stance")
     critical = defect_subset(ledgers, "conceptual_stance_fidelity", severities={"critical"}, codes=CONCEPT_CODES)
     local_major = defect_subset(ledgers, "conceptual_stance_fidelity", severities={"major"}, codes=CONCEPT_CODES)
     reversals = [item for item in local_major if item.get("defect_kind") in {"stance_reversal", "misleading_relationship"}]
@@ -2182,9 +2163,6 @@ def calculate_mechanics(ledgers: dict[str, Any], audit_mode: str) -> dict[str, A
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
         mark_defined_zero(denominator, f"candidate_attempt:{attempt}", non_attempt=True)
-    major_fail_nodes = [item for item in measured if item["_status"] in {"major_issues", "fails"}]
-    for node_record in major_fail_nodes:
-        require_node_defect_binding(node_record, ledgers, "mechanics_consistency", "mechanics")
     for structured_defect in defect_subset(ledgers, "mechanics_consistency"):
         require(
             all(item.startswith("NODE-") or item == "GLOBAL-STRUCTURE" for item in structured_defect["affected_item_ids"]),
