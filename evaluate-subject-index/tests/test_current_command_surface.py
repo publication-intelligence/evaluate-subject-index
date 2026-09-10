@@ -85,8 +85,16 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         text = help_text("dimension_score_v8_cli.py")
         self.assertIn("preflight", text)
         self.assertIn("calculate", text)
-        self.assertNotIn("migrate", text)
+        self.assertNotIn("derive-structure-review", text)
         self.assertNotIn("validate-artifact", text)
+        scoring_runtime = "\n".join(
+            (SCRIPTS / name).read_text()
+            for name in ("scoring_core.py", "dimension_score_v8_cli.py", "item_grade_v8_cli.py", "locator_utility.py", "structure_audit.py")
+        )
+        for forbidden in ("structure_locator_review", "migration_supplement", "locator_fit_supplement", "locator_fit_compatibility"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, scoring_runtime)
+        self.assertFalse((SCRIPTS / "structure_locator_review.py").exists())
 
     def test_policy_builder_uses_the_current_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

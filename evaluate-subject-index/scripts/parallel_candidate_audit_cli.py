@@ -34,6 +34,7 @@ from state_cli import (
     validate_state,
 )
 from schema_validation import schema_errors
+from locator_utility import combined_state_errors
 
 
 AUDIT_KINDS = {"locator", "missing_access"}
@@ -466,6 +467,8 @@ def validate_locator_audit(artifact: dict[str, Any], frozen: dict[str, Any], pac
         status = judgment["judgment"]
         severity = judgment["severity"]
         codes = judgment["error_codes"]
+        utility_errors = combined_state_errors(judgment)
+        require(not utility_errors, "locator_utility_state_invalid", f"Locator judgment {locator_id} has contradictory native utility fields.", utility_errors)
         judgment_counts[status] += 1
         severity_counts[severity] += 1
         error_counts.update(codes)

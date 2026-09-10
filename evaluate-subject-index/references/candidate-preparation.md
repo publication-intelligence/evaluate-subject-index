@@ -6,7 +6,7 @@ Candidate preparation consumes a format-neutral layout artifact and converts it 
 
 The input is JSON conforming to [`candidate-layout-extraction-v1`](schemas/candidate-layout-extraction.schema.json), accompanied by the exact candidate file whose SHA-256 appears as `candidate_sha256`. The schema is the public boundary: acquisition and format-specific extraction happen before this skill begins. Adapter IDs are provenance, not a closed list, so a new converter does not require a skill change.
 
-Legacy field names containing `pdf` remain in V1 for compatibility. For a non-PDF input, set `pdf_metadata.is_pdf` to `false` and use one-based logical pages for `candidate_pdf_page`. Preserve the original bytes and place uncertainty in `limitations` or line-level `extraction_warnings`.
+The V1 layout contract keeps its `pdf`-named fields for stable interchange. For a non-PDF input, set `pdf_metadata.is_pdf` to `false` and use one-based logical pages for `candidate_pdf_page`. Preserve the original bytes and place uncertainty in `limitations` or line-level `extraction_warnings`.
 
 If supplied input does not match the contract, use this conversion prompt with the schema and the original candidate:
 
@@ -26,7 +26,7 @@ The current contract uses `candidate-index-v2`, `subject-index-item-inventory-v2
 
 ## Separation from judgment
 
-Preparation may identify extraction uncertainty, malformed layout, and unresolved locators. It must not repair the delivered hierarchy, classify source support, identify omissions, judge structure, or calculate scores. The benchmark is used at registration only to bind the completed preparation to the frozen evaluation, not as extraction evidence. That state binding replaces the retired candidate-benchmark repository lock; do not create a second manifest or compatibility artifact.
+Preparation may identify extraction uncertainty, malformed layout, and unresolved locators. It must not repair the delivered hierarchy, classify source support, identify omissions, judge structure, or calculate scores. The benchmark is used at registration only to bind the completed preparation to the frozen evaluation, not as extraction evidence. That state binding is sufficient; do not create a second manifest or repository-lock artifact.
 
 ## Parallel and remote work
 

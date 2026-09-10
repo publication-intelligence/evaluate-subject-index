@@ -5,7 +5,7 @@ description: Run a repeatable, source-grounded V8 evaluation of a finished subje
 
 # Evaluate Subject Index
 
-Evaluate one finished subject index against its source and a frozen policy. Use only the current V8 workflow; this skill does not migrate or reinterpret historical evaluations.
+Evaluate one finished subject index against its source and a frozen policy. Use the current V8 workflow and create current-schema artifacts.
 
 ## Method
 
@@ -14,7 +14,7 @@ Evaluate one finished subject index against its source and a frozen policy. Use 
 3. Synthesize, independently review, and freeze the candidate-blind benchmark.
 4. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments from the published layout contract.
 5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.
-6. Judge global structure only after the locator and missing-access ledgers are complete.
+6. Build the native exception-oriented structure ledger only after the locator and missing-access ledgers are complete. Bind its exact node, cross-reference, and locator-bearing-path denominators; omit attested passes; record exceptions, architecture decisions, defects, strengths, and uncertainties.
 7. Calculate the six V8 dimensions from validated ledgers. Do not ask a model to maintain arithmetic or workflow state.
 8. Produce structured JSON and a web-report projection.
 
@@ -63,9 +63,7 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 
 ## Scoring
 
-Native V8 uses evaluation-policy V4, state V6, `structure-audit-v5`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V6, result V10, and web report V8. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
-
-This repository intentionally exposes no legacy migration commands or compatibility workflow. Runtime commands and schemas cover the current workflow only.
+Native V8 uses evaluation-policy V4, state V6, `structure-audit-v5`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V6, result V10, and web report V8. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
 
 ## Output contract
 

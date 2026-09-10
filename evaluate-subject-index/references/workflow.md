@@ -77,6 +77,6 @@ Invalidate from the earliest changed substantive input:
 
 Registering an updated judgment artifact makes it the current version in state. Recompute dependent outputs from the earliest affected stage.
 
-## Current-only policy
+## Current contract
 
-Runtime commands accept the current V8 workflow. Historical migrations and backward-compatibility lanes are intentionally not part of this state machine.
+Runtime commands accept the current V8 artifacts listed in `json-contracts-v8.md`.

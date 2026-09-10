@@ -33,10 +33,11 @@ The active workflow uses these primary identities:
   candidate-file, inventory-file, and audit-set hashes are not scoring gates.
 - Locator- and missing-access-audit set hashes are computed deterministically from
   the selected files and their stable IDs, then recorded in calculation outputs.
-- Current audit denominators must be complete and non-overlapping before a stage is marked complete.
+- The structure audit binds complete stable-ID denominators for nodes, cross-references, and locator-bearing paths. Full mode stores only exceptions plus a complete-scope pass attestation; pilot mode lists observed passes and preserves every unlisted denominator identity as `not_measured`.
+- Every locator judgment states `complete_path_fit`; scoring does not infer it from prose or another artifact.
 - Locator-packet preparation registers exactly one packet per frozen manifest chunk plus an empty routing-exception ledger; any unresolved or ownerless assignment prevents the state transition.
 - The candidate's frozen benchmark path and canonical benchmark identity in state are the locator-preparation binding. There is no candidate-benchmark repository-lock contract.
 - Explanation fields are metadata, not calculation inputs.
 - Checkpoint import validates safe ZIP structure, inventory membership, and current state shape; it does not require a previously published checksum.
 
-Runtime commands accept current schemas only; they do not advertise migration or compatibility entry points.
+Runtime commands accept the listed schemas directly.

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "calculation-components.schema.json",
+  "title": "Current subject-index calculation components",
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "decimal": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+    "inputArtifact": {
+      "type": "object",
+      "required": ["role", "path", "sha256", "schema_version"],
+      "properties": {
+        "role": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "schema_version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "denominator": {
+      "type": "object",
+      "required": ["component_id", "original", "applicable", "measured", "excluded", "uninspectable", "not_measured", "exclusion_reasons", "measurement_coverage", "small_denominator_exception", "genuinely_inapplicable", "zero_due_to_non_attempt", "defined_zero_rule", "provisionally_scoreable"],
+      "properties": {
+        "component_id": {"type": "string", "minLength": 1},
+        "original": {"type": "integer", "minimum": 0},
+        "applicable": {"type": "integer", "minimum": 0},
+        "measured": {"type": "integer", "minimum": 0},
+        "excluded": {"type": "integer", "minimum": 0},
+        "uninspectable": {"type": "integer", "minimum": 0},
+        "not_measured": {"type": "integer", "minimum": 0},
+        "exclusion_reasons": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "measurement_coverage": {"type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)?$"},
+        "small_denominator_exception": {"type": "boolean"},
+        "genuinely_inapplicable": {"type": "boolean"},
+        "zero_due_to_non_attempt": {"type": "boolean"},
+        "defined_zero_rule": {"type": ["string", "null"]},
+        "provisionally_scoreable": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "component": {
+      "type": "object",
+      "required": ["component_id", "raw_numerator", "raw_denominator", "normalized_value", "weight", "effective_weight", "weight_renormalized"],
+      "properties": {
+        "component_id": {"type": "string", "minLength": 1},
+        "raw_numerator": {"$ref": "#/$defs/decimal"},
+        "raw_denominator": {"$ref": "#/$defs/decimal"},
+        "normalized_value": {"$ref": "#/$defs/decimal"},
+        "weight": {"type": "string", "minLength": 1},
+        "effective_weight": {"type": "string", "minLength": 1},
+        "weight_renormalized": {"type": "boolean"},
+        "label": {"type": "string"},
+        "rounded_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "details": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "cap": {
+      "type": "object",
+      "required": ["cap_id", "maximum_rating", "triggered", "threshold", "observed", "affected_evidence_ids"],
+      "properties": {
+        "cap_id": {"type": "string", "minLength": 1},
+        "maximum_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "triggered": {"type": "boolean"},
+        "threshold": {"type": "object", "minProperties": 1},
+        "observed": {"type": "object", "minProperties": 1},
+        "affected_evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      },
+      "additionalProperties": false
+    },
+    "appliedCap": {
+      "type": ["object", "null"],
+      "required": ["cap_id", "maximum_rating", "affected_evidence_ids"],
+      "properties": {
+        "cap_id": {"type": "string"},
+        "maximum_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "affected_evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      },
+      "additionalProperties": false
+    },
+    "bound": {
+      "type": "object",
+      "required": ["pre_cap_rating", "post_cap_rating", "rounded_rating", "cap_evaluations", "applied_cap_id", "awarded_points"],
+      "properties": {
+        "pre_cap_rating": {"$ref": "#/$defs/decimal"},
+        "post_cap_rating": {"$ref": "#/$defs/decimal"},
+        "rounded_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "cap_evaluations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cap"}},
+        "applied_cap_id": {"type": ["string", "null"]},
+        "awarded_points": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

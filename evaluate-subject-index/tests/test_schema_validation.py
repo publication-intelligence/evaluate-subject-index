@@ -72,6 +72,7 @@ class SharedSchemaValidationTests(unittest.TestCase):
                 "source_scope_status": "indexable",
                 "treatment_class": "mixed",
                 "judgment": "supported",
+                "complete_path_fit": "exact_fit",
                 "evidence_summary": "Supported with meaningful but mixed treatment.",
                 "fit_rationale": "The complete heading path fits the independently useful fact exactly.",
                 "evidence_ids": ["EVID-1"],
@@ -84,6 +85,32 @@ class SharedSchemaValidationTests(unittest.TestCase):
         self.assertEqual(schema_errors(audit, "locator-audit-v2.schema.json"), [])
         del audit["judgments"][0]["evidence_ids"]
         self.assertTrue(any("evidence_ids" in error for error in schema_errors(audit, "locator-audit-v2.schema.json")))
+
+    def test_current_structure_and_outputs_do_not_reference_cutover_schemas(self) -> None:
+        schema_root = ROOT / "references" / "schemas"
+        removed = {
+            "structure-audit-v4.schema.json",
+            "structure-locator-review-v1.schema.json",
+            "v5-migration-supplement.schema.json",
+            "score-migration.schema.json",
+            "evaluation-result-v6.schema.json",
+            "dimension-calculations.schema.json",
+        }
+        self.assertFalse(any((schema_root / name).exists() for name in removed))
+        current = "\n".join(
+            (schema_root / name).read_text()
+            for name in (
+                "structure-audit-v5.schema.json",
+                "dimension-calculations-v5.schema.json",
+                "item-assessments-v6.schema.json",
+                "evaluation-result-v10.schema.json",
+                "web-report-v8.schema.json",
+                "v8-projection-metadata-v1.schema.json",
+            )
+        )
+        for forbidden in ("structure-audit-v4", "structure-locator-review", "migration-supplement", "score-migration", "evaluation-result-v6"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, current)
 
     def test_relative_schema_reference_validates_chunk_plan(self) -> None:
         manifest = {
