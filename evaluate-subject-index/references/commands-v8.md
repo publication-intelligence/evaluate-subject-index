@@ -69,6 +69,10 @@ python scripts/parallel_candidate_audit_cli.py register-audits --audit-kind miss
 ```
 
 Repeat `--audit` for the selected chunk files. Locator calls pair them with `--locator-packet`. Missing-access calls include the complete registered locator-audit set through repeated `--locator-audit`.
+Add `--replace-complete-batch` only when replacing an already registered locator
+or missing-access batch. Replacement requires exactly one valid audit per frozen
+chunk, completes that audit stage, and invalidates all later stage and artifact
+registrations without deleting their files.
 
 Source-discovery chunks use the same local pattern:
 
