@@ -280,6 +280,50 @@ class LedgerIdentityTests(unittest.TestCase):
         with mock.patch.object(audits, "schema_errors", return_value=[]), self.assertRaisesRegex(audits.PreparationError, "deterministic ownership"):
             audits.validate_missing_access_audit(artifact, frozen, workset, "CHUNK-001")
 
+    def test_missing_access_reader_task_access_mode_validation(self) -> None:
+        artifact = {
+            "evaluation_id": "EVAL-TEST",
+            "benchmark_sha256": SHA["benchmark"],
+            "candidate_sha256": SHA["candidate"],
+            "chunk_id": "CHUNK-001",
+            "expected_subject_ids": [],
+            "expected_reader_task_ids": ["TASK-001"],
+            "expected_treatment_ids": [],
+            "subject_judgments": [],
+            "reader_task_results": [{
+                "task_id": "TASK-001",
+                "subject_ids": [],
+                "result": "succeeds",
+                "access_mode": "direct",
+                "matched_path_ids": [],
+                "severity": "none",
+                "confidence": "high",
+                "evidence_ids": ["EVID-001"],
+            }],
+            "treatment_judgments": [],
+            "completion": {"expected": 0, "judged": 0, "complete": True},
+            "reader_task_completion": {"expected": 1, "judged": 1, "unique": True, "complete": True},
+            "treatment_completion": {"expected": 0, "judged": 0, "unique": True, "complete": True},
+        }
+        frozen = {
+            "state": {"evaluation_id": "EVAL-TEST"},
+            "benchmark": {
+                "benchmark_sha256": SHA["benchmark"],
+                "reader_tasks": [{"task_id": "TASK-001", "subject_ids": []}],
+            },
+            "candidate_sha256": SHA["candidate"],
+            "candidate": {"records": []},
+            "inventory": {"paths": []},
+        }
+        workset = {"subject_ids": [], "reader_task_ids": ["TASK-001"], "treatment_ids": [], "treatments": []}
+
+        with mock.patch.object(audits, "schema_errors", return_value=[]):
+            result = audits.validate_missing_access_audit(artifact, frozen, workset, "CHUNK-001")
+            self.assertEqual(1, result["reader_task_result_counts"]["succeeds"])
+            artifact["reader_task_results"][0]["access_mode"] = "invalid"
+            with self.assertRaisesRegex(audits.PreparationError, "tested access mode"):
+                audits.validate_missing_access_audit(artifact, frozen, workset, "CHUNK-001")
+
 
 if __name__ == "__main__":
     unittest.main()
