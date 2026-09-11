@@ -37,7 +37,8 @@ Important helpers:
 - `page_chunk_cli.py` — prepare the complete registered-state locator-packet batch after candidate registration.
 - `parallel_candidate_audit_cli.py` — validate/register audit chunks returned by separate chats.
 - `dimension_score_v8_cli.py` — current V8 preflight, structure review, and calculation.
-- `item_grade_v8_cli.py` — current V8 item projection.
+- `item_grade_v8_cli.py` — current V8 item and heading-access causal projection.
+- `worker_prompt_cli.py` — locator and global-structure worker prompts, including the causal provenance contract.
 
 See [SKILL.md](evaluate-subject-index/SKILL.md) and [workflow.md](evaluate-subject-index/references/workflow.md) for the operating contract.
 

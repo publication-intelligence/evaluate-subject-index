@@ -84,8 +84,14 @@ python scripts/item_grade_v8_cli.py build-assessments \
   --base-items base-item-assessments.json \
   --calculation dimension-calculations.json \
   --structure-locator-review structure-locator-review.json \
+  --structure-audit structure-audit.json \
   --locator-audit locator-audit.CHUNK-001.v2.json \
+  --missing-access-audit missing-access-audit.CHUNK-001.json \
   --output item-assessments.json
 ```
+
+Render the global-structure worker contract with `worker_prompt_cli.py render-structure-audit`. The generated prompt requires `structure-audit-v6` causal findings and explicitly keeps them outside scoring.
+
+For a frozen V8 run whose structure audit predates the causal contract, `item_grade_v8_cli.py project-structure-causality` creates a new `structure-audit-v6` projection from the frozen V5 audit plus an exact-hash-bound `subject-index-heading-access-causal-projection-input-v1`. Repeat `--locator-audit` and `--missing-access-audit` so source and evidence IDs can be checked. When building item assessments from that projection, pass the unchanged V5 audit as `--causal-projection-source`; the CLI verifies exact non-causal content equivalence after removing projection metadata. The command reports `scores_recomputed: false` and never overwrites the frozen input.
 
 Historical migration and compatibility commands are intentionally absent.

@@ -17,9 +17,9 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | locator_chunk_preparation | all locator packets |
 | locator_audit | all locator-audit V2 chunks |
 | missing_access_audit | all missing-access chunks |
-| structure_audit | global structure-audit V5 |
-| scoring | V8 calculation, item assessments, result V10 |
-| web_report | web report V8 |
+| structure_audit | global structure-audit V6 with causal provenance |
+| scoring | unchanged V8 calculation, item assessments V7, result V11 |
+| web_report | web report V9 |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.
 
@@ -37,6 +37,8 @@ Source discovery happens before candidate exposure. Synthesis creates a draft; i
 - Benchmark to index asks whether every required subject and reader task has useful access.
 
 The global structure pass then judges whether individually defensible records form a coherent navigation system.
+
+For every adverse heading-access judgment, the structure pass records specific causal findings joined to stable frozen source and evidence IDs. Overlapping causes remain separate. These findings flow to item, result, projection-metadata, and web-report outputs but never to dimension arithmetic.
 
 ## Chunk ownership
 

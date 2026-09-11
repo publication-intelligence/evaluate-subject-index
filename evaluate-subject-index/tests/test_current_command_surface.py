@@ -54,12 +54,12 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
                 "evaluation-state.schema.json",
                 "locator-audit-v2.schema.json",
                 "missing-access-audit.schema.json",
-                "structure-audit-v5.schema.json",
+                "structure-audit-v6.schema.json",
                 "dimension-calculation-input.schema.json",
                 "dimension-calculations-v5.schema.json",
-                "item-assessments-v6.schema.json",
-                "evaluation-result-v10.schema.json",
-                "web-report-v8.schema.json",
+                "item-assessments-v7.schema.json",
+                "evaluation-result-v11.schema.json",
+                "web-report-v9.schema.json",
             )
         )
         self.assertNotIn("subject-index-rubric-v4", runtime)
@@ -88,6 +88,35 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertIn("calculate", text)
         self.assertNotIn("migrate", text)
         self.assertNotIn("validate-artifact", text)
+        item_text = help_text("item_grade_v8_cli.py")
+        self.assertIn("project-structure-causality", item_text)
+
+    def test_structure_worker_prompt_requires_causal_provenance(self) -> None:
+        text = help_text("worker_prompt_cli.py")
+        self.assertIn("render-structure-audit", text)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "structure-prompt.md"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "worker_prompt_cli.py"),
+                    "render-structure-audit",
+                    "--evaluation-id",
+                    "EVAL-1",
+                    "--candidate-id",
+                    "CAND-1",
+                    "--output",
+                    str(output),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            prompt = output.read_text()
+            self.assertIn("structure-audit-v6", prompt)
+            self.assertIn("causal_findings", prompt)
+            self.assertIn("Do not change component statuses", prompt)
 
     def test_policy_builder_uses_the_current_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

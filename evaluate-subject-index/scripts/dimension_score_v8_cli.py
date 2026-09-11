@@ -39,6 +39,10 @@ from structure_locator_review import (
     derive_structure_locator_review,
     validate_structure_locator_review_semantics,
 )
+from heading_access_provenance import (
+    HeadingAccessProvenanceError,
+    validate_heading_access_provenance,
+)
 
 
 RUBRIC_VERSION = "subject-index-rubric-v8"
@@ -449,12 +453,12 @@ def raw_locator_state_requirements(
 
 
 def load_v8_inputs(config_path: Path) -> dict[str, Any]:
-    """Load native V8 inputs while reusing the unchanged structure contract.
+    """Load native V8 inputs while reusing the unchanged scoring contract.
 
     The V5 scorer is reused as an unchanged arithmetic engine.  For a native
-    ``structure-audit-v5`` document, only its in-memory schema tag is projected
-    to V4 for that engine; the exact V5 bytes and artifact identity remain the
-    bound input, and the existing architecture decisions remain present.
+    ``structure-audit-v6`` document, only its in-memory schema tag is projected
+    to V4 for that engine; the exact V6 bytes and artifact identity remain the
+    bound input, and score-free causal provenance remains present but unused.
     """
 
     config = v5.load_json(config_path, "Dimension calculation input")
@@ -491,15 +495,13 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
         config_path, structure_ref, "structure_audit"
     )
     v5.require(
-        structure_document.get("schema_version") == "structure-audit-v5",
+        structure_document.get("schema_version") == "structure-audit-v6",
         "unsupported_structure_audit_schema",
-        "Current V8 scoring requires structure-audit-v5.",
+        "Current V8 scoring requires structure-audit-v6.",
     )
     v5.validate_schema_document(
-        structure_document, "structure-audit-v5.schema.json", "structure_audit"
+        structure_document, "structure-audit-v6.schema.json", "structure_audit"
     )
-    runtime_structure = deepcopy(structure_document)
-    runtime_structure["schema_version"] = "structure-audit-v4"
     locator_entries: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
     missing_entries: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
     for index, record in enumerate(inputs["locator_audits"]):
@@ -522,6 +524,13 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
         missing_entries.append((document, artifact, path))
     locator_entries.sort(key=lambda item: str(item[0].get("chunk_id", "")))
     missing_entries.sort(key=lambda item: str(item[0].get("chunk_id", "")))
+    validate_heading_access_provenance(
+        structure_document,
+        (item[0] for item in locator_entries),
+        (item[0] for item in missing_entries),
+    )
+    runtime_structure = deepcopy(structure_document)
+    runtime_structure["schema_version"] = "structure-audit-v4"
     artifacts: list[dict[str, Any]] = [policy_artifact]
     paths: list[Path] = [policy_path]
     for prefix, entries in (
@@ -1315,11 +1324,11 @@ def command_derive_structure_review(args: argparse.Namespace) -> None:
         v5.validate_schema_document(candidate, "candidate-index-v2.schema.json", "Frozen normalized candidate")
         v5.validate_schema_document(inventory, "item-inventory-v2.schema.json", "Frozen item inventory")
         v5.require(
-            structure.get("schema_version") == "structure-audit-v5",
+            structure.get("schema_version") == "structure-audit-v6",
             "unsupported_structure_audit_schema",
-            "Current V8 scoring requires structure-audit-v5.",
+            "Current V8 scoring requires structure-audit-v6.",
         )
-        v5.validate_schema_document(structure, "structure-audit-v5.schema.json", "Frozen structure audit")
+        v5.validate_schema_document(structure, "structure-audit-v6.schema.json", "Frozen structure audit")
         v5.require(
             not v5.aliases_existing_file(
                 output_path, {candidate_path, inventory_path, structure_path}
@@ -1353,8 +1362,8 @@ def command_derive_structure_review(args: argparse.Namespace) -> None:
                 "summary": review["summary"],
             }
         )
-    except (OSError, v5.CalculationError, StructureReviewError) as exc:
-        if isinstance(exc, (v5.CalculationError, StructureReviewError)):
+    except (OSError, v5.CalculationError, StructureReviewError, HeadingAccessProvenanceError) as exc:
+        if isinstance(exc, (v5.CalculationError, StructureReviewError, HeadingAccessProvenanceError)):
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
         else:
             error = {"code": "file_error", "message": str(exc)}
@@ -1459,8 +1468,8 @@ def command_preflight(args: argparse.Namespace) -> None:
             write_json(output_path, result)
             result["artifact_written"] = str(output_path)
         v5.emit(result)
-    except (OSError, v5.CalculationError) as exc:
-        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, v5.CalculationError) else {"code": "file_error", "message": str(exc)}
+    except (OSError, v5.CalculationError, HeadingAccessProvenanceError) as exc:
+        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, (v5.CalculationError, HeadingAccessProvenanceError)) else {"code": "file_error", "message": str(exc)}
         v5.emit({"command": "v8-calculation-sufficiency-preflight", "ok": False, "error": error}, 1)
 
 
@@ -1483,8 +1492,8 @@ def command_calculate(args: argparse.Namespace) -> None:
         else:
             response = {"command": "calculate-v8-dimensions", "ok": True, **result}
         v5.emit(response)
-    except (OSError, v5.CalculationError) as exc:
-        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, v5.CalculationError) else {"code": "file_error", "message": str(exc)}
+    except (OSError, v5.CalculationError, HeadingAccessProvenanceError) as exc:
+        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, (v5.CalculationError, HeadingAccessProvenanceError)) else {"code": "file_error", "message": str(exc)}
         v5.emit({"command": "calculate-v8-dimensions", "ok": False, "error": error}, 1)
 
 

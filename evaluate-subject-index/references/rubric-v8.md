@@ -8,16 +8,18 @@
 - calculation input: `subject-index-dimension-calculation-input-v2`
 - calculation profile: `subject-index-dimension-calculation-v4`
 - calculation artifact: `subject-index-dimension-calculations-v5`
-- result: `subject-index-evaluation-result-v10`
+- structure audit: `structure-audit-v6`
+- result: `subject-index-evaluation-result-v11`
 - item policy: `subject-index-item-grading-v4`
 - explanation contract: `locator-explanations-v2`
-- item artifact: `subject-index-item-assessments-v6`
-- projection metadata: `subject-index-v8-projection-metadata-v1`
-- web report: `subject-index-web-report-v8`
+- heading-access causal contract: `heading-access-causal-findings-v1`
+- item artifact: `subject-index-item-assessments-v7`
+- projection metadata: `subject-index-v8-projection-metadata-v2`
+- web report: `subject-index-web-report-v9`
 - locator-fit preflight: `subject-index-v8-locator-fit-preflight-v1`
 - locator audit: `locator-audit-v2`
 
-Runtime commands accept the current identities only. A V8 calculation input must bind the self-hashed V8 policy whose hash matches audit provenance. Old state, calculation, result, item, and report artifacts are not rescored or migrated.
+Runtime commands accept the current identities only. A V8 calculation input must bind the self-hashed V8 policy whose hash matches audit provenance. Old calculation values are not rescored or migrated; a score-free causal backfill may project new structure, item, result, and report artifacts from the same frozen evidence.
 
 ## What changed in V8
 
@@ -103,3 +105,5 @@ More than six displayed locators or a range longer than ten pages triggers revie
 ## Provenance
 
 Calculation rows retain diagnostic categories and scores, binary rating credit, rule IDs, disposition, and uncertainty. Item projections display the diagnostic grade and factor breakdown while `dimension_reliability_credit` carries binary rating credit. Hashes join frozen records and prevent accidental cross-policy rescoring.
+
+Adverse heading-access judgments retain one or more causal findings linked to frozen source and evidence IDs. Causal kinds, reason codes, severity, summaries, and optional deterministically/adjudicatively established primary attribution are projection metadata only and are excluded from every calculation, gate, cap, rounding step, and readiness rule.

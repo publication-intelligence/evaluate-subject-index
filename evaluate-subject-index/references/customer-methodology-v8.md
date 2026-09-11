@@ -28,6 +28,8 @@ Rating credit is separate: a locator marked `supported` is kept unchanged and re
 
 Free-text rationale explains structured decisions but never supplies a score. Uninspectable material is represented through explicit uncertainty rather than guessed.
 
+When heading access is adverse, the report lists the specific contributing causes and their frozen source/evidence records. It retains multiple causes when they overlap and labels one primary only when a deterministic rule or explicit adjudication supports that choice. This provenance explains the judgment but does not change its score.
+
 ## Structure method
 
 A continuous page range counts as one displayed locator for scanning and subdivision review, while its pages remain separate atomic assignments for support auditing. More than six displayed locators or a range longer than ten pages triggers review, not an automatic penalty. A defect requires evidence that the structure materially harms retrieval and that a meaningful conceptual alternative exists.

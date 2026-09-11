@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "web-report-v9.schema.json",
+  "title": "Display-ready V8 report with heading-access causal provenance",
+  "type": "object",
+  "required": ["schema_version", "report_id", "headline", "summary", "grade", "scorecard", "calculation_explainer", "precision_diagnostics", "structure_locator_review", "key_metrics", "density", "gate_status", "strengths", "defects", "examples", "item_grade_index", "locator_explanations", "heading_access_causal_provenance", "score_views", "methodology", "comparability", "disclosures", "limitations", "evidence_index"],
+  "properties": {
+    "schema_version": {"const": "subject-index-web-report-v9"},
+    "report_id": {"$ref": "web-report-v8.schema.json#/properties/report_id"},
+    "headline": {"$ref": "web-report-v8.schema.json#/properties/headline"},
+    "summary": {"$ref": "web-report-v8.schema.json#/properties/summary"},
+    "grade": {"$ref": "web-report-v8.schema.json#/properties/grade"},
+    "scorecard": {"$ref": "web-report-v8.schema.json#/properties/scorecard"},
+    "calculation_explainer": {"$ref": "web-report-v8.schema.json#/properties/calculation_explainer"},
+    "precision_diagnostics": {"$ref": "web-report-v8.schema.json#/properties/precision_diagnostics"},
+    "structure_locator_review": {"$ref": "web-report-v8.schema.json#/properties/structure_locator_review"},
+    "key_metrics": {"$ref": "web-report-v8.schema.json#/properties/key_metrics"},
+    "density": {"$ref": "web-report-v8.schema.json#/properties/density"},
+    "gate_status": {"$ref": "web-report-v8.schema.json#/properties/gate_status"},
+    "strengths": {"$ref": "web-report-v8.schema.json#/properties/strengths"},
+    "defects": {"$ref": "web-report-v8.schema.json#/properties/defects"},
+    "examples": {"$ref": "web-report-v8.schema.json#/properties/examples"},
+    "item_grade_index": {
+      "type": "object",
+      "required": ["schema_version", "artifact_path", "sha256", "grading_policy", "summary", "color_legend", "interaction"],
+      "properties": {
+        "schema_version": {"const": "subject-index-item-assessments-v7"},
+        "artifact_path": {"$ref": "web-report-v8.schema.json#/$defs/portablePath"},
+        "sha256": {"$ref": "web-report-v8.schema.json#/$defs/sha256"},
+        "grading_policy": {"const": "subject-index-item-grading-v4"},
+        "summary": {"type": "object"},
+        "color_legend": {"type": "array"},
+        "interaction": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "locator_explanations": {"type": "array", "items": {"$ref": "item-assessments-v7.schema.json#/$defs/locatorExplanation"}},
+    "heading_access_causal_provenance": {"$ref": "item-assessments-v7.schema.json#/properties/heading_access_causal_provenance"},
+    "score_views": {"$ref": "web-report-v8.schema.json#/properties/score_views"},
+    "locator_fit_compatibility": {"$ref": "web-report-v8.schema.json#/properties/locator_fit_compatibility"},
+    "locator_fit_supplement": {"$ref": "web-report-v8.schema.json#/properties/locator_fit_supplement"},
+    "methodology": {"$ref": "web-report-v8.schema.json#/properties/methodology"},
+    "comparability": {"$ref": "web-report-v8.schema.json#/properties/comparability"},
+    "disclosures": {"$ref": "web-report-v8.schema.json#/properties/disclosures"},
+    "limitations": {"$ref": "web-report-v8.schema.json#/properties/limitations"},
+    "evidence_index": {"$ref": "web-report-v8.schema.json#/properties/evidence_index"}
+  },
+  "additionalProperties": false
+}

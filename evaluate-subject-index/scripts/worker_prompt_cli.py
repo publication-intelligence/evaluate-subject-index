@@ -91,7 +91,7 @@ Scope:
 
 Retrieve the restricted source chunk from `{chunk['source_library_path']}` and materialize it as `{chunk['source_materialize_path']}`. Retrieve its page sidecar from `{chunk['sidecar_library_path']}` and materialize it as `{chunk['sidecar_materialize_path']}`. If either is unavailable, stop as blocked.
 
-Audit every packet assignment exactly once. Preserve the complete heading path and use only `supported`, `partially_supported`, `unsupported`, or `uninspectable`. `supported` means keep the locator unchanged; `partially_supported` and `unsupported` mean do not keep it as delivered. Judge treatment from independently useful information, not rhetorical form: comparative-list facts and attributed observations may be meaningful, while `attribution_only`, `citation_only`, and `incidental_example` apply only when the passage supplies no independently useful information about the complete heading path. Record page treatment and complete-path fit independently, plus a concise evidence summary, any required fit rationale, evidence IDs, error codes, severity, and confidence. Preserve strict scope, relationship, chronology, compound-heading, attribution, and stance evaluation. Do not perform missing-access, global-structure, density, scoring, or reporting work.
+Audit every packet assignment exactly once. Preserve the complete heading path and use only `supported`, `partially_supported`, `unsupported`, or `uninspectable`. `supported` means keep the locator unchanged; `partially_supported` and `unsupported` mean do not keep it as delivered. Judge treatment from independently useful information, not rhetorical form: comparative-list facts and attributed observations may be meaningful, while `attribution_only`, `citation_only`, and `incidental_example` apply only when the passage supplies no independently useful information about the complete heading path. Record page treatment and complete-path fit independently, plus a concise evidence summary, any required fit rationale, stable locator and path IDs, evidence IDs, error codes, severity, and confidence. These structured fields are later joined into heading-access causal findings, so retain every applicable code and evidence ID when signals overlap. Preserve strict scope, relationship, chronology, compound-heading, attribution, and stance evaluation. Do not perform missing-access, global-structure, density, scoring, or reporting work.
 
 Validate the completed `locator-audit-v2`, save it under `{recovery_root}`, and return its path. A branch or pull request may be used for review, but neither is required.
 ```
@@ -108,6 +108,17 @@ Use one prompt per isolated chunk chat. Checkpoints and branches are recovery or
     return header + "\n".join(render_chunk(spec, chunk) for chunk in spec["chunks"])
 
 
+def render_structure_audit(evaluation_id: str, candidate_id: str) -> str:
+    return f"""@Evaluate Subject Index audit-index-structure
+
+Complete the global structure audit for evaluation `{evaluation_id}` and candidate `{candidate_id}` from the frozen normalized candidate, item inventory, locator audits, missing-access audits, and structure-review decisions. Emit `structure-audit-v6`.
+
+For every `heading_access_architecture` status of `minor_issues`, `major_issues`, or `fails`, emit at least one `causal_findings` record. Each record must carry a stable `HAF-*` ID, one of `heading_fit`, `benchmark_access`, `cross_reference`, or `confirmed_subdivision_architecture`, all applicable stable source IDs and reason codes, severity, frozen evidence IDs, and a concise evidence-backed summary. Preserve every applicable finding when causes overlap. Omit primary attribution unless a deterministic rule or explicit adjudication establishes it; when established, record both `primary_finding_id` and `primary_basis`. Do not derive causation from generic summary prose.
+
+Causal findings and explanations are reporting metadata only. Do not change component statuses, defects, calculation inputs, gates, caps, rounding, readiness rules, or any other scoring behavior to accommodate the provenance contract. Validate the structure audit against the complete frozen audit set before registration.
+"""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="operation", required=True)
@@ -115,7 +126,24 @@ def main() -> int:
     renderer.add_argument("--input", required=True)
     renderer.add_argument("--checkpoint", required=True)
     renderer.add_argument("--output", required=True)
+    structure_renderer = subparsers.add_parser("render-structure-audit")
+    structure_renderer.add_argument("--evaluation-id", required=True)
+    structure_renderer.add_argument("--candidate-id", required=True)
+    structure_renderer.add_argument("--output", required=True)
     args = parser.parse_args()
+    if args.operation == "render-structure-audit":
+        try:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(
+                render_structure_audit(args.evaluation_id, args.candidate_id),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}))
+            return 1
+        print(json.dumps({"ok": True, "operation": args.operation, "output": str(output)}))
+        return 0
     try:
         spec = json.loads(Path(args.input).read_text(encoding="utf-8"))
         validate_spec(spec)

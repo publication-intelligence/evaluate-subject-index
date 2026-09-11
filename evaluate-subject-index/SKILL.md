@@ -63,7 +63,7 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 
 ## Scoring
 
-Native V8 uses evaluation-policy V4, state V6, `structure-audit-v5`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V6, result V10, and web report V8. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
+Native V8 uses evaluation-policy V4, state V6, `structure-audit-v6`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V7, result V11, projection metadata V2, and web report V9. Every adverse `heading_access_architecture` judgment carries one or more source-linked causal findings; those findings are reporting metadata and never enter arithmetic. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
 
 This repository intentionally exposes no legacy migration commands or compatibility workflow. Runtime commands and schemas cover the current workflow only.
 

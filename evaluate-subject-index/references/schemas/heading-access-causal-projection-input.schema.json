@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "heading-access-causal-projection-input.schema.json",
+  "title": "Score-free heading-access causal projection input for a frozen structure audit",
+  "type": "object",
+  "required": ["schema_version", "evaluation_id", "candidate_sha256", "structure_audit_file_sha256", "node_causal_provenance"],
+  "properties": {
+    "schema_version": {"const": "subject-index-heading-access-causal-projection-input-v1"},
+    "evaluation_id": {"type": "string", "minLength": 1},
+    "candidate_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "structure_audit_file_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "node_causal_provenance": {"type": "array", "items": {"$ref": "item-assessments-v7.schema.json#/$defs/nodeCausalProvenance"}}
+  },
+  "additionalProperties": false
+}

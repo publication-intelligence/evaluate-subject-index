@@ -439,7 +439,8 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             "review_sha256": "b" * 64,
             "path_reviews": [],
         }
-        projected = item_v8.build_v8_assessments(base, calculation, review)
+        structure = {"schema_version": "structure-audit-v6", "node_judgments": []}
+        projected = item_v8.build_v8_assessments(base, calculation, review, structure)
         locator = projected["locator_assessments"][0]
         self.assertEqual(70, locator["grade"]["score"])
         self.assertEqual("1", locator["dimension_reliability_credit"])
@@ -475,7 +476,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             "config": {"evaluation_id": "EVAL-TEST", "audit_mode": "full"},
             "input_artifacts": [
                 {"role": "policy", "path": "policy.json", "sha256": "b" * 64, "schema_version": "subject-index-evaluation-policy-v4"},
-                {"role": "structure_audit", "path": "structure.json", "sha256": "c" * 64, "schema_version": "structure-audit-v5"},
+                {"role": "structure_audit", "path": "structure.json", "sha256": "c" * 64, "schema_version": "structure-audit-v6"},
             ],
         }
         fit_report = {
@@ -500,6 +501,49 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             if item["dimension_id"] != "page_reference_reliability"
         }
         self.assertEqual({dimension_id: dimension_id for dimension_id in dimension_ids}, observed)
+
+    def test_heading_access_causal_provenance_is_not_an_arithmetic_input(self) -> None:
+        ledgers = {
+            "subjects": [],
+            "tasks": [],
+            "task_original": 0,
+            "task_not_measured": [],
+            "nodes": [{
+                "node_id": "NODE-1",
+                "component_judgments": {
+                    "heading_access_architecture": {
+                        "status": "minor_issues",
+                        "evidence_ids": [],
+                    }
+                },
+            }],
+            "node_original": 1,
+            "node_not_measured": [],
+            "references": [],
+            "reference_original": 0,
+            "reference_not_measured": [],
+            "defects": [],
+            "context": {
+                "candidate_attempt": {"status": "meaningful_attempt", "evidence_ids": []},
+                "cross_reference_applicability": {
+                    "status": "inapplicable",
+                    "basis_code": "no_delivered_references_no_obligation_or_defect",
+                    "delivered_reference_count": 0,
+                    "warranted_reference_obligation_count": 0,
+                    "warranted_reference_obligation_ids": [],
+                    "reference_defect_ids": [],
+                },
+            },
+        }
+        without_provenance = v5.calculate_findability(ledgers, "full")
+        with_provenance = copy.deepcopy(ledgers)
+        with_provenance["nodes"][0]["component_judgments"][
+            "heading_access_architecture"
+        ]["causal_findings"] = [{"finding_id": "HAF-IGNORED-BY-ARITHMETIC"}]
+        self.assertEqual(
+            without_provenance,
+            v5.calculate_findability(with_provenance, "full"),
+        )
 
 
 if __name__ == "__main__":
