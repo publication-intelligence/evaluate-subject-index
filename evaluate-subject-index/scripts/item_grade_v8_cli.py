@@ -12,10 +12,17 @@ from typing import Any, Mapping
 
 import item_projection_core as items
 import scoring_core as core
+from heading_access_provenance import (
+    HeadingAccessProvenanceError,
+    build_structure_causal_projection,
+    causal_provenance_by_node,
+    validate_causal_projection_source,
+    validate_heading_access_provenance,
+)
 from structure_audit import validate_structure_audit_semantics
 
 
-SCHEMA_VERSION = "subject-index-item-assessments-v6"
+SCHEMA_VERSION = "subject-index-item-assessments-v7"
 GRADING_POLICY = "subject-index-item-grading-v4"
 
 
@@ -188,8 +195,9 @@ def build_v8_assessments(
     calculation: Mapping[str, Any],
     structure_audit: Mapping[str, Any],
     locator_documents: list[Mapping[str, Any]] | None = None,
+    missing_documents: list[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Project locator grades and structure metrics without changing evidence."""
+    """Project item diagnostics and score-free heading-access causality."""
 
     if base_items.get("schema_version") != "subject-index-item-assessments-v3":
         raise ValueError("base_item_assessments_required")
@@ -199,7 +207,7 @@ def build_v8_assessments(
         raise ValueError("item_calculation_evaluation_mismatch")
     if base_items.get("candidate_sha256") != calculation.get("evidence_identity", {}).get("candidate_sha256"):
         raise ValueError("item_calculation_candidate_identity_mismatch")
-    if structure_audit.get("schema_version") != "structure-audit-v5":
+    if structure_audit.get("schema_version") != "structure-audit-v6":
         raise ValueError("native_structure_audit_required")
     if structure_audit.get("candidate_sha256") != calculation.get("evidence_identity", {}).get("candidate_sha256"):
         raise ValueError("structure_calculation_candidate_identity_mismatch")
@@ -207,8 +215,14 @@ def build_v8_assessments(
         key: deepcopy(structure_audit[key])
         for key in ("schema_version", "candidate_denominator", "full_scope_attestation", "locator_architecture", "uncertainties")
     }
+    expected_structure_projection["schema_version"] = "structure-audit-v5"
     if calculation.get("structure_audit") != expected_structure_projection:
         raise ValueError("structure_calculation_projection_mismatch")
+    locator_documents = locator_documents or []
+    missing_documents = missing_documents or []
+    validate_heading_access_provenance(
+        structure_audit, locator_documents, missing_documents
+    )
 
     result = deepcopy(base_items)
     result["evidence_identity"] = deepcopy(calculation["evidence_identity"])
@@ -222,7 +236,7 @@ def build_v8_assessments(
         raise ValueError("item_locator_utility_ledger_mismatch")
 
     judgments: dict[str, dict[str, Any]] = {}
-    for document in locator_documents or []:
+    for document in locator_documents:
         schema_version = document.get("schema_version")
         for record in document.get("judgments", []):
             enriched = deepcopy(record)
@@ -325,12 +339,36 @@ def build_v8_assessments(
                 }
             )
 
+    causal_by_node = {
+        item["node_id"]: item for item in causal_provenance_by_node(structure_audit)
+    }
+    assessment_node_ids = {
+        item.get("node_id") for item in result.get("heading_node_assessments", [])
+    }
+    if assessment_node_ids != set(causal_by_node):
+        raise ValueError("item_heading_access_provenance_node_mismatch")
+    for assessment in result.get("heading_node_assessments", []):
+        node_causality = causal_by_node[assessment["node_id"]]
+        assessment["heading_access_status"] = node_causality["status"]
+        assessment["heading_access_causal_findings"] = deepcopy(
+            node_causality["causal_findings"]
+        )
+        if "primary_finding_id" in node_causality:
+            assessment["heading_access_primary_finding_id"] = node_causality[
+                "primary_finding_id"
+            ]
+            assessment["heading_access_primary_basis"] = deepcopy(
+                node_causality["primary_basis"]
+            )
+
     result["schema_version"] = SCHEMA_VERSION
     result["grading_policy"] = GRADING_POLICY
     result["explanation_contract"] = {
         "contract_version": "locator-explanations-v2",
+        "heading_access_causal_contract": "heading-access-causal-findings-v1",
         "authored_evidence_is_primary": True,
         "prose_used_in_scoring": False,
+        "causal_provenance_used_in_scoring": False,
     }
     result["grade_disclosure"] = (
         "V8 locator grades equal 100 times min(page-treatment score, complete-path-fit score) and remain diagnostic. "
@@ -380,6 +418,7 @@ def build_v8_assessments(
         "cross_reference_id_set_sha256": structure_audit["candidate_denominator"]["cross_reference_id_set_sha256"],
         "locator_bearing_path_id_set_sha256": structure_audit["candidate_denominator"]["locator_bearing_path_id_set_sha256"],
     }
+    result["heading_access_causal_provenance"] = list(causal_by_node.values())
     items.rebuild_summary(result)
     def credit_tier(item: Mapping[str, Any], field: str) -> str:
         if item["disposition"] == "bounded":
@@ -417,6 +456,15 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             )
             core.validate_schema_document(document, schema_name, f"Locator audit {index}")
             locator_documents.append(document)
+        missing_documents = []
+        for index, stored in enumerate(args.missing_access_audit or []):
+            document = core.load_json(Path(stored).resolve(), f"Missing-access audit {index}")
+            core.validate_schema_document(
+                document,
+                "missing-access-audit.schema.json",
+                f"Missing-access audit {index}",
+            )
+            missing_documents.append(document)
         core.validate_schema_document(
             base_items, "item-assessments-v3.schema.json", "Base item assessments"
         )
@@ -425,7 +473,7 @@ def command_build_assessments(args: argparse.Namespace) -> None:
         )
         core.validate_schema_document(
             structure,
-            "structure-audit-v5.schema.json",
+            "structure-audit-v6.schema.json",
             "V8 structure audit",
         )
         core.require(
@@ -450,9 +498,10 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             calculation,
             structure,
             locator_documents=locator_documents,
+            missing_documents=missing_documents,
         )
         core.validate_schema_document(
-            result, "item-assessments-v6.schema.json", "Generated V8 item assessments"
+            result, "item-assessments-v7.schema.json", "Generated V8 item assessments"
         )
         core.require(
             not core.aliases_existing_file(
@@ -462,6 +511,7 @@ def command_build_assessments(args: argparse.Namespace) -> None:
                     calculation_path,
                     structure_path,
                     *(Path(path).resolve() for path in (args.locator_audit or [])),
+                    *(Path(path).resolve() for path in (args.missing_access_audit or [])),
                 },
             ),
             "output_aliases_frozen_input",
@@ -478,8 +528,8 @@ def command_build_assessments(args: argparse.Namespace) -> None:
                 "artifact_written": str(output_path),
             }
         )
-    except (OSError, ValueError, core.CalculationError) as exc:
-        if isinstance(exc, core.CalculationError):
+    except (OSError, ValueError, core.CalculationError, HeadingAccessProvenanceError) as exc:
+        if isinstance(exc, (core.CalculationError, HeadingAccessProvenanceError)):
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
         else:
             error = {"code": "item_projection_error", "message": str(exc)}
@@ -487,6 +537,81 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             {"command": "build-v8-item-assessments", "ok": False, "error": error},
             1,
         )
+
+
+def command_project_structure_causality(args: argparse.Namespace) -> None:
+    """Add score-free causality to a frozen V5 structure audit copy."""
+
+    try:
+        structure_path = Path(args.structure_audit).resolve()
+        projection_path = Path(args.projection_input).resolve()
+        output_path = Path(args.output).resolve()
+        structure = core.load_json(structure_path, "Frozen structure audit")
+        projection = core.load_json(projection_path, "Heading-access causal projection input")
+        core.validate_schema_document(structure, "structure-audit-v5.schema.json", "Frozen structure audit")
+        core.validate_schema_document(
+            projection,
+            "heading-access-causal-projection-input.schema.json",
+            "Heading-access causal projection input",
+        )
+        core.require(
+            projection.get("structure_audit_file_sha256") == core.sha256_file(structure_path),
+            "causal_projection_source_hash_mismatch",
+            "The causal projection input does not bind the supplied frozen structure bytes.",
+        )
+        locator_documents = [
+            core.load_json(Path(path).resolve(), f"Locator audit {index}")
+            for index, path in enumerate(args.locator_audit or [])
+        ]
+        missing_documents = [
+            core.load_json(Path(path).resolve(), f"Missing-access audit {index}")
+            for index, path in enumerate(args.missing_access_audit or [])
+        ]
+        for index, document in enumerate(locator_documents):
+            core.validate_schema_document(document, "locator-audit-v2.schema.json", f"Locator audit {index}")
+        for index, document in enumerate(missing_documents):
+            core.validate_schema_document(document, "missing-access-audit.schema.json", f"Missing-access audit {index}")
+        result = build_structure_causal_projection(structure, projection)
+        result["causal_projection"] = {
+            "source_schema_version": "structure-audit-v5",
+            "source_structure_audit_file_sha256": core.sha256_file(structure_path),
+            "projection_input_file_sha256": core.sha256_file(projection_path),
+            "scores_recomputed": False,
+            "source_artifact_mutated": False,
+            "scoring_fields_changed": False,
+        }
+        validate_causal_projection_source(result, structure)
+        core.validate_schema_document(result, "structure-audit-v6.schema.json", "Causal structure projection")
+        validate_heading_access_provenance(result, locator_documents, missing_documents)
+        core.require(
+            not core.aliases_existing_file(
+                output_path,
+                {
+                    structure_path,
+                    projection_path,
+                    *(Path(path).resolve() for path in (args.locator_audit or [])),
+                    *(Path(path).resolve() for path in (args.missing_access_audit or [])),
+                },
+            ),
+            "output_aliases_frozen_input",
+            "The causal projection must not overwrite a frozen input artifact.",
+        )
+        core.write_json(output_path, result)
+        core.emit({
+            "command": "project-structure-causality",
+            "ok": True,
+            "evaluation_id": result["evaluation_id"],
+            "schema_version": result["schema_version"],
+            "artifact_written": str(output_path),
+            "scores_recomputed": False,
+            "frozen_inputs_mutated": False,
+        })
+    except (OSError, ValueError, core.CalculationError, HeadingAccessProvenanceError) as exc:
+        if isinstance(exc, (core.CalculationError, HeadingAccessProvenanceError)):
+            error = {"code": exc.code, "message": exc.message, "details": exc.details}
+        else:
+            error = {"code": "causal_projection_error", "message": str(exc)}
+        core.emit({"command": "project-structure-causality", "ok": False, "error": error}, 1)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -505,8 +630,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Frozen locator audit; repeat once per chunk. V2 carries authored fit rationale.",
     )
+    build.add_argument(
+        "--missing-access-audit",
+        action="append",
+        default=[],
+        help="Frozen missing-access audit; repeat once per chunk for causal ID validation.",
+    )
     build.add_argument("--output", required=True)
     build.set_defaults(func=command_build_assessments)
+    project = subparsers.add_parser(
+        "project-structure-causality",
+        help="Add score-free heading-access causality to a frozen structure-audit-v5 copy.",
+    )
+    project.add_argument("--structure-audit", required=True)
+    project.add_argument("--projection-input", required=True)
+    project.add_argument("--locator-audit", action="append", default=[])
+    project.add_argument("--missing-access-audit", action="append", default=[])
+    project.add_argument("--output", required=True)
+    project.set_defaults(func=command_project_structure_causality)
     return parser
 
 

@@ -1,6 +1,6 @@
 # Structure audit — V8
 
-Native V8 structure audits use `structure-audit-v5` directly. The artifact is an exception ledger, not one stored pass row per heading.
+Native V8 structure audits use `structure-audit-v6` directly. The artifact is an exception ledger, not one stored pass row per heading.
 
 ## Exact scope
 
@@ -10,6 +10,8 @@ Native V8 structure audits use `structure-audit-v5` directly. The artifact is an
 - Pilot mode is incomplete by definition. Only explicitly listed pilot passes and exception rows are measured; every other denominator identity remains `not_measured` and contributes to uncertainty bounds.
 
 `node_judgments` and `cross_reference_judgments` contain exceptions only. An all-pass node row or supported cross-reference row is redundant and invalid. The ledger separately preserves structured defects, strengths, uncertainties, density measurements, and scoring context.
+
+An adverse `heading_access_architecture` exception (`minor_issues`, `major_issues`, or `fails`) must include structured `causal_findings`. Each finding names its causal kind, stable source IDs, applicable reason codes, severity, evidence IDs, and summary. Preserve overlapping causes. Add a primary finding only when a deterministic rule or explicit `ARCHREV-*` adjudication establishes it. Causal metadata is validated and projected for explanation only; the scorer strips it from its in-memory V5-compatible arithmetic view.
 
 ## Locator architecture
 

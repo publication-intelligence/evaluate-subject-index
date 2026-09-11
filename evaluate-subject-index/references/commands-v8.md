@@ -86,14 +86,14 @@ python scripts/parallel_discovery_cli.py register-discoveries ...
 ```bash
 python scripts/dimension_score_v8_cli.py register-structure \
   --state evaluation-state.json \
-  --input structure-audit.v5.json
+  --input structure-audit.v6.json
 python scripts/dimension_score_v8_cli.py score \
   --state evaluation-state.json
 python scripts/dimension_score_v8_cli.py build-report \
   --state evaluation-state.json
 ```
 
-`register-structure` validates the native V5 ledger and its exact candidate denominator before registering it. `score` resolves and verifies the registered policy, manifest, candidate, inventory, locator audits, missing-access audits, and structure audit; it then writes and registers calculation input V2, calculations V5, item assessments V6, projection metadata V1, and result V10. `build-report` validates the registered scoring set and writes web report V8. Each successful command advances canonical state under its mutation lock. Validation failure writes no output and leaves state unchanged.
+`register-structure` validates the native V6 ledger, its exact candidate denominator, and every adverse heading-access causal finding before registering it. `score` resolves and verifies the registered policy, manifest, candidate, inventory, locator audits, missing-access audits, and structure audit; it then writes and registers calculation input V2, calculations V5, item assessments V7, projection metadata V2, and result V11. `build-report` validates the registered scoring set and writes web report V9. Each successful command advances canonical state under its mutation lock. Validation failure writes no output and leaves state unchanged.
 
 For isolated calculation diagnostics, the lower-level commands remain available:
 
@@ -109,5 +109,7 @@ python scripts/item_grade_v8_cli.py build-assessments \
   --locator-audit locator-audit.CHUNK-001.v2.json \
   --output item-assessments.json
 ```
+
+For a frozen V5 structure audit, `item_grade_v8_cli.py project-structure-causality` creates an exact-hash-bound V6 copy that adds only score-free causal metadata.
 
 The calculation input binds `structure_audit` directly; no intermediate structure artifact or derivation command is needed. The canonical `score` command assembles that input from state, so hand-authoring it is unnecessary in a normal run.

@@ -109,7 +109,7 @@ def _validate_architecture_review(
 def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
     """Validate exact denominator, exception-ledger, and architecture invariants."""
 
-    _require(structure.get("schema_version") == "structure-audit-v5", "unsupported_structure_audit_schema", "Current V8 scoring requires structure-audit-v5.")
+    _require(structure.get("schema_version") in {"structure-audit-v5", "structure-audit-v6"}, "unsupported_structure_audit_schema", "Current V8 structure processing requires structure-audit-v5 or structure-audit-v6.")
     denominator = structure["candidate_denominator"]
     node_records = _unique_records(denominator["nodes"], "node_id", "candidate_denominator.nodes")
     node_ids = list(node_records)

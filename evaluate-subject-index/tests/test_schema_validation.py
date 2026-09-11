@@ -18,13 +18,15 @@ class SharedSchemaValidationTests(unittest.TestCase):
     def test_v8_identity_contracts_reject_retired_identities(self) -> None:
         cases = [
             ("dimension-calculations-v5.schema.json", "subject-index-dimension-calculations-v5", "subject-index-dimension-calculations-v4"),
-            ("item-assessments-v6.schema.json", "subject-index-item-assessments-v6", "subject-index-item-assessments-v5"),
-            ("evaluation-result-v10.schema.json", "subject-index-evaluation-result-v10", "subject-index-evaluation-result-v9"),
+            ("structure-audit-v6.schema.json", "structure-audit-v6", "structure-audit-v5"),
+            ("item-assessments-v7.schema.json", "subject-index-item-assessments-v7", "subject-index-item-assessments-v6"),
+            ("evaluation-result-v11.schema.json", "subject-index-evaluation-result-v11", "subject-index-evaluation-result-v10"),
             ("evaluation-state.schema.json", "subject-index-evaluation-state-v6", "subject-index-evaluation-state-v5"),
-            ("web-report-v8.schema.json", "subject-index-web-report-v8", "subject-index-web-report-v7"),
+            ("web-report-v9.schema.json", "subject-index-web-report-v9", "subject-index-web-report-v8"),
             ("evaluation-policy-v4.schema.json", "subject-index-evaluation-policy-v4", "subject-index-evaluation-policy-v3"),
             ("dimension-calculation-input.schema.json", "subject-index-dimension-calculation-input-v2", "subject-index-dimension-calculation-input-v1"),
-            ("v8-projection-metadata-v1.schema.json", "subject-index-v8-projection-metadata-v1", "subject-index-v7-projection-metadata-v2"),
+            ("v8-projection-metadata-v2.schema.json", "subject-index-v8-projection-metadata-v2", "subject-index-v8-projection-metadata-v1"),
+            ("heading-access-causal-projection-input.schema.json", "subject-index-heading-access-causal-projection-input-v1", "subject-index-heading-access-causal-projection-input-v0"),
             ("v8-locator-fit-preflight.schema.json", "subject-index-v8-locator-fit-preflight-v1", "subject-index-v7-locator-fit-preflight-v1"),
         ]
         schema_root = ROOT / "references" / "schemas"
@@ -37,19 +39,27 @@ class SharedSchemaValidationTests(unittest.TestCase):
 
     def test_v8_native_result_and_report_have_no_migration_requirement(self) -> None:
         schema_root = ROOT / "references" / "schemas"
-        result_schema = json.loads((schema_root / "evaluation-result-v10.schema.json").read_text())
-        report_schema = json.loads((schema_root / "web-report-v8.schema.json").read_text())
+        result_schema = json.loads((schema_root / "evaluation-result-v11.schema.json").read_text())
+        report_schema = json.loads((schema_root / "web-report-v9.schema.json").read_text())
         self.assertNotIn("score_migration", result_schema["required"])
         self.assertNotIn("score_migration", result_schema["properties"])
         self.assertNotIn("migration_comparison", report_schema["required"])
         self.assertNotIn("migration_comparison", report_schema["properties"])
+        self.assertIn("heading_access_causal_provenance", result_schema["required"])
+        self.assertIn("heading_access_causal_provenance", report_schema["required"])
+
+    def test_projection_metadata_binds_the_canonical_causal_source(self) -> None:
+        schema = json.loads(
+            (ROOT / "references" / "schemas" / "v8-projection-metadata-v2.schema.json").read_text()
+        )
+        self.assertIn("canonical_heading_access_source", schema["required"])
 
     def test_current_worker_schemas_do_not_publish_redundant_provenance_contracts(self) -> None:
         schema_root = ROOT / "references" / "schemas"
         policy = json.loads((schema_root / "evaluation-policy-v4.schema.json").read_text())
         locator = json.loads((schema_root / "locator-audit-v2.schema.json").read_text())
         missing = json.loads((schema_root / "missing-access-audit.schema.json").read_text())
-        structure = json.loads((schema_root / "structure-audit-v5.schema.json").read_text())
+        structure = json.loads((schema_root / "structure-audit-v6.schema.json").read_text())
         self.assertEqual(["id"], policy["properties"]["policy_profile"]["required"])
         self.assertNotIn("provenance", locator["properties"])
         self.assertNotIn("provenance", missing["properties"])
@@ -100,12 +110,12 @@ class SharedSchemaValidationTests(unittest.TestCase):
         current = "\n".join(
             (schema_root / name).read_text()
             for name in (
-                "structure-audit-v5.schema.json",
+                "structure-audit-v6.schema.json",
                 "dimension-calculations-v5.schema.json",
-                "item-assessments-v6.schema.json",
-                "evaluation-result-v10.schema.json",
-                "web-report-v8.schema.json",
-                "v8-projection-metadata-v1.schema.json",
+                "item-assessments-v7.schema.json",
+                "evaluation-result-v11.schema.json",
+                "web-report-v9.schema.json",
+                "v8-projection-metadata-v2.schema.json",
             )
         )
         for forbidden in ("structure-audit-v4", "structure-locator-review", "migration-supplement", "score-migration", "evaluation-result-v6"):

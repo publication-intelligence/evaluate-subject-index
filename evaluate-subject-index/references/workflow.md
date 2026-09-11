@@ -17,9 +17,9 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | locator_chunk_preparation | all locator packets |
 | locator_audit | all locator-audit V2 chunks |
 | missing_access_audit | all missing-access chunks |
-| structure_audit | global structure-audit V5 |
-| scoring | V8 calculation, item assessments, result V10 |
-| web_report | web report V8 |
+| structure_audit | global structure-audit V6 with causal provenance |
+| scoring | V8 calculation, item assessments V7, result V11 |
+| web_report | web report V9 |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.
 
@@ -47,7 +47,7 @@ The global structure pass then judges whether individually defensible records fo
 The final transitions use one current command surface:
 
 ```bash
-python scripts/dimension_score_v8_cli.py register-structure --state evaluation-state.json --input structure-audit.v5.json
+python scripts/dimension_score_v8_cli.py register-structure --state evaluation-state.json --input structure-audit.v6.json
 python scripts/dimension_score_v8_cli.py score --state evaluation-state.json
 python scripts/dimension_score_v8_cli.py build-report --state evaluation-state.json
 ```

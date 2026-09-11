@@ -44,7 +44,7 @@ The final three state transitions are typed and atomic:
 ```bash
 python evaluate-subject-index/scripts/dimension_score_v8_cli.py register-structure \
   --state /path/to/evaluation/evaluation-state.json \
-  --input /path/to/evaluation/structure-audit.v5.json
+  --input /path/to/evaluation/structure-audit.v6.json
 python evaluate-subject-index/scripts/dimension_score_v8_cli.py score \
   --state /path/to/evaluation/evaluation-state.json
 python evaluate-subject-index/scripts/dimension_score_v8_cli.py build-report \

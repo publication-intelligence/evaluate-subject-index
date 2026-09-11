@@ -184,7 +184,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
             "completion": {"expected": 1, "judged": 1, "complete": True},
         }
         structure = {
-            "schema_version": "structure-audit-v5",
+            "schema_version": "structure-audit-v6",
             "evaluation_id": EVALUATION_ID,
             "candidate_sha256": CANDIDATE_SHA,
             "audit_mode": "full",
@@ -203,7 +203,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
                 "node_id": "NODE-001",
                 "component_judgments": {
                     "conceptual_stance_fidelity": {"status": "passes", "summary": "Concept preserved.", "evidence_ids": ["EVID-NODE-001"]},
-                    "heading_access_architecture": {"status": "passes", "summary": "Access works.", "evidence_ids": ["EVID-NODE-001"]},
+                    "heading_access_architecture": {"status": "passes", "summary": "Access works.", "evidence_ids": ["EVID-NODE-001"], "causal_findings": []},
                     "mechanics_consistency": {"status": "cosmetic_issues", "summary": "One cosmetic inconsistency.", "evidence_ids": ["EVID-NODE-001"]},
                 },
                 "summary": "One explicit structure exception.", "confidence": "high", "evidence_ids": ["EVID-NODE-001"],
@@ -377,7 +377,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         scored = self.run_cli("score", "--state", str(self.state_path))
         self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
 
-        result_path = self.root / "scoring/evaluation-result.v10.json"
+        result_path = self.root / "scoring/evaluation-result.v11.json"
         result_bytes = result_path.read_bytes()
         state_before_report_failure = self.state_path.read_bytes()
         result_path.write_bytes(result_bytes + b" ")
@@ -393,10 +393,10 @@ class CurrentV8CompletionTests(unittest.TestCase):
         state = json.loads(self.state_path.read_text())
         self.assertTrue(all(item["status"] == "completed" for item in state["stages"].values()))
         result = json.loads(result_path.read_text())
-        report = json.loads((self.root / "scoring/web-report.v8.json").read_text())
-        items = json.loads((self.root / "scoring/item-assessments.v6.json").read_text())
-        self.assertEqual("subject-index-evaluation-result-v10", result["schema_version"])
-        self.assertEqual("subject-index-web-report-v8", report["schema_version"])
+        report = json.loads((self.root / "scoring/web-report.v9.json").read_text())
+        items = json.loads((self.root / "scoring/item-assessments.v7.json").read_text())
+        self.assertEqual("subject-index-evaluation-result-v11", result["schema_version"])
+        self.assertEqual("subject-index-web-report-v9", report["schema_version"])
         self.assertIsNotNone(result["total_score"])
         self.assertEqual("mixed", items["locator_assessments"][0]["locator_utility"]["treatment_category"])
         self.assertEqual("1", items["locator_assessments"][0]["dimension_reliability_credit"])

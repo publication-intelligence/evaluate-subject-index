@@ -53,7 +53,7 @@ REQUIRED_INPUTS = {
     "locator_chunk_preparation": ["registered normalized candidate", "registered page map", "registered chunk manifest", "registered frozen benchmark"],
     "locator_audit": ["locator packets", "source chunks"],
     "missing_access_audit": ["benchmark", "normalized candidate", "locator audits"],
-    "structure_audit": ["complete candidate audits", "normalized index"],
+    "structure_audit": ["complete candidate audits", "normalized index", "structured heading-access causal findings"],
     "scoring": ["complete V8 audit ledgers"],
     "web_report": ["validated V8 result", "V8 item assessments"],
 }
@@ -66,8 +66,9 @@ VALID_RETENTION = {"required", "cache"}
 STATE_SCHEMA_VERSION = "subject-index-evaluation-state-v6"
 SCORE_RUBRIC_VERSION = "subject-index-rubric-v8"
 DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
-SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v10"
-WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v8"
+STRUCTURE_AUDIT_COMPLETION_SCHEMA = "structure-audit-v6"
+SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v11"
+WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v9"
 
 
 def now() -> str:
@@ -165,6 +166,7 @@ def stage_dependencies(stage: str, stage_order: list[str]) -> list[str]:
 
 def _completion_schema(stage: str) -> str | None:
     return {
+        "structure_audit": STRUCTURE_AUDIT_COMPLETION_SCHEMA,
         "scoring": SCORING_COMPLETION_SCHEMA,
         "web_report": WEB_REPORT_COMPLETION_SCHEMA,
     }.get(stage)

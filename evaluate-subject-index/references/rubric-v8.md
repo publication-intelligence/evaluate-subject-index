@@ -8,12 +8,13 @@
 - calculation input: `subject-index-dimension-calculation-input-v2`
 - calculation profile: `subject-index-dimension-calculation-v4`
 - calculation artifact: `subject-index-dimension-calculations-v5`
-- result: `subject-index-evaluation-result-v10`
+- structure audit: `structure-audit-v6`
+- result: `subject-index-evaluation-result-v11`
 - item policy: `subject-index-item-grading-v4`
 - explanation contract: `locator-explanations-v2`
-- item artifact: `subject-index-item-assessments-v6`
-- projection metadata: `subject-index-v8-projection-metadata-v1`
-- web report: `subject-index-web-report-v8`
+- item artifact: `subject-index-item-assessments-v7`
+- projection metadata: `subject-index-v8-projection-metadata-v2`
+- web report: `subject-index-web-report-v9`
 - locator-fit preflight: `subject-index-v8-locator-fit-preflight-v1`
 - locator audit: `locator-audit-v2`
 
@@ -103,6 +104,8 @@ Existing caps, gates, uncertainty bounds, weights, and rounding apply unchanged.
 More than six displayed locators or a range longer than ten pages triggers review; it does not itself create a defect. Structure scoring and all non-reliability dimension formulas remain unchanged. Their results may still differ when a new V8 audit supplies different policy-governed judgments as inputs.
 
 The native structure ledger binds complete stable-ID denominators, a deterministic full-scope attestation, exception-only node and cross-reference judgments, displayed-to-atomic locator ownership, triggered architecture decisions, defects, strengths, and uncertainties. In full mode, omitted denominator records are attested passes. In pilot mode, only explicitly listed passes are passes; all other omitted identities remain `not_measured` and feed uncertainty bounds.
+
+Every adverse `heading_access_architecture` exception also records one or more source-linked causal findings. Overlapping causes remain separate; a primary cause is optional and requires a deterministic rule or explicit architecture adjudication. These fields are display provenance and do not enter scoring arithmetic.
 
 ## Provenance
 

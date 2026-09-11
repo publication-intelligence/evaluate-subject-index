@@ -30,6 +30,8 @@ Judge every expected benchmark treatment assigned to the chunk. Record found, mi
 
 Numerical locator-string and range thresholds trigger review only. A defect requires structured evidence of conceptual distinctions, a useful alternative organization, and material retrieval harm.
 
+An adverse heading-access judgment must not stop at a generic summary or a shared evidence array. Record every applicable `heading_fit`, `benchmark_access`, `cross_reference`, and `confirmed_subdivision_architecture` causal finding with stable source and evidence IDs. Do not collapse overlapping signals or guess a primary cause.
+
 ## Independence
 
 Benchmark construction remains candidate-blind. Worker artifacts are accepted through local validation and registration; Git history and checkpoint hashes are not evaluation evidence.

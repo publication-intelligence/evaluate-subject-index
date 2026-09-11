@@ -444,7 +444,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             "source_subject_assessments": [],
         }
         structure = {
-            "schema_version": "structure-audit-v5",
+            "schema_version": "structure-audit-v6",
             "candidate_sha256": "b" * 64,
             "candidate_denominator": {
                 "node_id_set_sha256": "c" * 64,
@@ -471,6 +471,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
                 },
             }],
         }
+        calculation["structure_audit"]["schema_version"] = "structure-audit-v5"
         projected = item_v8.build_v8_assessments(
             base,
             calculation,
@@ -511,7 +512,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         loaded = {
             "config": {"evaluation_id": "EVAL-TEST", "audit_mode": "full"},
             "structure": {
-                "schema_version": "structure-audit-v5",
+                "schema_version": "structure-audit-v6",
                 "candidate_denominator": {},
                 "full_scope_attestation": {},
                 "locator_architecture": {},
@@ -519,7 +520,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             },
             "input_artifacts": [
                 {"role": "policy", "path": "policy.json", "sha256": "b" * 64, "schema_version": "subject-index-evaluation-policy-v4"},
-                {"role": "structure_audit", "path": "structure.json", "sha256": "c" * 64, "schema_version": "structure-audit-v5"},
+                {"role": "structure_audit", "path": "structure.json", "sha256": "c" * 64, "schema_version": "structure-audit-v6"},
             ],
         }
         fit_report = {
