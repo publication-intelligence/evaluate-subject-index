@@ -12,14 +12,15 @@
 - result: `subject-index-evaluation-result-v11`
 - item policy: `subject-index-item-grading-v4`
 - explanation contract: `locator-explanations-v2`
-- heading-access causal contract: `heading-access-causal-findings-v1`
 - item artifact: `subject-index-item-assessments-v7`
 - projection metadata: `subject-index-v8-projection-metadata-v2`
 - web report: `subject-index-web-report-v9`
 - locator-fit preflight: `subject-index-v8-locator-fit-preflight-v1`
 - locator audit: `locator-audit-v2`
 
-Runtime commands accept the current identities only. A V8 calculation input must bind the self-hashed V8 policy whose hash matches audit provenance. Old calculation values are not rescored or migrated; a score-free causal backfill may project new structure, item, result, and report artifacts from the same frozen evidence.
+Runtime commands accept the current identities only. A V8 calculation input must
+bind a self-hashed V8 policy with the versioned standard-policy profile ID. The
+profile ID and schema, not the current Markdown bytes, define the contract.
 
 ## What changed in V8
 
@@ -28,7 +29,7 @@ V8 makes two distinct kinds of change:
 - **Arithmetic:** Page-reference Reliability replaces weighted locator-utility precision with binary keep precision. This directly changes that dimension's precision input. Its recall measure, F1 form, caps, gates, uncertainty handling, weighting, and rounding remain unchanged.
 - **Judgment policy:** V8 clarifies how source evidence is classified, including comparative facts, attributed observations, contentless mentions, and complete-path stance. These are not formula changes. They may nevertheless change a locator's treatment class or keep decision in a new V8 audit, which can change any downstream input or result that uses that judgment. In particular, a treatment-class change may affect Editorial Selectivity even though its formula and treatment-credit mapping are unchanged.
 
-An unchanged formula therefore does not guarantee an unchanged result when its underlying V8 judgments differ. Frozen V7 evaluations remain unchanged and are not reinterpreted.
+An unchanged formula therefore does not guarantee an unchanged result when its underlying V8 judgments differ.
 
 ## Treatment and complete-path fit
 
@@ -41,7 +42,7 @@ Calibration cases:
 - “For example, Young (1794),” without informative content is weak presence.
 - Substantive treatment plus a major stance mismatch, such as established wording for a source that says only “may suggest,” remains nonexact and is not kept.
 
-Evaluate full scope, relationship, chronology, compound meaning, attribution, and stance independently of treatment depth.
+Evaluate full scope, relationship, chronology, compound meaning, attribution, and stance independently of treatment depth, and record `complete_path_fit` directly in every locator judgment.
 
 | Treatment diagnostic | Score |
 | --- | ---: |
@@ -102,8 +103,10 @@ Existing caps, gates, uncertainty bounds, weights, and rounding apply unchanged.
 
 More than six displayed locators or a range longer than ten pages triggers review; it does not itself create a defect. Structure scoring and all non-reliability dimension formulas remain unchanged. Their results may still differ when a new V8 audit supplies different policy-governed judgments as inputs.
 
+The native structure ledger binds complete stable-ID denominators, a deterministic full-scope attestation, exception-only node and cross-reference judgments, displayed-to-atomic locator ownership, triggered architecture decisions, defects, strengths, and uncertainties. In full mode, omitted denominator records are attested passes. In pilot mode, only explicitly listed passes are passes; all other omitted identities remain `not_measured` and feed uncertainty bounds.
+
+Every adverse `heading_access_architecture` exception also records one or more source-linked causal findings. Overlapping causes remain separate; a primary cause is optional and requires a deterministic rule or explicit architecture adjudication. These fields are display provenance and do not enter scoring arithmetic.
+
 ## Provenance
 
 Calculation rows retain diagnostic categories and scores, binary rating credit, rule IDs, disposition, and uncertainty. Item projections display the diagnostic grade and factor breakdown while `dimension_reliability_credit` carries binary rating credit. Hashes join frozen records and prevent accidental cross-policy rescoring.
-
-Adverse heading-access judgments retain one or more causal findings linked to frozen source and evidence IDs. Causal kinds, reason codes, severity, summaries, and optional deterministically/adjudicatively established primary attribution are projection metadata only and are excluded from every calculation, gate, cap, rounding step, and readiness rule.

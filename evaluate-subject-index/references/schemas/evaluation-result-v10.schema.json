@@ -3,11 +3,11 @@
   "$id": "evaluation-result-v10.schema.json",
   "title": "V8 scored subject-index evaluation result",
   "type": "object",
-  "required": ["schema_version", "evaluation_id", "candidate", "provenance", "audit_scope", "dimension_calculations", "scorecard", "total_score", "interpretation", "metrics", "item_assessments", "structure_locator_review", "projection_metadata", "critical_gates", "defect_counts", "comparison_key", "limitations"],
+  "required": ["schema_version", "evaluation_id", "candidate", "provenance", "audit_scope", "dimension_calculations", "scorecard", "total_score", "interpretation", "metrics", "item_assessments", "structure_audit", "projection_metadata", "critical_gates", "defect_counts", "comparison_key", "limitations"],
   "properties": {
     "schema_version": {"const": "subject-index-evaluation-result-v10"},
     "evaluation_id": {"type": "string", "minLength": 1},
-    "candidate": {"$ref": "evaluation-result-v6.schema.json#/properties/candidate"},
+    "candidate": {"type": "object", "required": ["label", "sha256"], "properties": {"label": {"type": "string"}, "sha256": {"$ref": "#/$defs/sha256"}}, "additionalProperties": true},
     "provenance": {
       "type": "object",
       "required": ["source_sha256", "judgment_policy_sha256", "benchmark_sha256", "rubric_version", "dimension_calculation_profile"],
@@ -20,17 +20,15 @@
       },
       "additionalProperties": true
     },
-    "audit_scope": {"$ref": "evaluation-result-v6.schema.json#/properties/audit_scope"},
+    "audit_scope": {"type": "object", "required": ["mode", "complete"], "properties": {"mode": {"enum": ["full", "pilot"]}, "complete": {"type": "boolean"}}, "additionalProperties": true},
     "dimension_calculations": {"allOf": [{"$ref": "#/$defs/artifact"}, {"required": ["calculation_profile"], "properties": {"schema_version": {"const": "subject-index-dimension-calculations-v5"}, "calculation_profile": {"const": "subject-index-dimension-calculation-v4"}}}]},
     "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "object", "required": ["dimension_id", "weight", "rating", "points", "formula_id"], "properties": {"dimension_id": {"type": "string"}, "weight": {"type": "number"}, "rating": {"type": ["number", "null"]}, "points": {"type": ["number", "null"]}, "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v4:"}}, "additionalProperties": true}},
     "total_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
     "interpretation": {"type": "string"},
     "metrics": {"type": "object", "required": ["keep_precision"], "properties": {"keep_precision": {"type": "object"}}, "additionalProperties": true},
     "item_assessments": {"allOf": [{"$ref": "#/$defs/artifact"}, {"required": ["grading_policy", "summary"], "properties": {"schema_version": {"const": "subject-index-item-assessments-v6"}, "grading_policy": {"const": "subject-index-item-grading-v4"}, "summary": {"type": "object"}}}]},
-    "structure_locator_review": {"allOf": [{"$ref": "#/$defs/artifact"}, {"required": ["review_sha256", "summary"], "properties": {"schema_version": {"const": "subject-index-structure-locator-review-v1"}, "review_sha256": {"$ref": "#/$defs/sha256"}, "summary": {"type": "object"}}}]},
+    "structure_audit": {"allOf": [{"$ref": "#/$defs/artifact"}, {"properties": {"schema_version": {"const": "structure-audit-v5"}}}]},
     "projection_metadata": {"allOf": [{"$ref": "#/$defs/artifact"}, {"required": ["projection_metadata_sha256"], "properties": {"schema_version": {"const": "subject-index-v8-projection-metadata-v1"}, "projection_metadata_sha256": {"$ref": "#/$defs/sha256"}}}]},
-    "locator_fit_compatibility": {"description": "Projected score-free compatibility and unresolved-fit provenance, including any conflict routed under F-COMPAT-LEGACY-FIT-CONFLICT-TO-SUPPLEMENT-V1.", "$ref": "dimension-calculations-v5.schema.json#/properties/locator_fit_compatibility"},
-    "locator_fit_supplement": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/fitSupplementReference"},
     "critical_gates": {"type": "array", "items": {"type": "object"}},
     "defect_counts": {"type": "object"},
     "comparison_key": {

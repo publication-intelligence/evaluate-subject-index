@@ -15,7 +15,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["locator_id", "path_id", "complete_heading_path", "document_page", "source_page_label", "source_scope_status", "treatment_class", "judgment", "evidence_summary", "evidence_ids", "confidence", "error_codes", "severity"],
+        "required": ["locator_id", "path_id", "complete_heading_path", "document_page", "source_page_label", "source_scope_status", "treatment_class", "complete_path_fit", "judgment", "evidence_summary", "evidence_ids", "confidence", "error_codes", "severity"],
         "properties": {
           "locator_id": {"type": "string", "pattern": "^LOC-"},
           "path_id": {"type": "string", "pattern": "^PATH-"},
@@ -24,6 +24,7 @@
           "source_page_label": {"type": "string"},
           "source_scope_status": {"enum": ["indexable", "excluded", "unavailable", "ambiguous"]},
           "treatment_class": {"enum": ["substantive", "passing_mention", "attribution_only", "citation_only", "incidental_example", "absent", "unavailable", "mixed"]},
+          "complete_path_fit": {"enum": ["exact_fit", "material_partial_fit", "material_mismatch", "severe_mismatch", "no_fit", "uninspectable"]},
           "judgment": {"enum": ["supported", "partially_supported", "unsupported", "uninspectable"]},
           "evidence_summary": {"type": "string", "minLength": 1, "maxLength": 2000},
           "fit_rationale": {"type": "string", "minLength": 1, "maxLength": 2000, "description": "Public-safe authored rationale for complete-heading-path fit. Required except when substantive treatment and a supported judgment make both axes routinely perfect."},
@@ -38,6 +39,22 @@
           "severity": {"enum": ["none", "cosmetic", "minor", "major", "critical"]}
         },
         "allOf": [
+          {
+            "if": {"properties": {"judgment": {"const": "supported"}}, "required": ["judgment"]},
+            "then": {"properties": {"complete_path_fit": {"const": "exact_fit"}}}
+          },
+          {
+            "if": {"properties": {"judgment": {"const": "partially_supported"}}, "required": ["judgment"]},
+            "then": {"properties": {"complete_path_fit": {"const": "material_partial_fit"}}}
+          },
+          {
+            "if": {"properties": {"judgment": {"const": "uninspectable"}}, "required": ["judgment"]},
+            "then": {"properties": {"complete_path_fit": {"const": "uninspectable"}, "treatment_class": {"const": "unavailable"}}}
+          },
+          {
+            "if": {"properties": {"treatment_class": {"const": "absent"}}, "required": ["treatment_class"]},
+            "then": {"properties": {"complete_path_fit": {"const": "no_fit"}}}
+          },
           {
             "if": {
               "not": {
@@ -70,20 +87,6 @@
         "severity_counts": {"$ref": "#/$defs/severityCounts"},
         "error_code_counts": {"$ref": "#/$defs/errorCodeCounts"}
       }
-    },
-    "provenance": {
-      "type": "object",
-      "properties": {
-        "source_sha256": {"$ref": "#/$defs/sha256"},
-        "benchmark_sha256": {"$ref": "#/$defs/sha256"},
-        "policy_sha256": {"$ref": "#/$defs/sha256"},
-        "page_map_sha256": {"$ref": "#/$defs/sha256"},
-        "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
-        "normalized_candidate_file_sha256": {"$ref": "#/$defs/sha256"},
-        "item_inventory_file_sha256": {"$ref": "#/$defs/sha256"},
-        "locator_packet_file_sha256": {"$ref": "#/$defs/sha256"}
-      },
-      "additionalProperties": true
     }
   },
   "$defs": {

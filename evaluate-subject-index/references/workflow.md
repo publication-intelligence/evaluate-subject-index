@@ -11,14 +11,14 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | source_chunk_preparation | chunk PDFs and sidecars |
 | source_subject_discovery | all source-subject chunks |
 | benchmark_synthesis | benchmark draft |
-| benchmark_review | independent review ledger |
-| benchmark_freeze | frozen benchmark |
-| candidate_normalization | normalized candidate and inventory |
+| benchmark_review | independently validated review ledger, registered by typed freeze |
+| benchmark_freeze | approved frozen benchmark, registered atomically with review |
+| candidate_normalization | normalized candidate, fidelity layout, inventory, and optional issues |
 | locator_chunk_preparation | all locator packets |
 | locator_audit | all locator-audit V2 chunks |
 | missing_access_audit | all missing-access chunks |
 | structure_audit | global structure-audit V6 with causal provenance |
-| scoring | unchanged V8 calculation, item assessments V7, result V11 |
+| scoring | V8 calculation, item assessments V7, result V11 |
 | web_report | web report V9 |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.
@@ -27,18 +27,32 @@ Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage c
 
 State contains the artifact inventory. Writers validate the selected operation, write artifacts, and atomically replace state while holding `.evaluation.lock`. There is no separate manifest and no two-control-file commit order.
 
-Hashes inside policy, benchmark, and audit records provide stable identity joins and catch accidental input mix-ups. A local artifact checksum mismatch is a warning during resume, not proof of tampering and not an automatic stage blocker.
+Policy and benchmark self-hashes provide stable identities. Worker provenance is
+informational; packet/workset ownership and stable IDs bind worker judgments.
+During scoring, calculation-input references select artifacts, their hashes are
+verified against actual bytes, and audit-set hashes are computed from those files.
+A local state-inventory checksum mismatch remains a resume warning rather than an
+automatic stage blocker. Benchmark freeze is stricter at its trust boundary: the
+supplied draft must be the exact registered synthesis artifact.
 
 ## Source-first sequence
 
-Source discovery happens before candidate exposure. Synthesis creates a draft; independent candidate-blind review authorizes benchmark freeze. The two candidate audit directions remain separate:
+Source discovery happens before candidate exposure. Synthesis creates a draft; independent candidate-blind review authorizes benchmark freeze. The deterministic screen is a temporary review queue, not a registered artifact. One typed operation validates the full review package, registers only the review ledger and final benchmark, and completes both stages atomically. The two candidate audit directions remain separate:
 
 - Index to source asks whether each proposed complete path and locator is supported.
 - Benchmark to index asks whether every required subject and reader task has useful access.
 
 The global structure pass then judges whether individually defensible records form a coherent navigation system.
 
-For every adverse heading-access judgment, the structure pass records specific causal findings joined to stable frozen source and evidence IDs. Overlapping causes remain separate. These findings flow to item, result, projection-metadata, and web-report outputs but never to dimension arithmetic.
+The final transitions use one current command surface:
+
+```bash
+python scripts/dimension_score_v8_cli.py register-structure --state evaluation-state.json --input structure-audit.v6.json
+python scripts/dimension_score_v8_cli.py score --state evaluation-state.json
+python scripts/dimension_score_v8_cli.py build-report --state evaluation-state.json
+```
+
+These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. Generic stage completion is disabled for these three stages.
 
 ## Chunk ownership
 
@@ -48,17 +62,17 @@ Parallel chats may work on independent chunks. A coordinator validates the selec
 
 ## Candidate preparation
 
-Candidate preparation is mechanical and may run separately, provided it does not expose benchmark content to extraction or normalization. It preserves the original hierarchy, records uncertainty, expands locators, builds the item inventory, and accounts for all delivered items. Local registration after benchmark freeze fulfills `candidate_normalization`.
+Candidate preparation is mechanical and may run separately, provided it does not expose benchmark content to extraction or normalization. It preserves the original hierarchy, records uncertainty only when present, expands locators, builds the item inventory, and computes exact layout, line, item, and locator denominator checks. Clean validation produces no report artifact. Local registration after benchmark freeze fulfills `candidate_normalization` with three required artifacts and at most one non-empty issues report.
 
 ## Locator-packet preparation
 
 Run `page_chunk_cli.py prepare-locator-chunks` directly after local candidate registration. The command validates the canonical state and the exact registered normalized candidate, page map, chunk manifest, and frozen benchmark; no repository, publication, commit, pull-request, blob, or preparation-receipt evidence participates in this transition.
 
-Preparation recomputes chunk identity and page ownership, creates one `candidate-locator-chunk-v1` packet for every frozen chunk, routes each resolved locator assignment exactly once, and writes `candidate-locator-routing-exceptions-v1`. It registers the complete frozen batch and completes `locator_chunk_preparation` only when the exception ledger is empty. Validation failures or unresolved/ownerless assignments do not advance state. The next canonical action is `audit-locators`.
+Preparation recomputes chunk identity and page ownership, creates one `candidate-locator-chunk-v1` packet for every frozen chunk, and routes each resolved locator assignment exactly once. With complete routing, it writes and registers the packet batch and completes `locator_chunk_preparation`. An unresolved or ownerless assignment writes only an unregistered `candidate-locator-routing-exceptions-v1` diagnostic; other validation failures write nothing. Neither failure advances state. The next canonical action after success is `audit-locators`.
 
 ## Checkpoints
 
-Checkpoint, export, and import are persistence operations rather than stages. Create checkpoints when interruption risk justifies them. They do not advance state and do not require a previous checkpoint hash. Import performs archive-safety and current-state validation, then resume proceeds from the earliest unfinished stage.
+Checkpoint and import are persistence operations rather than stages. Create checkpoints when interruption risk justifies them. They do not advance state and do not require a previous checkpoint hash. Import performs archive-safety and current-state validation, then resume proceeds from the earliest unfinished stage.
 
 ## Invalidation
 
@@ -74,6 +88,12 @@ Invalidate from the earliest changed substantive input:
 
 Registering an updated judgment artifact makes it the current version in state. Recompute dependent outputs from the earliest affected stage.
 
-## Current-only policy
+For locator or missing-access corrections, use `register-audits` with
+`--replace-complete-batch` and exactly one valid artifact for every frozen chunk.
+The command replaces that canonical audit batch and rewinds all later stages
+under the evaluation lock; stale later output files are retained but their state
+registrations are removed.
 
-Runtime commands accept the current V8 workflow. Historical migrations and backward-compatibility lanes are intentionally not part of this state machine.
+## Current contract
+
+Runtime commands accept the current V8 artifacts listed in `json-contracts-v8.md`.

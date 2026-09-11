@@ -3,7 +3,7 @@
   "$id": "item-assessments-v7.schema.json",
   "title": "V8 item assessments with heading-access causal provenance",
   "type": "object",
-  "required": ["schema_version", "grading_policy", "evaluation_id", "candidate_id", "candidate_sha256", "item_inventory_sha256", "item_inventory_artifact", "evidence_identity", "assessment_completeness", "audit_mode", "scope_complete", "grade_disclosure", "explanation_contract", "locator_grading_provenance", "structure_locator_review_binding", "color_legend", "locator_assessments", "path_assessments", "heading_node_assessments", "cross_reference_assessments", "source_subject_assessments", "heading_access_causal_provenance", "summary"],
+  "required": ["schema_version", "grading_policy", "evaluation_id", "candidate_id", "candidate_sha256", "item_inventory_sha256", "item_inventory_artifact", "evidence_identity", "assessment_completeness", "audit_mode", "scope_complete", "grade_disclosure", "explanation_contract", "locator_grading_provenance", "structure_audit_binding", "color_legend", "locator_assessments", "path_assessments", "heading_node_assessments", "cross_reference_assessments", "source_subject_assessments", "heading_access_causal_provenance", "summary"],
   "properties": {
     "schema_version": {"const": "subject-index-item-assessments-v7"},
     "grading_policy": {"$ref": "item-assessments-v6.schema.json#/properties/grading_policy"},
@@ -19,21 +19,29 @@
     "grade_disclosure": {"$ref": "item-assessments-v6.schema.json#/properties/grade_disclosure"},
     "explanation_contract": {
       "type": "object",
-      "required": ["contract_version", "heading_access_causal_contract", "authored_evidence_is_primary", "prose_used_in_scoring", "causal_provenance_used_in_scoring", "legacy_compatibility_mode"],
+      "required": ["contract_version", "heading_access_causal_contract", "authored_evidence_is_primary", "prose_used_in_scoring", "causal_provenance_used_in_scoring"],
       "properties": {
         "contract_version": {"const": "locator-explanations-v2"},
         "heading_access_causal_contract": {"const": "heading-access-causal-findings-v1"},
         "authored_evidence_is_primary": {"const": true},
         "prose_used_in_scoring": {"const": false},
-        "causal_provenance_used_in_scoring": {"const": false},
-        "legacy_compatibility_mode": {"type": "boolean"}
+        "causal_provenance_used_in_scoring": {"const": false}
       },
       "additionalProperties": false
     },
     "locator_grading_provenance": {"$ref": "item-assessments-v6.schema.json#/properties/locator_grading_provenance"},
-    "structure_locator_review_binding": {"$ref": "item-assessments-v6.schema.json#/properties/structure_locator_review_binding"},
-    "locator_fit_compatibility": {"$ref": "item-assessments-v6.schema.json#/properties/locator_fit_compatibility"},
-    "locator_fit_supplement": {"$ref": "item-assessments-v6.schema.json#/properties/locator_fit_supplement"},
+    "structure_audit_binding": {
+      "type": "object",
+      "required": ["schema_version", "candidate_sha256", "node_id_set_sha256", "cross_reference_id_set_sha256", "locator_bearing_path_id_set_sha256"],
+      "properties": {
+        "schema_version": {"const": "structure-audit-v6"},
+        "candidate_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"},
+        "node_id_set_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"},
+        "cross_reference_id_set_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"},
+        "locator_bearing_path_id_set_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
     "color_legend": {"$ref": "item-assessments-v6.schema.json#/properties/color_legend"},
     "locator_assessments": {"$ref": "item-assessments-v6.schema.json#/properties/locator_assessments"},
     "path_assessments": {"$ref": "item-assessments-v6.schema.json#/properties/path_assessments"},

@@ -3,7 +3,7 @@
   "$id": "v8-projection-metadata-v2.schema.json",
   "title": "V8 result, web, and score-view projection metadata with causal source binding",
   "type": "object",
-  "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_locator_review", "canonical_heading_access_source", "projection_metadata_sha256"],
+  "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_audit", "canonical_heading_access_source", "projection_metadata_sha256"],
   "properties": {
     "schema_version": {"const": "subject-index-v8-projection-metadata-v2"},
     "candidate_label": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/candidate_label"},
@@ -20,19 +20,24 @@
     "examples": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/examples"},
     "limitations": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/limitations"},
     "canonical_calculation": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/canonical_calculation"},
-    "canonical_structure_locator_review": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/canonical_structure_locator_review"},
+    "canonical_structure_audit": {
+      "type": "object",
+      "required": ["schema_version", "artifact_path", "sha256"],
+      "properties": {
+        "schema_version": {"const": "structure-audit-v6"},
+        "artifact_path": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/portablePath"},
+        "sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
     "canonical_heading_access_source": {
       "allOf": [
         {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/artifactReference"},
         {"properties": {"role": {"const": "heading_access_causal_source"}, "schema_version": {"const": "structure-audit-v6"}}}
       ]
     },
-    "canonical_locator_fit_supplement": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/canonical_locator_fit_supplement"},
     "counterfactual_score_views": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/counterfactual_score_views"},
     "projection_metadata_sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/projection_metadata_sha256"}
-  },
-  "$defs": {
-    "fitSupplementReference": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/fitSupplementReference"}
   },
   "additionalProperties": false
 }

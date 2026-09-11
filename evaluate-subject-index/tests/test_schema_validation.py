@@ -54,6 +54,18 @@ class SharedSchemaValidationTests(unittest.TestCase):
         )
         self.assertIn("canonical_heading_access_source", schema["required"])
 
+    def test_current_worker_schemas_do_not_publish_redundant_provenance_contracts(self) -> None:
+        schema_root = ROOT / "references" / "schemas"
+        policy = json.loads((schema_root / "evaluation-policy-v4.schema.json").read_text())
+        locator = json.loads((schema_root / "locator-audit-v2.schema.json").read_text())
+        missing = json.loads((schema_root / "missing-access-audit.schema.json").read_text())
+        structure = json.loads((schema_root / "structure-audit-v6.schema.json").read_text())
+        self.assertEqual(["id"], policy["properties"]["policy_profile"]["required"])
+        self.assertNotIn("provenance", locator["properties"])
+        self.assertNotIn("provenance", missing["properties"])
+        self.assertNotIn("provenance", structure["required"])
+        self.assertNotIn("item_inventory_sha256", structure["required"])
+
     def test_locator_audit_nested_shape_is_owned_by_schema(self) -> None:
         audit = {
             "schema_version": "locator-audit-v2",
@@ -70,6 +82,7 @@ class SharedSchemaValidationTests(unittest.TestCase):
                 "source_scope_status": "indexable",
                 "treatment_class": "mixed",
                 "judgment": "supported",
+                "complete_path_fit": "exact_fit",
                 "evidence_summary": "Supported with meaningful but mixed treatment.",
                 "fit_rationale": "The complete heading path fits the independently useful fact exactly.",
                 "evidence_ids": ["EVID-1"],
@@ -82,6 +95,32 @@ class SharedSchemaValidationTests(unittest.TestCase):
         self.assertEqual(schema_errors(audit, "locator-audit-v2.schema.json"), [])
         del audit["judgments"][0]["evidence_ids"]
         self.assertTrue(any("evidence_ids" in error for error in schema_errors(audit, "locator-audit-v2.schema.json")))
+
+    def test_current_structure_and_outputs_do_not_reference_cutover_schemas(self) -> None:
+        schema_root = ROOT / "references" / "schemas"
+        removed = {
+            "structure-audit-v4.schema.json",
+            "structure-locator-review-v1.schema.json",
+            "v5-migration-supplement.schema.json",
+            "score-migration.schema.json",
+            "evaluation-result-v6.schema.json",
+            "dimension-calculations.schema.json",
+        }
+        self.assertFalse(any((schema_root / name).exists() for name in removed))
+        current = "\n".join(
+            (schema_root / name).read_text()
+            for name in (
+                "structure-audit-v6.schema.json",
+                "dimension-calculations-v5.schema.json",
+                "item-assessments-v7.schema.json",
+                "evaluation-result-v11.schema.json",
+                "web-report-v9.schema.json",
+                "v8-projection-metadata-v2.schema.json",
+            )
+        )
+        for forbidden in ("structure-audit-v4", "structure-locator-review", "migration-supplement", "score-migration", "evaluation-result-v6"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, current)
 
     def test_relative_schema_reference_validates_chunk_plan(self) -> None:
         manifest = {

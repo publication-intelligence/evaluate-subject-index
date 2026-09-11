@@ -30,11 +30,13 @@ COMMANDS = {
     "source_chunk_preparation": "prepare-source-chunks",
     "source_subject_discovery": "discover-source-subjects",
     "benchmark_synthesis": "synthesize-source-benchmark",
-    "benchmark_review": "review-source-benchmark", "benchmark_freeze": "freeze-source-benchmark",
+    "benchmark_review": "benchmark_review_cli.py freeze",
+    "benchmark_freeze": "benchmark_review_cli.py freeze",
     "candidate_normalization": "normalize-index", "locator_chunk_preparation": "prepare-locator-chunks",
     "locator_audit": "audit-locators", "missing_access_audit": "audit-missing-access",
-    "structure_audit": "audit-index-structure", "scoring": "score-index",
-    "web_report": "build-web-report",
+    "structure_audit": "dimension_score_v8_cli.py register-structure",
+    "scoring": "dimension_score_v8_cli.py score",
+    "web_report": "dimension_score_v8_cli.py build-report",
 }
 
 REQUIRED_INPUTS = {
@@ -45,8 +47,8 @@ REQUIRED_INPUTS = {
     "source_chunk_preparation": ["source PDF", "page map", "chunk manifest"],
     "source_subject_discovery": ["source chunks", "sidecars", "policy"],
     "benchmark_synthesis": ["all source-subject chunks"],
-    "benchmark_review": ["candidate-blind benchmark draft", "independent review"],
-    "benchmark_freeze": ["approved benchmark"],
+    "benchmark_review": ["registered benchmark draft", "temporary review inventory", "independent review ledger", "approved final benchmark"],
+    "benchmark_freeze": ["registered benchmark draft", "temporary review inventory", "independent review ledger", "approved final benchmark"],
     "candidate_normalization": ["candidate index", "page map"],
     "locator_chunk_preparation": ["registered normalized candidate", "registered page map", "registered chunk manifest", "registered frozen benchmark"],
     "locator_audit": ["locator packets", "source chunks"],
@@ -228,6 +230,19 @@ def validate_state(
         elif check_files and artifact.get("sha256") and sha256_file(local) != artifact.get("sha256"):
             warnings.append(f"Artifact bytes changed since registration: {stored}")
 
+    candidate = state.get("candidate")
+    if isinstance(candidate, dict):
+        candidate_records = {item["path"]: item for item in artifacts if item.get("stage") == "candidate_normalization"}
+        normalized = candidate_records.get(candidate["normalized_path"])
+        inventory = candidate_records.get(candidate["item_inventory_path"])
+        benchmark = next((item for item in artifacts if item.get("path") == candidate["benchmark_path"]), None)
+        if not normalized or normalized.get("artifact_type") != "candidate_index" or normalized.get("sha256") != candidate["normalized_sha256"]:
+            errors.append("state.candidate normalized path and hash must identify the registered canonical candidate.")
+        if not inventory or inventory.get("artifact_type") != "item_inventory":
+            errors.append("state.candidate item_inventory_path must identify the registered item inventory.")
+        if not benchmark or benchmark.get("stage") != "benchmark_freeze":
+            errors.append("state.candidate benchmark_path must identify the registered frozen benchmark.")
+
     for name in STAGES[1:]:
         if stages.get(name, {}).get("status") == "completed" and not any(
             artifact_is_active_for_stage(state, item, name) for item in artifacts if isinstance(item, dict)
@@ -350,6 +365,18 @@ def command_next(args: argparse.Namespace) -> None:
 def command_set_stage(args: argparse.Namespace) -> None:
     state_path = Path(args.state)
     state = load_state(state_path)
+    typed_commands = {
+        "benchmark_review": "benchmark_review_cli.py freeze",
+        "benchmark_freeze": "benchmark_review_cli.py freeze",
+        "structure_audit": "dimension_score_v8_cli.py register-structure",
+        "scoring": "dimension_score_v8_cli.py score",
+        "web_report": "dimension_score_v8_cli.py build-report",
+    }
+    if args.status == "completed" and args.stage in typed_commands:
+        fail(
+            "typed_transition_required",
+            f"Use {typed_commands[args.stage]} to validate and complete {args.stage} atomically.",
+        )
     unmet = [name for name in stage_dependencies(args.stage, STAGES) if state["stages"][name]["status"] != "completed"]
     if args.status in {"in_progress", "completed"} and unmet:
         fail("unmet_dependencies", f"Cannot set {args.stage} to {args.status}.", unmet)

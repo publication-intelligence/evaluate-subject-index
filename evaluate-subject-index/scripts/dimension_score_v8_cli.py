@@ -10,38 +10,46 @@ unchanged.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 from collections import Counter
 from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-import scoring_core as v5
-from locator_utility import (
-    FIT_SCORES,
-    LEGACY_FIT_COMPATIBILITY_RULE_ID,
-    LEGACY_FIT_CONFLICT_REASON_CODE,
-    LEGACY_FIT_CONFLICT_RULE_ID,
-    TREATMENT_SCORES,
-    UNRESOLVED_REASON_MESSAGES,
-    assign_locator_utility,
-    combined_state_errors,
-    historical_locator_fit_defects,
-    locator_fit_state_analysis,
-    not_measured_assignment,
-    relevant_structured_defects,
-)
-from structure_locator_review import (
-    StructureReviewError,
-    apply_deterministic_structure_corrections,
-    canonical_hash as structure_review_hash,
-    derive_structure_locator_review,
-    validate_structure_locator_review_semantics,
-)
+import item_grade_v8_cli as item_grades
+import item_projection_core as item_projection
+import scoring_core as core
 from heading_access_provenance import (
     HeadingAccessProvenanceError,
     validate_heading_access_provenance,
+)
+from locator_utility import (
+    FIT_SCORES,
+    TREATMENT_SCORES,
+    assign_locator_utility,
+    combined_state_errors,
+    not_measured_assignment,
+)
+from state_cli import (
+    STAGES,
+    artifact_id,
+    evaluation_mutation_lock,
+    load_state,
+    next_stage,
+    now,
+    portable_relative_path,
+    resolve_artifact_path,
+    save_state,
+    validate_state,
+)
+from structure_audit import (
+    StructureAuditError,
+    id_set_hash,
+    materialize_structure_records,
+    validate_structure_audit_semantics,
 )
 
 
@@ -49,16 +57,14 @@ RUBRIC_VERSION = "subject-index-rubric-v8"
 CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
 CALCULATION_SCHEMA = "subject-index-dimension-calculations-v5"
 ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
-SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA = (
-    "subject-index-v7-architecture-review-supplement-v1"
-)
+POLICY_PROFILE = "subject-index-standard-policy-v8"
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
 TWO = Decimal(2)
 FIVE = Decimal(5)
 
-write_json = v5.write_json
+write_json = core.write_json
 
 
 def _mapping_failure(locator: Mapping[str, Any], errors: Iterable[str]) -> dict[str, Any]:
@@ -73,6 +79,7 @@ def _mapping_failure(locator: Mapping[str, Any], errors: Iterable[str]) -> dict[
             for field in (
                 "judgment",
                 "treatment_class",
+                "complete_path_fit",
                 "source_scope_status",
                 "error_codes",
                 "severity",
@@ -83,55 +90,6 @@ def _mapping_failure(locator: Mapping[str, Any], errors: Iterable[str]) -> dict[
     }
 
 
-def _unresolved_fit_record(
-    locator: Mapping[str, Any],
-    analysis: Mapping[str, Any],
-    defects: Iterable[Mapping[str, Any]],
-) -> dict[str, Any]:
-    locator_id = str(locator["locator_id"])
-    relevant_defects = relevant_structured_defects(locator_id, defects)
-    defect_ids = sorted(
-        {
-            *(
-                str(item["defect_id"])
-                for item in relevant_defects
-            ),
-            *analysis["applicable_legacy_defect_ids"],
-        }
-    )
-    reason_codes = list(analysis["unresolved_reason_codes"])
-    result = {
-        "locator_id": locator_id,
-        "path_id": locator.get("path_id"),
-        "reason_code": reason_codes[0]
-        if len(reason_codes) == 1
-        else "multiple_fit_classifiers_possible",
-        "reason_codes": reason_codes,
-        "present_judgment": locator.get("judgment"),
-        "treatment_class": locator.get("treatment_class"),
-        "source_scope_status": locator.get("source_scope_status"),
-        "structured_codes": sorted(
-            {
-                *locator.get("error_codes", []),
-                *(
-                    str(item["code"])
-                    for item in relevant_defects
-                    if isinstance(item.get("code"), str)
-                ),
-            }
-        ),
-        "applicable_structured_defect_ids": defect_ids,
-        "missing_classifier_category": "complete_path_fit_category",
-        "prose_inference_permitted": False,
-    }
-    if analysis.get("fit_conflict") is not None:
-        conflict = deepcopy(analysis["fit_conflict"])
-        result.update(conflict)
-        result["reason_code"] = LEGACY_FIT_CONFLICT_REASON_CODE
-        result["reason_codes"] = [LEGACY_FIT_CONFLICT_REASON_CODE]
-    return result
-
-
 def _deterministic_fit_record(
     locator: Mapping[str, Any], assignment: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -140,9 +98,6 @@ def _deterministic_fit_record(
         "path_id": locator.get("path_id"),
         "fit_category": assignment["fit_category"],
         "fit_classification_source": assignment["fit_classification_source"],
-        "compatibility_rule_ids": deepcopy(
-            assignment["compatibility_rule_ids"]
-        ),
         "prose_inference_used": False,
     }
 
@@ -224,17 +179,13 @@ def locator_fit_preflight(
     ledgers: dict[str, Any],
     audit_mode: str,
     *,
-    legacy_defects: Iterable[Mapping[str, Any]] = (),
     candidate: Mapping[str, Any] | None = None,
     inventory: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return deterministic unsupplemented fit compatibility and unresolved sets."""
+    """Validate native structured fit judgments without consulting prose."""
 
-    legacy_defects = list(legacy_defects)
     invalid: list[dict[str, Any]] = []
-    unresolved: list[dict[str, Any]] = []
     deterministic: list[dict[str, Any]] = []
-    compatibility: list[dict[str, Any]] = []
     path_identity_errors = _locator_path_identity_errors(
         ledgers, candidate, inventory
     )
@@ -247,45 +198,16 @@ def locator_fit_preflight(
                 _mapping_failure(locator, path_identity_errors[locator_id])
             )
             continue
-        analysis = locator_fit_state_analysis(
-            locator, ledgers["defects"], legacy_defects
-        )
-        if analysis["hard_errors"]:
-            invalid.append(_mapping_failure(locator, analysis["hard_errors"]))
-            continue
-        if analysis["unresolved_reason_codes"]:
-            unresolved.append(
-                _unresolved_fit_record(
-                    locator,
-                    analysis,
-                    [*ledgers["defects"], *legacy_defects],
-                )
-            )
+        errors = combined_state_errors(locator, ledgers["defects"])
+        if errors:
+            invalid.append(_mapping_failure(locator, errors))
             continue
         try:
-            assignment = assign_locator_utility(
-                locator, ledgers["defects"], legacy_defects
-            ).as_dict()
+            assignment = assign_locator_utility(locator, ledgers["defects"]).as_dict()
         except ValueError as exc:
             invalid.append(_mapping_failure(locator, str(exc).split(";")))
             continue
         deterministic.append(_deterministic_fit_record(locator, assignment))
-        if assignment["fit_classification_source"] == "legacy_code_severity_compatibility":
-            compatibility.append(
-                {
-                    "locator_id": assignment["locator_id"],
-                    "path_id": locator.get("path_id"),
-                    "compatibility_rule_id": assignment[
-                        "compatibility_rule_ids"
-                    ][0],
-                    "fit_category": assignment["fit_category"],
-                    "fit_rule_id": assignment["fit_rule_id"],
-                    "applicable_structured_defect_ids": assignment[
-                        "applicable_structured_defect_ids"
-                    ],
-                    "prose_inference_used": False,
-                }
-            )
     if audit_mode == "full" and ledgers["locator_not_measured"]:
         invalid.append(
             {
@@ -296,26 +218,14 @@ def locator_fit_preflight(
                 "prose_inference_permitted": False,
             }
         )
-    unresolved_reason_counts = dict(
-        sorted(
-            Counter(
-                reason
-                for item in unresolved
-                for reason in item["reason_codes"]
-            ).items()
-        )
-    )
     deterministic_ids = {item["locator_id"] for item in deterministic}
-    unresolved_ids = {item["locator_id"] for item in unresolved}
     invalid_ids = {
         item["locator_id"]
         for item in invalid
         if isinstance(item.get("locator_id"), str)
     }
-    v5.require(
-        not (deterministic_ids & unresolved_ids)
-        and not (deterministic_ids & invalid_ids)
-        and not (unresolved_ids & invalid_ids),
+    core.require(
+        not (deterministic_ids & invalid_ids),
         "locator_fit_preflight_group_overlap",
         "Each frozen locator record must appear in exactly one V8 fit-preflight group.",
     )
@@ -323,30 +233,22 @@ def locator_fit_preflight(
         item.get("code") == "inconsistent_or_incomplete_locator_utility_state"
         for item in invalid
     )
-    v5.require(
-        len(deterministic) + len(unresolved) + locator_invalid_count
+    core.require(
+        len(deterministic) + locator_invalid_count
         == len(ledgers["locators"]),
         "locator_fit_preflight_group_coverage_invalid",
         "Every frozen locator record must appear exactly once in a V8 fit-preflight group.",
     )
     return {
         "schema_version": "subject-index-v8-locator-fit-preflight-v1",
-        "deterministically_compatible": deterministic,
-        "unresolved_complete_path_fit": unresolved,
+        "validated_complete_path_fit": deterministic,
         "invalid_or_contradictory_state": invalid,
-        "compatibility_classifications": compatibility,
         "group_counts": {
-            "deterministically_compatible": len(deterministic),
-            "unresolved_complete_path_fit": len(unresolved),
+            "validated_complete_path_fit": len(deterministic),
             "invalid_or_contradictory_state": len(invalid),
         },
-        "unresolved_reason_counts": unresolved_reason_counts,
-        "unresolved_set_sha256": v5.canonical_hash(
-            {"unresolved_locator_fit": unresolved}
-        ),
         "aggregate_v8_score_available": False,
         "prose_inference_used": False,
-        "historical_artifacts_modified": False,
         "_locator_records_by_id": {
             item["locator_id"]: item for item in ledgers["locators"]
         },
@@ -366,27 +268,10 @@ def public_locator_fit_preflight(report: Mapping[str, Any]) -> dict[str, Any]:
 def locator_state_requirements(
     ledgers: dict[str, Any],
     audit_mode: str,
-    *,
-    legacy_defects: Iterable[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Return precise V8 mapping failures without consulting prose."""
 
-    report = locator_fit_preflight(
-        ledgers, audit_mode, legacy_defects=legacy_defects
-    )
-    unresolved = [
-        {
-            "code": "unresolved_complete_path_fit",
-            "path": f"locator:{item['locator_id']}",
-            "message": "; ".join(
-                UNRESOLVED_REASON_MESSAGES[reason]
-                for reason in item["reason_codes"]
-            ),
-            **item,
-        }
-        for item in report["unresolved_complete_path_fit"]
-    ]
-    return [*report["invalid_or_contradictory_state"], *unresolved]
+    return locator_fit_preflight(ledgers, audit_mode)["invalid_or_contradictory_state"]
 
 
 def raw_locator_state_requirements(
@@ -395,8 +280,8 @@ def raw_locator_state_requirements(
     """Pre-scan raw audits for actionable V8 field and mapping failures."""
 
     try:
-        config = v5.load_json(config_path, "V8 calculation input")
-    except (OSError, v5.CalculationError):
+        config = core.load_json(config_path, "V8 calculation input")
+    except (OSError, core.CalculationError):
         return None, [], []
     references = config.get("inputs", {}).get("locator_audits", [])
     if not isinstance(references, list):
@@ -410,8 +295,8 @@ def raw_locator_state_requirements(
         path = (config_path.parent / stored).resolve()
         paths.append(path)
         try:
-            document = v5.load_json(path, f"Raw locator audit {batch_index}")
-        except (OSError, v5.CalculationError):
+            document = core.load_json(path, f"Raw locator audit {batch_index}")
+        except (OSError, core.CalculationError):
             continue
         judgments = document.get("judgments")
         if not isinstance(judgments, list):
@@ -439,6 +324,7 @@ def raw_locator_state_requirements(
                 "locator_id",
                 "judgment",
                 "treatment_class",
+                "complete_path_fit",
                 "source_scope_status",
                 "error_codes",
                 "severity",
@@ -452,71 +338,66 @@ def raw_locator_state_requirements(
     return config.get("evaluation_id"), failures, paths
 
 
+def validate_v8_policy(policy_document: dict[str, Any]) -> None:
+    """Validate the frozen policy itself, independent of Markdown wording."""
+    core.validate_schema_document(
+        policy_document, "evaluation-policy-v4.schema.json", "policy"
+    )
+    core.require(
+        policy_document.get("policy_sha256")
+        == core.canonical_hash(policy_document, "policy_sha256"),
+        "policy_self_hash_mismatch",
+        "The V8 evaluation policy self-hash does not reconstruct.",
+    )
+    core.require(
+        policy_document.get("policy_profile", {}).get("id") == POLICY_PROFILE,
+        "policy_profile_mismatch",
+        f"The V8 evaluation policy must use profile {POLICY_PROFILE}.",
+    )
+
+
 def load_v8_inputs(config_path: Path) -> dict[str, Any]:
-    """Load native V8 inputs while reusing the unchanged scoring contract.
+    """Load current V8 inputs and validate each trust boundary once."""
 
-    The V5 scorer is reused as an unchanged arithmetic engine.  For a native
-    ``structure-audit-v6`` document, only its in-memory schema tag is projected
-    to V4 for that engine; the exact V6 bytes and artifact identity remain the
-    bound input, and score-free causal provenance remains present but unused.
-    """
-
-    config = v5.load_json(config_path, "Dimension calculation input")
-    v5.validate_config_shape(config)
-    v5.validate_schema_document(
+    config = core.load_json(config_path, "Dimension calculation input")
+    core.validate_config_shape(config)
+    core.validate_schema_document(
         config,
         "dimension-calculation-input.schema.json",
         "Dimension calculation input",
     )
     inputs = config["inputs"]
-    policy_path, policy_document, policy_artifact = v5.resolve_input(
+    policy_path, policy_document, policy_artifact = core.resolve_input(
         config_path, inputs["policy"], "policy"
     )
-    v5.validate_schema_document(
-        policy_document, "evaluation-policy-v4.schema.json", "policy"
-    )
-    v5.require(
-        policy_document.get("policy_sha256")
-        == v5.canonical_hash(policy_document, "policy_sha256"),
-        "policy_self_hash_mismatch",
-        "The V8 evaluation policy self-hash does not reconstruct.",
-    )
-    standard_policy_path = (
-        Path(__file__).resolve().parents[1] / "references" / "standard-policy-v8.md"
-    )
-    v5.require(
-        policy_document.get("policy_profile", {}).get("standard_policy_sha256")
-        == v5.sha256_file(standard_policy_path),
-        "standard_policy_profile_hash_mismatch",
-        "The V8 policy must bind the exact built-in standard-policy-v8 content.",
-    )
+    validate_v8_policy(policy_document)
     structure_ref = inputs["structure_audit"]
-    structure_path, structure_document, structure_artifact = v5.resolve_input(
+    structure_path, structure_document, structure_artifact = core.resolve_input(
         config_path, structure_ref, "structure_audit"
     )
-    v5.require(
+    core.require(
         structure_document.get("schema_version") == "structure-audit-v6",
         "unsupported_structure_audit_schema",
         "Current V8 scoring requires structure-audit-v6.",
     )
-    v5.validate_schema_document(
+    core.validate_schema_document(
         structure_document, "structure-audit-v6.schema.json", "structure_audit"
     )
     locator_entries: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
     missing_entries: list[tuple[dict[str, Any], dict[str, Any], Path]] = []
     for index, record in enumerate(inputs["locator_audits"]):
-        path, document, artifact = v5.resolve_input(
+        path, document, artifact = core.resolve_input(
             config_path, record, f"locator_audit[{index}]"
         )
-        v5.validate_schema_document(
+        core.validate_schema_document(
             document, "locator-audit-v2.schema.json", f"locator_audit[{index}]"
         )
         locator_entries.append((document, artifact, path))
     for index, record in enumerate(inputs["missing_access_audits"]):
-        path, document, artifact = v5.resolve_input(
+        path, document, artifact = core.resolve_input(
             config_path, record, f"missing_access_audit[{index}]"
         )
-        v5.validate_schema_document(
+        core.validate_schema_document(
             document,
             "missing-access-audit.schema.json",
             f"missing_access_audit[{index}]",
@@ -529,8 +410,6 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
         (item[0] for item in locator_entries),
         (item[0] for item in missing_entries),
     )
-    runtime_structure = deepcopy(structure_document)
-    runtime_structure["schema_version"] = "structure-audit-v4"
     artifacts: list[dict[str, Any]] = [policy_artifact]
     paths: list[Path] = [policy_path]
     for prefix, entries in (
@@ -545,58 +424,57 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
     paths.append(structure_path)
     chunk_manifest = None
     if "chunk_manifest" in inputs:
-        chunk_path, chunk_manifest, chunk_artifact = v5.resolve_input(
+        chunk_path, chunk_manifest, chunk_artifact = core.resolve_input(
             config_path, inputs["chunk_manifest"], "chunk_manifest"
         )
-        v5.validate_schema_document(
+        core.validate_schema_document(
             chunk_manifest, "chunk-manifest.schema.json", "chunk_manifest"
         )
-        v5.require(
+        core.require(
             chunk_manifest.get("chunk_manifest_sha256")
-            == v5.canonical_hash(chunk_manifest, "chunk_manifest_sha256"),
+            == core.canonical_hash(chunk_manifest, "chunk_manifest_sha256"),
             "chunk_manifest_self_hash_mismatch",
             "The canonical chunk manifest self-hash does not reconstruct.",
         )
         artifacts.append(chunk_artifact)
         paths.append(chunk_path)
+    core.require(
+        len(paths) == len(set(paths)),
+        "duplicate_input_artifact",
+        "Each calculation input path may select only one artifact.",
+    )
     return {
         "config": config,
         "policy": policy_document,
         "locator_documents": [item[0] for item in locator_entries],
         "missing_documents": [item[0] for item in missing_entries],
-        "structure": runtime_structure,
-        "frozen_structure": structure_document,
+        "structure": structure_document,
         "chunk_manifest": chunk_manifest,
-        "supplement": None,
+        "locator_input_entries": locator_entries,
+        "missing_input_entries": missing_entries,
         "input_artifacts": artifacts,
         "input_paths": paths,
         "config_path": config_path,
     }
 
 
-def policy_identity_requirements(
-    loaded: Mapping[str, Any], ledgers: Mapping[str, Any]
-) -> list[dict[str, Any]]:
-    if loaded.get("policy", {}).get("policy_sha256") == ledgers["identity"].get(
-        "policy_sha256"
-    ):
-        return []
-    return [{
-        "code": "policy_identity_mismatch",
-        "path": "inputs.policy",
-        "message": "The V8 policy hash must equal the policy hash frozen into every audit ledger.",
-    }]
-
-
 def preflight_loaded(
     loaded: dict[str, Any]
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-    ledgers, missing = v5.preflight_loaded(loaded)
+    scoring_inputs = dict(loaded)
+    if "structure" in loaded:
+        scoring_inputs["structure"] = deepcopy(loaded["structure"])
+        scoring_inputs["structure"].pop("causal_projection", None)
+        scoring_inputs["structure"]["schema_version"] = "structure-audit-v5"
+        for node in scoring_inputs["structure"].get("node_judgments", []):
+            component = node["component_judgments"]["heading_access_architecture"]
+            for field in ("causal_findings", "primary_finding_id", "primary_basis"):
+                component.pop(field, None)
+    ledgers, missing = core.preflight_loaded(scoring_inputs)
     if ledgers is None:
         return None, missing
     missing = [
         *missing,
-        *policy_identity_requirements(loaded, ledgers),
         *locator_state_requirements(
             ledgers,
             loaded["config"]["audit_mode"],
@@ -607,23 +485,13 @@ def preflight_loaded(
 
 def utility_assignments(
     ledgers: dict[str, Any],
-    *,
-    legacy_defects: Iterable[Mapping[str, Any]] = (),
-    supplemental_decisions: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     assignments: list[dict[str, Any]] = []
-    legacy_defects = list(legacy_defects)
-    supplemental_decisions = supplemental_decisions or {}
     for locator in sorted(ledgers["locators"], key=lambda item: item["locator_id"]):
         try:
-            assignment = assign_locator_utility(
-                locator,
-                ledgers["defects"],
-                legacy_defects,
-                supplemental_decisions.get(locator["locator_id"]),
-            )
+            assignment = assign_locator_utility(locator, ledgers["defects"])
         except ValueError as exc:
-            raise v5.CalculationError(
+            raise core.CalculationError(
                 "inconsistent_locator_utility_state",
                 f"Locator {locator.get('locator_id')} cannot receive a V8 diagnostic and rating assignment.",
                 _mapping_failure(locator, str(exc).split(";")),
@@ -651,24 +519,17 @@ def _uncertainty_triple(
     lower = numerator / Decimal(denominator) if denominator else ZERO
     upper = (numerator + Decimal(unknown)) / Decimal(denominator) if denominator else ZERO
     return {
-        "lower": v5.decimal_text(lower),
-        "central": v5.decimal_text(central),
-        "upper": v5.decimal_text(upper),
+        "lower": core.decimal_text(lower),
+        "central": core.decimal_text(central),
+        "upper": core.decimal_text(upper),
     }
 
 
 def calculate_reliability(
     ledgers: dict[str, Any],
     audit_mode: str,
-    *,
-    legacy_defects: Iterable[Mapping[str, Any]] = (),
-    supplemental_decisions: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    assignments = utility_assignments(
-        ledgers,
-        legacy_defects=legacy_defects,
-        supplemental_decisions=supplemental_decisions,
-    )
+    assignments = utility_assignments(ledgers)
     by_id = {item["locator_id"]: item for item in assignments}
     measured_locators = [
         item for item in ledgers["locators"] if item.get("judgment") in {"supported", "partially_supported", "unsupported"}
@@ -677,7 +538,7 @@ def calculate_reliability(
         item for item in ledgers["locators"] if item.get("judgment") == "uninspectable"
     ]
     locator_not_measured = ledgers["locator_not_measured"]
-    keep_denom = v5.component_denominators(
+    keep_denom = core.component_denominators(
         "keep_precision",
         ledgers["locator_original"],
         ledgers["locator_original"],
@@ -700,7 +561,7 @@ def calculate_reliability(
         item["treatment_id"] for item in explicit_treatment_not_measured_records
     ]
     treatment_not_measured = ledgers["treatment_not_measured"] + explicit_treatment_not_measured
-    recall_denom = v5.component_denominators(
+    recall_denom = core.component_denominators(
         "expected_treatment_recall",
         ledgers["treatment_original"],
         ledgers["treatment_original"],
@@ -712,13 +573,13 @@ def calculate_reliability(
 
     assessed_assignments = [by_id[item["locator_id"]] for item in measured_locators]
     diagnostic_numerator = sum(
-        (v5.decimal_value(item["diagnostic_credit"]) for item in assessed_assignments), ZERO
+        (core.decimal_value(item["diagnostic_credit"]) for item in assessed_assignments), ZERO
     )
     treatment_numerator = sum(
-        (v5.decimal_value(item["treatment_score"]) for item in assessed_assignments), ZERO
+        (core.decimal_value(item["treatment_score"]) for item in assessed_assignments), ZERO
     )
     fit_numerator = sum(
-        (v5.decimal_value(item["fit_score"]) for item in assessed_assignments), ZERO
+        (core.decimal_value(item["fit_score"]) for item in assessed_assignments), ZERO
     )
     supported = sum(item["judgment"] == "supported" for item in measured_locators)
     found = sum(item["status"] == "found" for item in measured_treatments)
@@ -726,31 +587,31 @@ def calculate_reliability(
     mean_diagnostic = diagnostic_numerator / Decimal(assessable) if assessable else ZERO
     mean_treatment = treatment_numerator / Decimal(assessable) if assessable else ZERO
     mean_fit = fit_numerator / Decimal(assessable) if assessable else ZERO
-    keep_precision = v5.rate(supported, assessable)
-    recall = v5.rate(found, len(measured_treatments))
+    keep_precision = core.rate(supported, assessable)
+    recall = core.rate(found, len(measured_treatments))
 
     unknown_loc = len(uninspectable_locators) + len(locator_not_measured)
     unknown_treat = len(uninspectable_treatments) + len(treatment_not_measured)
     locator_bound_denominator = assessable + unknown_loc
-    keep_lower = v5.rate(supported, locator_bound_denominator)
-    keep_upper = v5.rate(supported + unknown_loc, locator_bound_denominator)
-    recall_lower = v5.rate(found, len(measured_treatments) + unknown_treat)
-    recall_upper = v5.rate(found + unknown_treat, len(measured_treatments) + unknown_treat)
+    keep_lower = core.rate(supported, locator_bound_denominator)
+    keep_upper = core.rate(supported + unknown_loc, locator_bound_denominator)
+    recall_lower = core.rate(found, len(measured_treatments) + unknown_treat)
+    recall_upper = core.rate(found + unknown_treat, len(measured_treatments) + unknown_treat)
 
     expected_treatments = ledgers["treatment_original"]
     no_locator_assignments = ledgers["locator_original"] == 0
     attempt = ledgers["context"]["candidate_attempt"]["status"]
     if expected_treatments > 0 and no_locator_assignments:
         central_base = lower_base = upper_base = ZERO
-        v5.mark_defined_zero(keep_denom, "expected_treatments_but_no_locator_assignments")
+        core.mark_defined_zero(keep_denom, "expected_treatments_but_no_locator_assignments")
     else:
-        central_base = FIVE * v5.f1(keep_precision, recall)
-        lower_base = FIVE * v5.f1(keep_lower, recall_lower)
-        upper_base = FIVE * v5.f1(keep_upper, recall_upper)
+        central_base = FIVE * core.f1(keep_precision, recall)
+        lower_base = FIVE * core.f1(keep_lower, recall_lower)
+        upper_base = FIVE * core.f1(keep_upper, recall_upper)
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
         for denominator in (keep_denom, recall_denom):
-            v5.mark_defined_zero(denominator, f"candidate_attempt:{attempt}", non_attempt=True)
+            core.mark_defined_zero(denominator, f"candidate_attempt:{attempt}", non_attempt=True)
 
     high_measured = [
         item for item in measured_treatments if item.get("locator_class") in {"principal", "synthesis_or_conclusion"}
@@ -764,7 +625,7 @@ def calculate_reliability(
         if item.get("locator_class") in {"principal", "synthesis_or_conclusion"}
     ] + ledgers["treatment_not_measured"]
     high_found = sum(item["status"] == "found" for item in high_measured)
-    critical = v5.defect_subset(
+    critical = core.defect_subset(
         ledgers,
         "page_reference_reliability",
         severities={"critical"},
@@ -775,7 +636,7 @@ def calculate_reliability(
         item
         for item in measured_locators
         if item.get("judgment") == "unsupported"
-        and set(item.get("error_codes", [])) & v5.RELIABILITY_CODES
+        and set(item.get("error_codes", [])) & core.RELIABILITY_CODES
     ]
     pattern_units = {item.get("_source_unit_id") for item in pattern if item.get("_source_unit_id")}
     unknown_locator_units = {
@@ -792,12 +653,12 @@ def calculate_reliability(
         high_miss_evidence: Sequence[str],
         pattern_evidence: Sequence[str],
     ) -> list[dict[str, Any]]:
-        high_max, high_triggered, high_band = v5.high_value_cap(high_found_value, high_total)
-        pattern_max, pattern_triggered, pattern_band = v5.reliability_pattern_cap(
+        high_max, high_triggered, high_band = core.high_value_cap(high_found_value, high_total)
+        pattern_max, pattern_triggered, pattern_band = core.reliability_pattern_cap(
             pattern_count, locator_total, units, unit_denominator
         )
         return [
-            v5.cap_record(
+            core.cap_record(
                 "reliability.critical_locator",
                 Decimal(2),
                 bool(critical),
@@ -805,15 +666,15 @@ def calculate_reliability(
                 {"defect_count": len(critical)},
                 [item["defect_id"] for item in critical],
             ),
-            v5.cap_record(
+            core.cap_record(
                 "reliability.high_value_treatment_recall",
                 high_max,
                 high_triggered,
                 {"table": "pooled_principal_and_synthesis_recall_v1", "band": high_band},
-                {"found": high_found_value, "expected": high_total, "rate": v5.decimal_text(v5.rate(high_found_value, high_total))},
+                {"found": high_found_value, "expected": high_total, "rate": core.decimal_text(core.rate(high_found_value, high_total))},
                 high_miss_evidence,
             ),
-            v5.cap_record(
+            core.cap_record(
                 "reliability.distributed_unsupported_pattern",
                 pattern_max,
                 pattern_triggered,
@@ -821,10 +682,10 @@ def calculate_reliability(
                 {
                     "unsupported_count": pattern_count,
                     "assessable_locator_denominator": locator_total,
-                    "rate": v5.decimal_text(v5.rate(pattern_count, locator_total)),
+                    "rate": core.decimal_text(core.rate(pattern_count, locator_total)),
                     "affected_source_units": units,
                     "source_unit_denominator": unit_denominator,
-                    "source_unit_rate": v5.decimal_text(v5.rate(units, unit_denominator)),
+                    "source_unit_rate": core.decimal_text(core.rate(units, unit_denominator)),
                 },
                 pattern_evidence,
             ),
@@ -852,7 +713,7 @@ def calculate_reliability(
         known_pattern_ids,
     )
 
-    result = v5.finish_dimension(
+    result = core.finish_dimension(
         "page_reference_reliability",
         [keep_denom, recall_denom],
         central_base,
@@ -864,7 +725,7 @@ def calculate_reliability(
         audit_mode,
     )
     result["formula_id"] = f"{CALCULATION_PROFILE}:page_reference_reliability"
-    result["input_roles"] = ["locator_audit", "missing_access_audit", "structure_audit_or_migration_supplement"]
+    result["input_roles"] = ["locator_audit", "missing_access_audit", "structure_audit"]
 
     treatment_tiers = ("substantive", "mixed", "weak_presence", "absent", "invalid_destination", "uninspectable", "not_measured")
     fit_tiers = ("exact_fit", "material_partial_fit", "material_mismatch", "severe_mismatch", "no_fit", "uninspectable", "not_measured")
@@ -900,8 +761,8 @@ def calculate_reliability(
         "not_measured_treatments": len(treatment_not_measured),
     }
     result["credit_mappings"] = {
-        "page_treatment": {key: v5.decimal_text(value) for key, value in TREATMENT_SCORES.items()} | {"uninspectable": "neutral_uncertainty_bounds"},
-        "complete_path_fit": {key: v5.decimal_text(value) for key, value in FIT_SCORES.items()} | {"uninspectable": "neutral_uncertainty_bounds"},
+        "page_treatment": {key: core.decimal_text(value) for key, value in TREATMENT_SCORES.items()} | {"uninspectable": "neutral_uncertainty_bounds"},
+        "complete_path_fit": {key: core.decimal_text(value) for key, value in FIT_SCORES.items()} | {"uninspectable": "neutral_uncertainty_bounds"},
         "diagnostic_combination": {"rule": "minimum", "formula": "D_j=min(T_j,F_j)"},
         "rating_credit": {"supported": "1", "partially_supported": "0", "unsupported": "0"},
         "treatment_recall": {"found": "1", "missed": "0"},
@@ -910,63 +771,63 @@ def calculate_reliability(
     result["components"] = [
         {
             "component_id": "keep_precision",
-            "raw_numerator": v5.decimal_text(Decimal(supported)),
-            "raw_denominator": v5.decimal_text(Decimal(assessable)),
-            "normalized_value": v5.decimal_text(keep_precision),
+            "raw_numerator": core.decimal_text(Decimal(supported)),
+            "raw_denominator": core.decimal_text(Decimal(assessable)),
+            "normalized_value": core.decimal_text(keep_precision),
             "weight": "harmonic_mean",
             "effective_weight": "harmonic_mean",
             "weight_renormalized": False,
         },
         {
             "component_id": "page_treatment_axis_diagnostic",
-            "raw_numerator": v5.decimal_text(treatment_numerator),
-            "raw_denominator": v5.decimal_text(Decimal(assessable)),
-            "normalized_value": v5.decimal_text(mean_treatment),
+            "raw_numerator": core.decimal_text(treatment_numerator),
+            "raw_denominator": core.decimal_text(Decimal(assessable)),
+            "normalized_value": core.decimal_text(mean_treatment),
             "weight": "reported_diagnostic_only",
             "effective_weight": "not_used_independently_in_dimension_arithmetic",
             "weight_renormalized": False,
         },
         {
             "component_id": "complete_path_fit_axis_diagnostic",
-            "raw_numerator": v5.decimal_text(fit_numerator),
-            "raw_denominator": v5.decimal_text(Decimal(assessable)),
-            "normalized_value": v5.decimal_text(mean_fit),
+            "raw_numerator": core.decimal_text(fit_numerator),
+            "raw_denominator": core.decimal_text(Decimal(assessable)),
+            "normalized_value": core.decimal_text(mean_fit),
             "weight": "reported_diagnostic_only",
             "effective_weight": "not_used_independently_in_dimension_arithmetic",
             "weight_renormalized": False,
         },
         {
             "component_id": "diagnostic_locator_credit_mean",
-            "raw_numerator": v5.decimal_text(diagnostic_numerator),
-            "raw_denominator": v5.decimal_text(Decimal(assessable)),
-            "normalized_value": v5.decimal_text(mean_diagnostic),
+            "raw_numerator": core.decimal_text(diagnostic_numerator),
+            "raw_denominator": core.decimal_text(Decimal(assessable)),
+            "normalized_value": core.decimal_text(mean_diagnostic),
             "weight": "reported_diagnostic_only",
             "effective_weight": "not_used_in_dimension_arithmetic",
             "weight_renormalized": False,
         },
         {
             "component_id": "expected_treatment_recall",
-            "raw_numerator": v5.decimal_text(Decimal(found)),
-            "raw_denominator": v5.decimal_text(Decimal(len(measured_treatments))),
-            "normalized_value": v5.decimal_text(recall),
+            "raw_numerator": core.decimal_text(Decimal(found)),
+            "raw_denominator": core.decimal_text(Decimal(len(measured_treatments))),
+            "normalized_value": core.decimal_text(recall),
             "weight": "harmonic_mean",
             "effective_weight": "harmonic_mean",
             "weight_renormalized": False,
         },
         {
             "component_id": "reliability_f1",
-            "raw_numerator": v5.decimal_text(TWO * keep_precision * recall),
-            "raw_denominator": v5.decimal_text(f1_denominator),
-            "normalized_value": v5.decimal_text(v5.f1(keep_precision, recall)),
+            "raw_numerator": core.decimal_text(TWO * keep_precision * recall),
+            "raw_denominator": core.decimal_text(f1_denominator),
+            "normalized_value": core.decimal_text(core.f1(keep_precision, recall)),
             "weight": "base_rating_times_5",
             "effective_weight": "base_rating_times_5",
             "weight_renormalized": False,
         },
         {
             "component_id": "high_value_treatment_recall_safeguard",
-            "raw_numerator": v5.decimal_text(Decimal(high_found)),
-            "raw_denominator": v5.decimal_text(Decimal(len(high_measured))),
-            "normalized_value": v5.decimal_text(v5.rate(high_found, len(high_measured))),
+            "raw_numerator": core.decimal_text(Decimal(high_found)),
+            "raw_denominator": core.decimal_text(Decimal(len(high_measured))),
+            "normalized_value": core.decimal_text(core.rate(high_found, len(high_measured))),
             "weight": "cap_only",
             "effective_weight": "cap_only",
             "weight_renormalized": False,
@@ -989,44 +850,27 @@ def calculate_reliability(
         "counts_by_rating_credit_value": rating_counts,
         "locator_utility_assignments": assignments,
         "mapping_rejections": [],
-        "compatibility_classifications": [
-            {
-                "locator_id": item["locator_id"],
-                "fit_category": item["fit_category"],
-                "fit_rule_id": item["fit_rule_id"],
-                "compatibility_rule_ids": item["compatibility_rule_ids"],
-                "applicable_structured_defect_ids": item[
-                    "applicable_structured_defect_ids"
-                ],
-            }
-            for item in assignments
-            if item["compatibility_rule_ids"]
-        ],
-        "supplemental_fit_decision_count": sum(
-            item["supplemental_fit_decision_id"] is not None
-            for item in assignments
-        ),
-        "treatment_score_numerator": v5.decimal_text(treatment_numerator),
+        "treatment_score_numerator": core.decimal_text(treatment_numerator),
         "treatment_score_denominator": assessable,
-        "mean_treatment_score": v5.decimal_text(mean_treatment),
-        "fit_score_numerator": v5.decimal_text(fit_numerator),
+        "mean_treatment_score": core.decimal_text(mean_treatment),
+        "fit_score_numerator": core.decimal_text(fit_numerator),
         "fit_score_denominator": assessable,
-        "mean_fit_score": v5.decimal_text(mean_fit),
-        "diagnostic_credit_numerator": v5.decimal_text(diagnostic_numerator),
+        "mean_fit_score": core.decimal_text(mean_fit),
+        "diagnostic_credit_numerator": core.decimal_text(diagnostic_numerator),
         "diagnostic_credit_denominator": assessable,
-        "mean_diagnostic_credit": v5.decimal_text(mean_diagnostic),
+        "mean_diagnostic_credit": core.decimal_text(mean_diagnostic),
         "keep_precision_numerator": supported,
         "keep_precision_denominator": assessable,
-        "keep_precision": v5.decimal_text(keep_precision),
+        "keep_precision": core.decimal_text(keep_precision),
         "treatment_recall_numerator": found,
         "treatment_recall_denominator": len(measured_treatments),
-        "treatment_recall": v5.decimal_text(recall),
-        "reliability_f1": v5.decimal_text(v5.f1(keep_precision, recall)),
+        "treatment_recall": core.decimal_text(recall),
+        "reliability_f1": core.decimal_text(core.f1(keep_precision, recall)),
         "treatment_score_uncertainty": _uncertainty_triple(treatment_numerator, assessable, unknown_loc),
         "fit_score_uncertainty": _uncertainty_triple(fit_numerator, assessable, unknown_loc),
         "diagnostic_credit_uncertainty": _uncertainty_triple(diagnostic_numerator, assessable, unknown_loc),
-        "keep_precision_uncertainty": {"lower": v5.decimal_text(keep_lower), "central": v5.decimal_text(keep_precision), "upper": v5.decimal_text(keep_upper)},
-        "treatment_recall_uncertainty": {"lower": v5.decimal_text(recall_lower), "central": v5.decimal_text(recall), "upper": v5.decimal_text(recall_upper)},
+        "keep_precision_uncertainty": {"lower": core.decimal_text(keep_lower), "central": core.decimal_text(keep_precision), "upper": core.decimal_text(keep_upper)},
+        "treatment_recall_uncertainty": {"lower": core.decimal_text(recall_lower), "central": core.decimal_text(recall), "upper": core.decimal_text(recall_upper)},
         "rating_credit_source": "locator_utility_assignments[].rating_credit",
         "diagnostic_grade_formula": "100 * diagnostic_credit",
         "diagnostic_grades_used_in_dimension_arithmetic": False,
@@ -1045,131 +889,30 @@ def calculate_reliability(
 
 def calculate_loaded(
     loaded: dict[str, Any],
-    *,
-    structure_review: dict[str, Any] | None = None,
-    structure_review_artifact: dict[str, Any] | None = None,
-    supplemental_architecture_review_artifact: dict[str, Any] | None = None,
-    legacy_fit_defects: Iterable[Mapping[str, Any]] | None = None,
-    locator_fit_supplement: Mapping[str, Any] | None = None,
-    locator_fit_supplement_artifact: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ledgers, missing = preflight_loaded(loaded)
-    v5.require(
+    core.require(
         ledgers is not None and not missing,
         "v8_inputs_insufficient",
         "The frozen ledgers do not satisfy the V8 diagnostic-and-rating calculation contract.",
         missing,
     )
     audit_mode = loaded["config"]["audit_mode"]
-    legacy_fit_defects = [] if legacy_fit_defects is None else list(legacy_fit_defects)
-    fit_preflight = locator_fit_preflight(
-        ledgers, audit_mode, legacy_defects=legacy_fit_defects
-    )
-    v5.require(
+    fit_preflight = locator_fit_preflight(ledgers, audit_mode)
+    core.require(
         not fit_preflight["invalid_or_contradictory_state"],
         "v8_inputs_insufficient",
         "The frozen ledgers contain invalid or contradictory V8 locator states.",
         fit_preflight["invalid_or_contradictory_state"],
     )
-    unresolved_ids = [
-        item["locator_id"]
-        for item in fit_preflight["unresolved_complete_path_fit"]
-    ]
-    supplemental_decisions: dict[str, Mapping[str, Any]] = {}
-    if locator_fit_supplement is None:
-        v5.require(
-            not unresolved_ids,
-            "v8_inputs_insufficient",
-            "The frozen ledgers contain unresolved complete-path-fit states.",
-            fit_preflight["unresolved_complete_path_fit"],
-        )
-        v5.require(
-            locator_fit_supplement_artifact is None,
-            "unexpected_locator_fit_supplement_artifact",
-            "A locator-fit supplement artifact cannot be bound without its validated semantic input.",
-        )
-    else:
-        v5.require(
-            locator_fit_supplement_artifact is not None
-            and locator_fit_supplement_artifact.get("schema_version")
-            == locator_fit_supplement.get("schema_version"),
-            "locator_fit_supplement_binding_mismatch",
-            "A supplemental locator-fit input requires its exact validated artifact binding.",
-        )
-        supplemental_decisions = {
-            item["locator_id"]: item
-            for item in locator_fit_supplement["decisions"]
-        }
-        v5.require(
-            sorted(supplemental_decisions) == unresolved_ids,
-            "locator_fit_supplement_scope_mismatch",
-            "The supplemental decisions must equal the independently derived unresolved locator set.",
-            {
-                "expected": unresolved_ids,
-                "actual": sorted(supplemental_decisions),
-            },
-        )
     calculation_artifacts = deepcopy(loaded["input_artifacts"])
-    if locator_fit_supplement_artifact is not None:
-        calculation_artifacts.append(deepcopy(locator_fit_supplement_artifact))
-    if structure_review is not None:
-        v5.require(
-            structure_review_artifact is not None,
-            "structure_review_artifact_binding_required",
-            "A V8 structure-locator review requires its exact file binding.",
-        )
-        structure_artifact = next(
-            (item for item in loaded["input_artifacts"] if item.get("role") == "structure_audit"),
-            None,
-        )
-        v5.require(
-            structure_artifact is not None
-            and structure_review.get("inputs", {}).get("structure_audit_file_sha256")
-            == structure_artifact.get("sha256"),
-            "structure_review_input_binding_mismatch",
-            "The V8 review does not bind the exact frozen structure audit used for calculation.",
-        )
-        supplemental_sha256 = structure_review.get("inputs", {}).get(
-            "supplemental_architecture_review_file_sha256"
-        )
-        if supplemental_sha256 is None:
-            v5.require(
-                supplemental_architecture_review_artifact is None,
-                "unexpected_supplemental_architecture_review_artifact",
-                "A V8 calculation cannot bind a supplemental architecture review that is absent from the structure-locator review.",
-            )
-        else:
-            v5.require(
-                supplemental_architecture_review_artifact is not None
-                and supplemental_architecture_review_artifact.get("sha256")
-                == supplemental_sha256
-                and supplemental_architecture_review_artifact.get("schema_version")
-                == SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA,
-                "supplemental_architecture_review_binding_mismatch",
-                "The V8 structure-locator review does not bind the supplied supplemental architecture review.",
-            )
-            calculation_artifacts.append(
-                deepcopy(supplemental_architecture_review_artifact)
-            )
-        try:
-            ledgers = apply_deterministic_structure_corrections(
-                ledgers, structure_review, audit_mode=audit_mode
-            )
-        except StructureReviewError as exc:
-            raise v5.CalculationError(exc.code, exc.message, exc.details) from exc
-        calculation_artifacts.append(structure_review_artifact)
     dimensions = [
-        v5.calculate_coverage(ledgers, audit_mode),
-        v5.calculate_selectivity(ledgers, audit_mode),
-        v5.calculate_concept(ledgers, audit_mode),
-        calculate_reliability(
-            ledgers,
-            audit_mode,
-            legacy_defects=legacy_fit_defects,
-            supplemental_decisions=supplemental_decisions,
-        ),
-        v5.calculate_findability(ledgers, audit_mode),
-        v5.calculate_mechanics(ledgers, audit_mode),
+        core.calculate_coverage(ledgers, audit_mode),
+        core.calculate_selectivity(ledgers, audit_mode),
+        core.calculate_concept(ledgers, audit_mode),
+        calculate_reliability(ledgers, audit_mode),
+        core.calculate_findability(ledgers, audit_mode),
+        core.calculate_mechanics(ledgers, audit_mode),
     ]
     for dimension in dimensions:
         dimension["formula_id"] = f"{CALCULATION_PROFILE}:{dimension['dimension_id']}"
@@ -1181,41 +924,28 @@ def calculate_loaded(
                 or (requested == "locator_audit" and role.startswith("locator_audit["))
                 or (requested == "missing_access_audit" and role.startswith("missing_access_audit["))
                 or (requested == "structure_audit" and role == "structure_audit")
-                or (requested == "structure_audit_or_migration_supplement" and role in {"structure_audit", "migration_supplement"})
                 for requested in dimension["input_roles"]
             )
-            if role == "structure_locator_review" and dimension["dimension_id"] == "findability_navigation":
-                include = True
-            if (
-                role == "supplemental_architecture_review"
-                and dimension["dimension_id"] == "findability_navigation"
-            ):
-                include = True
-            if (
-                role == "supplemental_locator_fit"
-                and dimension["dimension_id"] == "page_reference_reliability"
-            ):
-                include = True
             if include and artifact not in selected:
                 selected.append(artifact)
-        v5.require(bool(selected), "dimension_input_binding_failed", f"{dimension['dimension_id']} did not resolve frozen inputs.")
+        core.require(bool(selected), "dimension_input_binding_failed", f"{dimension['dimension_id']} did not resolve frozen inputs.")
         dimension["input_artifacts"] = selected
 
     all_scored = all(item["status"] == "scored" for item in dimensions)
     total = (
-        v5.round_points(sum((v5.decimal_value(item["awarded_points"]) for item in dimensions), ZERO))
+        core.round_points(sum((core.decimal_value(item["awarded_points"]) for item in dimensions), ZERO))
         if all_scored
         else None
     )
     result = {
         "schema_version": CALCULATION_SCHEMA,
-        "calculation_id": f"CALC-{v5.canonical_hash({'evaluation_id': loaded['config']['evaluation_id'], 'audit_mode': audit_mode, 'rubric_version': RUBRIC_VERSION, 'calculation_profile': CALCULATION_PROFILE, 'inputs': calculation_artifacts})[:12].upper()}",
+        "calculation_id": f"CALC-{core.canonical_hash({'evaluation_id': loaded['config']['evaluation_id'], 'audit_mode': audit_mode, 'rubric_version': RUBRIC_VERSION, 'calculation_profile': CALCULATION_PROFILE, 'inputs': calculation_artifacts})[:12].upper()}",
         "evaluation_id": loaded["config"]["evaluation_id"],
         "rubric_version": RUBRIC_VERSION,
         "calculation_profile": CALCULATION_PROFILE,
         "audit_mode": audit_mode,
         "status": "scored" if all_scored else "not_scored_insufficient_evidence",
-        "evidence_identity": {field: ledgers["identity"][field] for field in v5.CALCULATION_EVIDENCE_IDENTITY_FIELDS},
+        "evidence_identity": {field: ledgers["identity"][field] for field in core.CALCULATION_EVIDENCE_IDENTITY_FIELDS},
         "input_artifacts": calculation_artifacts,
         "diagnostic_item_grades": {
             "used_in_dimension_arithmetic": False,
@@ -1223,151 +953,34 @@ def calculate_loaded(
             "required_policy_version": ITEM_GRADING_POLICY,
             "expected_source_subjects": {
                 "count": len(ledgers["expected_subject_ids"]),
-                "id_set_sha256": v5.canonical_hash({"ids": ledgers["expected_subject_ids"]}),
+                "id_set_sha256": core.canonical_hash({"ids": ledgers["expected_subject_ids"]}),
             },
         },
         "publication_readiness_gates": {
             "used_in_score_arithmetic": False,
-            "policy": "separate_claim_restrictions_unchanged_from_v6",
+            "policy": "separate_claim_restrictions",
         },
         "dimensions": dimensions,
-        "total_score": v5.displayed_number(total, Decimal("0.01")) if total is not None else None,
+        "total_score": core.displayed_number(total, Decimal("0.01")) if total is not None else None,
         "maximum_score": 100,
-        "arithmetic_check": all_scored and total == sum((v5.decimal_value(item["awarded_points"]) for item in dimensions), ZERO).quantize(Decimal("0.01"), rounding=v5.ROUND_HALF_UP),
+        "arithmetic_check": all_scored and total == sum((core.decimal_value(item["awarded_points"]) for item in dimensions), ZERO).quantize(Decimal("0.01"), rounding=core.ROUND_HALF_UP),
     }
-    if structure_review is not None:
-        result["structure_locator_review"] = {
-            "schema_version": structure_review["schema_version"],
-            "review_id": structure_review["review_id"],
-            "review_sha256": structure_review["review_sha256"],
-            "thresholds": deepcopy(structure_review["thresholds"]),
-            "summary": deepcopy(structure_review["summary"]),
-            "active_correction": deepcopy(ledgers["v7_structure_correction"]),
-        }
-    result["locator_fit_compatibility"] = {
-        "rule": LEGACY_FIT_COMPATIBILITY_RULE_ID,
-        "conflict_rule": LEGACY_FIT_CONFLICT_RULE_ID,
-        "classifications": deepcopy(
-            fit_preflight["compatibility_classifications"]
-        ),
-        "preflight_group_counts": deepcopy(fit_preflight["group_counts"]),
-        "unresolved_reason_counts_before_supplement": deepcopy(
-            fit_preflight["unresolved_reason_counts"]
-        ),
-        "unresolved_records_before_supplement": deepcopy(
-            fit_preflight["unresolved_complete_path_fit"]
-        ),
-        "unresolved_before_supplement": len(unresolved_ids),
-        "unresolved_after_supplement": (
-            0 if locator_fit_supplement is not None else len(unresolved_ids)
-        ),
-        "historical_defects_rewritten": False,
-        "classifier_precedence_applied": False,
-        "aggregate_score_exposed_during_preflight": False,
-        "prose_inference_used": False,
+    architecture = loaded["structure"]["locator_architecture"]
+    result["structure_audit"] = {
+        "schema_version": "structure-audit-v5",
+        "candidate_denominator": deepcopy(loaded["structure"]["candidate_denominator"]),
+        "full_scope_attestation": deepcopy(loaded["structure"]["full_scope_attestation"]),
+        "locator_architecture": deepcopy(architecture),
+        "uncertainties": deepcopy(loaded["structure"]["uncertainties"]),
     }
-    if locator_fit_supplement is not None:
-        result["locator_fit_supplement"] = {
-            "schema_version": locator_fit_supplement["schema_version"],
-            "supplement_id": locator_fit_supplement["supplement_id"],
-            "supplement_sha256": locator_fit_supplement["supplement_sha256"],
-            "file_sha256": locator_fit_supplement_artifact["sha256"],
-            "scope_rule_id": locator_fit_supplement["scope"]["rule_id"],
-            "unresolved_set_sha256": locator_fit_supplement["scope"][
-                "unresolved_set_sha256"
-            ],
-            "decision_count": len(locator_fit_supplement["decisions"]),
-            "application": "complete_path_fit_only_in_memory",
-            "numerical_credit_supplied": False,
-        }
-    result["calculation_sha256"] = v5.canonical_hash(result, "calculation_sha256")
+    result["calculation_sha256"] = core.canonical_hash(result, "calculation_sha256")
     return result
 
 
 def reliability_dimension(calculation: dict[str, Any]) -> dict[str, Any]:
     matches = [item for item in calculation.get("dimensions", []) if item.get("dimension_id") == "page_reference_reliability"]
-    v5.require(len(matches) == 1, "v8_reliability_dimension_required", "A V8 calculation must contain exactly one Page-reference Reliability dimension.")
+    core.require(len(matches) == 1, "v8_reliability_dimension_required", "A V8 calculation must contain exactly one Page-reference Reliability dimension.")
     return matches[0]
-
-
-def load_structure_review(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    document = v5.load_json(path, "V8 structure-locator review")
-    v5.validate_schema_document(
-        document,
-        "structure-locator-review-v1.schema.json",
-        "V8 structure-locator review",
-    )
-    v5.require(
-        document.get("review_sha256")
-        == structure_review_hash(document, "review_sha256"),
-        "structure_review_hash_mismatch",
-        "The V8 structure-locator review self-hash does not reconstruct.",
-    )
-    validate_structure_locator_review_semantics(document)
-    return document, {
-        "role": "structure_locator_review",
-        "path": str(path),
-        "sha256": v5.sha256_file(path),
-        "schema_version": document["schema_version"],
-    }
-
-
-def command_derive_structure_review(args: argparse.Namespace) -> None:
-    try:
-        candidate_path = Path(args.normalized_candidate).resolve()
-        inventory_path = Path(args.item_inventory).resolve()
-        structure_path = Path(args.structure_audit).resolve()
-        output_path = Path(args.output).resolve()
-        candidate = v5.load_json(candidate_path, "Frozen normalized candidate")
-        inventory = v5.load_json(inventory_path, "Frozen item inventory")
-        structure = v5.load_json(structure_path, "Frozen structure audit")
-        v5.validate_schema_document(candidate, "candidate-index-v2.schema.json", "Frozen normalized candidate")
-        v5.validate_schema_document(inventory, "item-inventory-v2.schema.json", "Frozen item inventory")
-        v5.require(
-            structure.get("schema_version") == "structure-audit-v6",
-            "unsupported_structure_audit_schema",
-            "Current V8 scoring requires structure-audit-v6.",
-        )
-        v5.validate_schema_document(structure, "structure-audit-v6.schema.json", "Frozen structure audit")
-        v5.require(
-            not v5.aliases_existing_file(
-                output_path, {candidate_path, inventory_path, structure_path}
-            ),
-            "output_aliases_frozen_input",
-            "The V8 derived review must not overwrite a frozen artifact.",
-        )
-        review = derive_structure_locator_review(
-            candidate,
-            inventory,
-            structure,
-            candidate_file_sha256=v5.sha256_file(candidate_path),
-            inventory_file_sha256=v5.sha256_file(inventory_path),
-            structure_file_sha256=v5.sha256_file(structure_path),
-            audit_mode=args.audit_mode,
-        )
-        v5.validate_schema_document(
-            review,
-            "structure-locator-review-v1.schema.json",
-            "Generated V8 structure-locator review",
-        )
-        write_json(output_path, review)
-        v5.emit(
-            {
-                "command": "derive-v8-structure-locator-review",
-                "ok": True,
-                "artifact_written": str(output_path),
-                "review_id": review["review_id"],
-                "review_sha256": review["review_sha256"],
-                "migration_ready": review["migration_ready"],
-                "summary": review["summary"],
-            }
-        )
-    except (OSError, v5.CalculationError, StructureReviewError, HeadingAccessProvenanceError) as exc:
-        if isinstance(exc, (v5.CalculationError, StructureReviewError, HeadingAccessProvenanceError)):
-            error = {"code": exc.code, "message": exc.message, "details": exc.details}
-        else:
-            error = {"code": "file_error", "message": str(exc)}
-        v5.emit({"command": "derive-v8-structure-locator-review", "ok": False, "error": error}, 1)
 
 
 def command_preflight(args: argparse.Namespace) -> None:
@@ -1390,59 +1003,30 @@ def command_preflight(args: argparse.Namespace) -> None:
             }
             if args.output:
                 output_path = Path(args.output).resolve()
-                v5.require(not v5.aliases_existing_file(output_path, {config_path, *raw_paths}), "output_aliases_frozen_input", "Preflight output must not overwrite frozen evidence.")
+                core.require(not core.aliases_existing_file(output_path, {config_path, *raw_paths}), "output_aliases_frozen_input", "Preflight output must not overwrite frozen evidence.")
                 write_json(output_path, result)
                 result["artifact_written"] = str(output_path)
-            v5.emit(result)
+            core.emit(result)
         loaded = load_v8_inputs(config_path)
-        ledgers, base_missing = v5.preflight_loaded(loaded)
-        if ledgers is not None:
-            base_missing.extend(policy_identity_requirements(loaded, ledgers))
+        ledgers, base_missing = core.preflight_loaded(loaded)
         fit_report = (
-            locator_fit_preflight(
-                ledgers,
-                loaded["config"]["audit_mode"],
-                legacy_defects=(),
-            )
+            locator_fit_preflight(ledgers, loaded["config"]["audit_mode"])
             if ledgers is not None
             else {
                 "schema_version": "subject-index-v8-locator-fit-preflight-v1",
-                "deterministically_compatible": [],
-                "unresolved_complete_path_fit": [],
+                "validated_complete_path_fit": [],
                 "invalid_or_contradictory_state": [],
-                "compatibility_classifications": [],
                 "group_counts": {
-                    "deterministically_compatible": 0,
-                    "unresolved_complete_path_fit": 0,
+                    "validated_complete_path_fit": 0,
                     "invalid_or_contradictory_state": 0,
                 },
-                "unresolved_reason_counts": {},
-                "unresolved_set_sha256": v5.canonical_hash(
-                    {"unresolved_locator_fit": []}
-                ),
                 "aggregate_v8_score_available": False,
                 "prose_inference_used": False,
-                "historical_artifacts_modified": False,
             }
         )
-        missing = [
-            *base_missing,
-            *fit_report["invalid_or_contradictory_state"],
-            *(
-                {
-                    "code": "unresolved_complete_path_fit",
-                    "path": f"locator:{item['locator_id']}",
-                    "message": "; ".join(
-                        UNRESOLVED_REASON_MESSAGES[reason]
-                        for reason in item["reason_codes"]
-                    ),
-                    **item,
-                }
-                for item in fit_report["unresolved_complete_path_fit"]
-            ),
-        ]
+        missing = [*base_missing, *fit_report["invalid_or_contradictory_state"]]
         public_fit_report = public_locator_fit_preflight(fit_report)
-        v5.validate_schema_document(
+        core.validate_schema_document(
             public_fit_report,
             "v8-locator-fit-preflight.schema.json",
             "V8 locator-fit preflight",
@@ -1457,44 +1041,764 @@ def command_preflight(args: argparse.Namespace) -> None:
             "missing_requirements": missing,
             "locator_fit_preflight": public_fit_report,
             "aggregate_v8_score_available": False,
-            "required_locator_fields": ["judgment", "treatment_class", "source_scope_status", "error_codes", "severity", "applicable_structured_defects"],
+            "required_locator_fields": ["judgment", "treatment_class", "complete_path_fit", "source_scope_status", "error_codes", "severity", "applicable_structured_defects"],
             "source_reopened": False,
             "prose_inference_used": False,
             "frozen_evidence_mutated": False,
         }
         if args.output:
             output_path = Path(args.output).resolve()
-            v5.require(not v5.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Preflight output must not overwrite frozen evidence.")
+            core.require(not core.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Preflight output must not overwrite frozen evidence.")
             write_json(output_path, result)
             result["artifact_written"] = str(output_path)
-        v5.emit(result)
-    except (OSError, v5.CalculationError, HeadingAccessProvenanceError) as exc:
-        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, (v5.CalculationError, HeadingAccessProvenanceError)) else {"code": "file_error", "message": str(exc)}
-        v5.emit({"command": "v8-calculation-sufficiency-preflight", "ok": False, "error": error}, 1)
+        core.emit(result)
+    except (OSError, core.CalculationError, HeadingAccessProvenanceError) as exc:
+        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, (core.CalculationError, HeadingAccessProvenanceError)) else {"code": "file_error", "message": str(exc)}
+        core.emit({"command": "v8-calculation-sufficiency-preflight", "ok": False, "error": error}, 1)
 
 
 def command_calculate(args: argparse.Namespace) -> None:
     try:
         loaded = load_v8_inputs(Path(args.input).resolve())
-        review_path = Path(args.structure_locator_review).resolve()
-        review, review_artifact = load_structure_review(review_path)
-        result = calculate_loaded(
-            loaded,
-            structure_review=review,
-            structure_review_artifact=review_artifact,
-        )
-        v5.validate_schema_document(result, "dimension-calculations-v5.schema.json", "Generated V8 dimension calculations")
+        result = calculate_loaded(loaded)
+        core.validate_schema_document(result, "dimension-calculations-v5.schema.json", "Generated V8 dimension calculations")
         if args.output:
             output_path = Path(args.output).resolve()
-            v5.require(not v5.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Calculation output must not overwrite frozen evidence.")
+            core.require(not core.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Calculation output must not overwrite frozen evidence.")
             write_json(output_path, result)
             response = {"command": "calculate-v8-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "total_score": result["total_score"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
         else:
             response = {"command": "calculate-v8-dimensions", "ok": True, **result}
-        v5.emit(response)
-    except (OSError, v5.CalculationError, HeadingAccessProvenanceError) as exc:
-        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, (v5.CalculationError, HeadingAccessProvenanceError)) else {"code": "file_error", "message": str(exc)}
-        v5.emit({"command": "calculate-v8-dimensions", "ok": False, "error": error}, 1)
+        core.emit(response)
+    except (OSError, core.CalculationError, HeadingAccessProvenanceError) as exc:
+        error = {"code": exc.code, "message": exc.message, "details": exc.details} if isinstance(exc, (core.CalculationError, HeadingAccessProvenanceError)) else {"code": "file_error", "message": str(exc)}
+        core.emit({"command": "calculate-v8-dimensions", "ok": False, "error": error}, 1)
+
+
+def _json_bytes(document: Mapping[str, Any]) -> bytes:
+    return (json.dumps(core.json_output_value(document), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+def _atomic_write(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(payload)
+    os.replace(temporary, path)
+
+
+def _transition_state(state_path: Path, stage: str) -> tuple[dict[str, Any], list[str]]:
+    state = load_state(state_path)
+    errors, warnings = validate_state(state, state_path=state_path)
+    core.require(not errors, "canonical_state_invalid", "Canonical evaluation state is invalid.", errors)
+    core.require(state["stages"][stage]["status"] != "completed", "stage_already_completed", f"{stage} is already completed.")
+    stage_index = STAGES.index(stage)
+    unmet = [name for name in STAGES[:stage_index] if state["stages"][name]["status"] != "completed"]
+    core.require(not unmet, "stage_dependencies_incomplete", f"Complete these stages before {stage}: {', '.join(unmet)}", unmet)
+    active = [name for name, value in state["stages"].items() if value.get("status") == "in_progress" and name != stage]
+    core.require(not active, "another_stage_in_progress", f"Another stage is in progress: {', '.join(active)}", active)
+    return state, warnings
+
+
+def _registered_documents(
+    state: Mapping[str, Any],
+    state_path: Path,
+    *,
+    stage: str,
+    schema_version: str,
+    schema_name: str,
+    many: bool = False,
+) -> list[tuple[dict[str, Any], dict[str, Any], Path]]:
+    records = [
+        item for item in state.get("artifacts", [])
+        if item.get("stage") == stage and item.get("schema_version") == schema_version
+    ]
+    core.require(bool(records), "registered_artifact_missing", f"No registered {schema_version} artifact exists for {stage}.")
+    core.require(many or len(records) == 1, "duplicate_registered_artifact", f"Expected exactly one registered {schema_version} artifact for {stage}.", [item["path"] for item in records])
+    result = []
+    for record in sorted(records, key=lambda item: item["path"]):
+        path = resolve_artifact_path(state_path, record["path"]).resolve()
+        core.require(path.is_file(), "registered_artifact_missing", f"Registered artifact is unavailable: {record['path']}")
+        actual = core.sha256_file(path)
+        core.require(actual == record["sha256"], "registered_artifact_hash_mismatch", f"Registered artifact bytes changed: {record['path']}", {"expected_sha256": record["sha256"], "actual_sha256": actual})
+        document = core.load_json(path, schema_version)
+        core.validate_schema_document(document, schema_name, schema_version)
+        result.append((document, deepcopy(record), path))
+    return result
+
+
+def _state_output_path(root: Path, relative: str) -> Path:
+    path = (root / relative).resolve()
+    try:
+        path.relative_to(root.resolve())
+    except ValueError as exc:
+        raise core.CalculationError("output_outside_evaluation_directory", "Generated artifacts must remain inside the evaluation directory.", str(path)) from exc
+    return path
+
+
+def _artifact_record(
+    root: Path,
+    path: Path,
+    payload: bytes,
+    *,
+    stage: str,
+    artifact_type: str,
+    schema_version: str,
+    stamp: str,
+    visibility: str = "private",
+    input_sha256: Iterable[str] = (),
+) -> dict[str, Any]:
+    relative = portable_relative_path(path, root)
+    digest = hashlib.sha256(payload).hexdigest()
+    return {
+        "artifact_id": artifact_id(relative, digest),
+        "stage": stage,
+        "artifact_type": artifact_type,
+        "path": relative,
+        "sha256": digest,
+        "media_type": "application/json",
+        "schema_version": schema_version,
+        "visibility": visibility,
+        "retention": "required",
+        "frozen": True,
+        "recorded_at": stamp,
+        **({"input_sha256": sorted(set(input_sha256))} if input_sha256 else {}),
+    }
+
+
+def _add_records_and_complete(
+    state: dict[str, Any],
+    state_path: Path,
+    stage: str,
+    records: Sequence[dict[str, Any]],
+    note: str,
+) -> dict[str, Any]:
+    updated = deepcopy(state)
+    new_paths = {record["path"] for record in records}
+    collisions = [item["path"] for item in updated["artifacts"] if item.get("path") in new_paths]
+    core.require(not collisions, "registered_output_collision", "Generated output would replace an already registered artifact.", collisions)
+    updated["artifacts"].extend(records)
+    updated["artifacts"].sort(key=lambda item: item["path"])
+    stamp = records[0]["recorded_at"]
+    updated["stages"][stage] = {"status": "completed", "updated_at": stamp, "notes": [note]}
+    updated["updated_at"] = stamp
+    errors, _ = validate_state(updated, state_path=state_path, check_files=False)
+    core.require(not errors, "canonical_state_invalid", f"Completing {stage} would leave invalid canonical state.", errors)
+    return updated
+
+
+def _completeness(records: Sequence[Mapping[str, Any]], field: str) -> dict[str, Any]:
+    identities = [str(item[field]) for item in records]
+    core.require(len(identities) == len(set(identities)), "duplicate_item_identity", f"Duplicate {field} in item-assessment denominator.")
+    return {
+        "expected": len(identities),
+        "assessed": len(identities),
+        "unique": True,
+        "complete": True,
+        "id_set_sha256": core.canonical_hash({"ids": sorted(identities)}),
+    }
+
+
+def _assessed_item(
+    title: str,
+    grade_scope: str,
+    score: float | None,
+    *,
+    confidence: str | None = None,
+    evidence_ids: Iterable[str] = (),
+    summary: str = "",
+    navigation: Mapping[str, Any] | None = None,
+    **fields: Any,
+) -> dict[str, Any]:
+    grade = item_projection.grade(score)
+    evidence = sorted(set(evidence_ids))
+    return {
+        **fields,
+        "grade": grade,
+        "grade_scope": grade_scope,
+        "confidence": confidence,
+        "evidence_ids": evidence,
+        "summary": summary,
+        "popover": {
+            "title": title,
+            "summary": summary,
+            "grade": deepcopy(grade),
+            "grade_scope": grade_scope,
+            "confidence": confidence,
+            "factors": [],
+            "evidence_ids": evidence,
+            "navigation": dict(navigation or {}),
+        },
+    }
+
+
+def _current_item_assessments(
+    inventory: Mapping[str, Any],
+    inventory_record: Mapping[str, Any],
+    calculation: Mapping[str, Any],
+    structure: Mapping[str, Any],
+    locator_documents: Sequence[Mapping[str, Any]],
+    missing_documents: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    locator_by_id = {item["locator_id"]: item for document in locator_documents for item in document["judgments"]}
+    subject_by_id = {item["subject_id"]: item for document in missing_documents for item in document["subject_judgments"]}
+    nodes, references, _, _ = materialize_structure_records(structure)
+    node_by_id = {item["node_id"]: item for item in nodes}
+    reference_by_id = {item["reference_id"]: item for item in references}
+    status_score = {"passes": 100.0, "cosmetic_issues": 95.0, "minor_issues": 85.0, "major_issues": 55.0, "fails": 0.0, "supported": 100.0, "partially_supported": 50.0, "unsupported": 0.0}
+    coverage_score = {"complete": 100.0, "partial": 50.0, "missing": 0.0}
+
+    locators = []
+    for item in inventory["locators"]:
+        judgment = locator_by_id[item["locator_id"]]
+        locators.append(_assessed_item(
+            f"Locator {item.get('source_page_label')}",
+            "one_complete_heading_path_and_source_page_assignment",
+            None,
+            confidence=judgment["confidence"],
+            evidence_ids=judgment["evidence_ids"],
+            summary=judgment["evidence_summary"],
+            navigation={"path_id": item["path_id"], "node_ids": item["node_ids"]},
+            **item,
+            judgment=judgment["judgment"],
+        ))
+
+    node_assessments = []
+    for item in inventory["heading_nodes"]:
+        judgment = node_by_id[item["node_id"]]
+        component_results = []
+        scores = []
+        for dimension, component in judgment["component_judgments"].items():
+            score = status_score.get(component["status"])
+            scores.append(score)
+            component_results.append({"dimension_id": dimension, "status": component["status"], "score": score, "weight": 1, "summary": component["summary"], "evidence_ids": component["evidence_ids"]})
+        measured = [value for value in scores if value is not None]
+        node_assessments.append(_assessed_item(
+            " — ".join(item["heading_path"]),
+            "heading_wording_and_structural_role",
+            sum(measured) / len(measured) if measured else None,
+            confidence=judgment["confidence"],
+            evidence_ids=judgment["evidence_ids"],
+            summary=judgment["summary"],
+            navigation={"node_id": item["node_id"], "path_ids": item["path_ids"]},
+            **item,
+            component_results=component_results,
+        ))
+
+    reference_assessments = []
+    for item in inventory["cross_references"]:
+        judgment = reference_by_id[item["reference_id"]]
+        reference_assessments.append(_assessed_item(
+            f"{item['reference_type']} {item['target_display']}",
+            "one_cross_reference_relationship",
+            status_score.get(judgment["judgment"]),
+            confidence=judgment["confidence"],
+            evidence_ids=judgment["evidence_ids"],
+            summary=judgment["summary"],
+            navigation={"source_path_id": item["source_path_id"], "target_path_id": item["target_path_id"]},
+            **item,
+            judgment=judgment["judgment"],
+        ))
+
+    subject_assessments = []
+    for subject_id in sorted(subject_by_id):
+        judgment = subject_by_id[subject_id]
+        subject_assessments.append(_assessed_item(
+            f"Source subject {subject_id}",
+            "access_to_one_frozen_source_subject",
+            coverage_score.get(judgment["coverage"]),
+            confidence=judgment["confidence"],
+            evidence_ids=judgment["evidence_ids"],
+            summary=f"Frozen benchmark subject access is {judgment['coverage']}.",
+            navigation={"matched_path_ids": judgment["matched_path_ids"]},
+            subject_id=subject_id,
+            coverage=judgment["coverage"],
+            matched_path_ids=judgment["matched_path_ids"],
+        ))
+
+    paths = [
+        _assessed_item(
+            " — ".join(item["heading_path"]),
+            "complete_heading_path_as_delivered",
+            None,
+            summary="Path-level display is descriptive; canonical grades remain at locator and audited item level.",
+            navigation={"path_id": item["path_id"], "locator_ids": item["locator_ids"]},
+            **item,
+            component_results=[],
+        )
+        for item in inventory["paths"]
+    ]
+    base = {
+        "schema_version": "subject-index-item-assessments-v3",
+        "grading_policy": "subject-index-item-grading-v2",
+        "evaluation_id": calculation["evaluation_id"],
+        "candidate_id": inventory["candidate_id"],
+        "candidate_sha256": inventory["candidate_sha256"],
+        "item_inventory_sha256": inventory_record["sha256"],
+        "item_inventory_artifact": {"schema_version": inventory["schema_version"], "artifact_path": inventory_record["path"], "sha256": inventory_record["sha256"]},
+        "evidence_identity": deepcopy(calculation["evidence_identity"]),
+        "assessment_completeness": {
+            "locators": _completeness(locators, "locator_id"),
+            "paths": _completeness(paths, "path_id"),
+            "heading_nodes": _completeness(node_assessments, "node_id"),
+            "cross_references": _completeness(reference_assessments, "reference_id"),
+            "source_subjects": _completeness(subject_assessments, "subject_id"),
+        },
+        "audit_mode": calculation["audit_mode"],
+        "scope_complete": calculation["audit_mode"] == "full",
+        "grade_disclosure": "Diagnostic item projections do not replace the six-dimension calculation.",
+        "locator_grading_provenance": {},
+        "color_legend": [
+            {"band": "excellent", "minimum_score": 90, "color_token": "grade_excellent"},
+            {"band": "strong", "minimum_score": 80, "color_token": "grade_strong"},
+            {"band": "mixed", "minimum_score": 70, "color_token": "grade_mixed"},
+            {"band": "weak", "minimum_score": 60, "color_token": "grade_weak"},
+            {"band": "poor", "minimum_score": 0, "color_token": "grade_poor"},
+            {"band": "not_measured", "minimum_score": None, "color_token": "grade_neutral"},
+        ],
+        "locator_assessments": locators,
+        "path_assessments": paths,
+        "heading_node_assessments": node_assessments,
+        "cross_reference_assessments": reference_assessments,
+        "source_subject_assessments": subject_assessments,
+        "summary": {},
+    }
+    result = item_grades.build_v8_assessments(
+        base,
+        calculation,
+        structure,
+        locator_documents=list(locator_documents),
+        missing_documents=list(missing_documents),
+    )
+    core.validate_schema_document(result, "item-assessments-v7.schema.json", "Generated V8 item assessments")
+    return result
+
+
+def _scorecard(calculation: Mapping[str, Any], *, web: bool = False) -> list[dict[str, Any]]:
+    return [
+        {
+            "dimension_id": item["dimension_id"],
+            "weight": item["dimension_weight"],
+            "rating": item["final_rating"],
+            ("awarded_points" if web else "points"): item["awarded_points"],
+            "formula_id": item["formula_id"],
+        }
+        for item in calculation["dimensions"]
+    ]
+
+
+def _calculation_reference(record: Mapping[str, Any], calculation: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": calculation["schema_version"],
+        "artifact_path": record["path"],
+        "sha256": record["sha256"],
+        "calculation_sha256": calculation["calculation_sha256"],
+        "rubric_version": calculation["rubric_version"],
+        "calculation_profile": calculation["calculation_profile"],
+    }
+
+
+def _structure_reference(record: Mapping[str, Any]) -> dict[str, Any]:
+    return {"schema_version": "structure-audit-v6", "artifact_path": record["path"], "sha256": record["sha256"]}
+
+
+def _critical_gate_outcomes(
+    policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    defects = structure["defects"]
+    predicates = {
+        "GATE-SCOPE-LOCATOR": lambda item: item["defect_kind"] in {"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
+        "GATE-SYSTEMIC-UNSUPPORTED": lambda item: item["severity_basis"] == "systemic_nonuse" and item["dimension_owner"] == "page_reference_reliability",
+        "GATE-CENTRAL-OMISSION": lambda item: item["defect_kind"] == "central_omission",
+        "GATE-STANCE": lambda item: item["defect_kind"] in {"stance_reversal", "misleading_relationship"},
+        "GATE-COMPOUND": lambda item: item["code"] == "CMP",
+        "GATE-SEE-SUBSTITUTION": lambda item: item["defect_kind"] == "substitutive_see",
+        "GATE-CROSS-REFERENCE": lambda item: item["code"] == "XRF",
+        "GATE-DEPTH": lambda item: item["code"] == "HED" and item["severity"] in {"major", "critical"},
+        "GATE-CLUTTER": lambda item: item["defect_kind"] == "clutter_pattern",
+        "GATE-GROUNDING": lambda item: item["severity"] in {"major", "critical"} and item["dimension_owner"] in {"conceptual_stance_fidelity", "page_reference_reliability"},
+        "GATE-SOURCE-SPAN": lambda item: item["defect_kind"] == "scope_failure",
+        "GATE-STRUCTURE": lambda item: item["severity"] == "critical" and item["dimension_owner"] in {"findability_navigation", "mechanics_consistency"},
+    }
+    reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
+    denominator = reliability["original_locator_denominator"]
+    uninspectable_rate = Decimal(reliability["uninspectable_locator_count"]) / Decimal(denominator) if denominator else ZERO
+    tolerance = Decimal(str(policy["audit_design"]["uninspectable_locator_rate_tolerance"]))
+    results = []
+    for gate in policy["critical_gates"]:
+        gate_id = gate["gate_id"]
+        matching = [item["defect_id"] for item in defects if predicates.get(gate_id, lambda _: False)(item)]
+        triggered = uninspectable_rate > tolerance if gate_id == "GATE-UNINSPECTABLE" else bool(matching)
+        if gate_id == "GATE-STRUCTURE":
+            triggered = triggered or not structure["full_scope_attestation"]["complete"]
+        results.append({**deepcopy(gate), "triggered": triggered, "defect_ids": sorted(matching)})
+    return results
+
+
+def _projection_metadata(
+    *,
+    policy: Mapping[str, Any],
+    calculation: Mapping[str, Any],
+    calculation_record: Mapping[str, Any],
+    structure: Mapping[str, Any],
+    structure_record: Mapping[str, Any],
+    candidate_label: str,
+) -> dict[str, Any]:
+    gates = _critical_gate_outcomes(policy, structure, calculation)
+    limitations = [item["summary"] for item in structure["uncertainties"]]
+    metadata = {
+        "schema_version": "subject-index-v8-projection-metadata-v2",
+        "candidate_label": candidate_label,
+        "inclusion_policy": "Frozen current-V8 source scope and candidate-blind benchmark.",
+        "uncertainty_policy": policy["audit_design"]["uncertainty_policy"],
+        "critical_gates": gates,
+        "report_id": f"{calculation['evaluation_id']}-v8",
+        "headline": "Subject-index evaluation",
+        "summary": "Current-V8 source-grounded evaluation from validated registered artifacts.",
+        "interpretation": f"The validated V8 calculation produced {calculation['total_score']} of 100 points.",
+        "defect_counts": dict(sorted(Counter(item["severity"] for item in structure["defects"]).items())),
+        "strengths": deepcopy(structure["strengths"]),
+        "defects": deepcopy(structure["defects"]),
+        "examples": [],
+        "limitations": limitations,
+        "canonical_calculation": _calculation_reference(calculation_record, calculation),
+        "canonical_structure_audit": _structure_reference(structure_record),
+        "canonical_heading_access_source": {
+            "role": "heading_access_causal_source",
+            **_structure_reference(structure_record),
+        },
+    }
+    metadata["projection_metadata_sha256"] = core.canonical_hash(metadata, "projection_metadata_sha256")
+    core.validate_schema_document(metadata, "v8-projection-metadata-v2.schema.json", "Generated V8 projection metadata")
+    return metadata
+
+
+def _evaluation_result(
+    *,
+    calculation: Mapping[str, Any],
+    calculation_record: Mapping[str, Any],
+    items: Mapping[str, Any],
+    items_record: Mapping[str, Any],
+    structure_record: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    metadata_record: Mapping[str, Any],
+) -> dict[str, Any]:
+    identity = calculation["evidence_identity"]
+    reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
+    result = {
+        "schema_version": "subject-index-evaluation-result-v11",
+        "evaluation_id": calculation["evaluation_id"],
+        "candidate": {"label": metadata["candidate_label"], "sha256": identity["candidate_sha256"]},
+        "provenance": {
+            "source_sha256": identity["source_sha256"],
+            "judgment_policy_sha256": identity["policy_sha256"],
+            "benchmark_sha256": identity["benchmark_sha256"],
+            "rubric_version": calculation["rubric_version"],
+            "dimension_calculation_profile": calculation["calculation_profile"],
+        },
+        "audit_scope": {"mode": calculation["audit_mode"], "complete": calculation["status"] == "scored"},
+        "dimension_calculations": _calculation_reference(calculation_record, calculation),
+        "scorecard": _scorecard(calculation),
+        "total_score": calculation["total_score"],
+        "interpretation": metadata["interpretation"],
+        "metrics": {"keep_precision": {key: reliability[key] for key in ("keep_precision_numerator", "keep_precision_denominator", "keep_precision", "treatment_recall", "reliability_f1")}},
+        "item_assessments": {"schema_version": items["schema_version"], "artifact_path": items_record["path"], "sha256": items_record["sha256"], "grading_policy": items["grading_policy"], "summary": deepcopy(items["summary"])},
+        "heading_access_causal_provenance": deepcopy(items["heading_access_causal_provenance"]),
+        "structure_audit": _structure_reference(structure_record),
+        "projection_metadata": {"schema_version": metadata["schema_version"], "artifact_path": metadata_record["path"], "sha256": metadata_record["sha256"], "projection_metadata_sha256": metadata["projection_metadata_sha256"]},
+        "critical_gates": deepcopy(metadata["critical_gates"]),
+        "defect_counts": deepcopy(metadata["defect_counts"]),
+        "comparison_key": {
+            "source_sha256": identity["source_sha256"],
+            "benchmark_sha256": identity["benchmark_sha256"],
+            "judgment_policy_sha256": identity["policy_sha256"],
+            "page_map_sha256": identity["page_map_sha256"],
+            "chunk_manifest_sha256": identity["chunk_manifest_sha256"],
+            "inclusion_policy": metadata["inclusion_policy"],
+            "audit_mode": calculation["audit_mode"],
+            "uncertainty_policy": metadata["uncertainty_policy"],
+            "rubric_version": calculation["rubric_version"],
+            "dimension_calculation_profile": calculation["calculation_profile"],
+        },
+        "limitations": deepcopy(metadata["limitations"]),
+    }
+    core.validate_schema_document(result, "evaluation-result-v11.schema.json", "Generated V8 evaluation result")
+    return result
+
+
+def _grade_label(score: int | float | None) -> str:
+    if score is None:
+        return "Not scored"
+    if score >= 90:
+        return "Excellent"
+    if score >= 80:
+        return "Strong"
+    if score >= 70:
+        return "Mixed"
+    if score >= 60:
+        return "Weak"
+    return "Poor"
+
+
+def _web_report(
+    *,
+    result: Mapping[str, Any],
+    calculation: Mapping[str, Any],
+    calculation_record: Mapping[str, Any],
+    items: Mapping[str, Any],
+    items_record: Mapping[str, Any],
+    structure: Mapping[str, Any],
+    structure_record: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    calculation_ref = _calculation_reference(calculation_record, calculation)
+    structure_ref = _structure_reference(structure_record)
+    precision = deepcopy(result["metrics"]["keep_precision"])
+    report = {
+        "schema_version": "subject-index-web-report-v9",
+        "report_id": metadata["report_id"],
+        "headline": metadata["headline"],
+        "summary": metadata["summary"],
+        "grade": {"score": calculation["total_score"], "maximum": 100, "label": _grade_label(calculation["total_score"])},
+        "scorecard": _scorecard(calculation, web=True),
+        "calculation_explainer": {**calculation_ref, "item_grades_used": False, "gates_used": False},
+        "precision_diagnostics": precision,
+        "structure_audit": {**deepcopy(calculation["structure_audit"]), **structure_ref},
+        "key_metrics": [{"metric_id": key, "value": value} for key, value in precision.items()],
+        "density": deepcopy(structure["density"]),
+        "gate_status": {"critical_gates": deepcopy(result["critical_gates"]), "outcomes_sha256": core.canonical_hash({"critical_gates": result["critical_gates"]}), "used_in_score_arithmetic": False},
+        "strengths": deepcopy(metadata["strengths"]),
+        "defects": deepcopy(metadata["defects"]),
+        "examples": deepcopy(metadata["examples"]),
+        "item_grade_index": {"schema_version": items["schema_version"], "artifact_path": items_record["path"], "sha256": items_record["sha256"], "grading_policy": items["grading_policy"], "summary": deepcopy(items["summary"]), "color_legend": deepcopy(items["color_legend"]), "interaction": {"color_source": "grade.color_token", "popover_source": "popover", "not_measured_behavior": "neutral_not_failure"}},
+        "locator_explanations": [deepcopy(item["locator_explanation"]) for item in items["locator_assessments"]],
+        "heading_access_causal_provenance": deepcopy(items["heading_access_causal_provenance"]),
+        "score_views": {"primary_view_id": "canonical_as_delivered", "adjustment_status": "none", "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "score": calculation["total_score"], "maximum": 100, "calculation": calculation_ref, "structure_audit": structure_ref, "causal_attribution": "primary_observed_result", "provenance_artifacts": []}]},
+        "methodology": {
+            "rubric_version": calculation["rubric_version"],
+            "calculation_profile": calculation["calculation_profile"],
+            "locator_utility": "Independent page treatment and complete-path fit remain separate diagnostics.",
+            "diagnostic_minimum_rule": "The displayed locator grade is 100 times min(treatment, complete-path fit).",
+            "binary_keep_rule": "Only supported locators receive Page-reference Reliability keep credit.",
+            "keep_precision": "Supported divided by assessable registered locator assignments.",
+            "editorial_selectivity_separate": True,
+            "long_string_review": "More than six displayed locators triggers review.",
+            "long_range_review": "A continuous range longer than ten pages triggers review.",
+            "numeric_trigger_is_automatic_defect": False,
+        },
+        "comparability": deepcopy(result["comparison_key"]),
+        "disclosures": ["Item grades are diagnostic and do not reconstruct the six-dimension score.", "Critical gates are reported separately from score arithmetic."],
+        "limitations": deepcopy(result["limitations"]),
+        "evidence_index": {"calculation": calculation_ref, "structure_audit": structure_ref, "item_assessments": {"artifact_path": items_record["path"], "sha256": items_record["sha256"]}},
+    }
+    core.validate_schema_document(report, "web-report-v9.schema.json", "Generated V8 web report")
+    return report
+
+
+def _validate_structure_inventory(structure: Mapping[str, Any], inventory: Mapping[str, Any]) -> None:
+    denominator = structure["candidate_denominator"]
+    nodes = [{key: item[key] for key in ("node_id", "heading_path", "role")} for item in inventory["heading_nodes"]]
+    references = [item["reference_id"] for item in inventory["cross_references"]]
+    path_ids = [item["path_id"] for item in inventory["paths"] if item["locator_ids"]]
+    core.require(denominator["nodes"] == nodes, "structure_candidate_denominator_mismatch", "Structure node denominator differs from the registered item inventory.")
+    for values, field, count_field, hash_field in (
+        (references, "cross_reference_ids", "cross_reference_count", "cross_reference_id_set_sha256"),
+        (path_ids, "locator_bearing_path_ids", "locator_bearing_path_count", "locator_bearing_path_id_set_sha256"),
+    ):
+        core.require(denominator[field] == values and denominator[count_field] == len(values) and denominator[hash_field] == id_set_hash(values), "structure_candidate_denominator_mismatch", f"Structure {field} differs from the registered item inventory.")
+    core.require(denominator["node_count"] == len(nodes) and denominator["node_id_set_sha256"] == id_set_hash([item["node_id"] for item in nodes]), "structure_candidate_denominator_mismatch", "Structure node count or hash differs from the registered item inventory.")
+    metrics = structure["metrics"]
+    core.require(metrics["total_paths"] == len(inventory["paths"]) and metrics["total_nodes"] == len(nodes) and metrics["expanded_locators"] == len(inventory["locators"]), "structure_candidate_metric_mismatch", "Structure metrics differ from the registered item inventory.")
+
+
+def command_register_structure(args: argparse.Namespace) -> None:
+    command = "register-structure-audit"
+    state_path = Path(args.state).resolve()
+    try:
+        with evaluation_mutation_lock(state_path):
+            state, warnings = _transition_state(state_path, "structure_audit")
+            _, candidate_record, _ = _registered_documents(state, state_path, stage="candidate_normalization", schema_version="candidate-index-v2", schema_name="candidate-index-v2.schema.json")[0]
+            inventory, inventory_record, _ = _registered_documents(state, state_path, stage="candidate_normalization", schema_version="subject-index-item-inventory-v2", schema_name="item-inventory-v2.schema.json")[0]
+            locator_entries = _registered_documents(state, state_path, stage="locator_audit", schema_version="locator-audit-v2", schema_name="locator-audit-v2.schema.json", many=True)
+            missing_entries = _registered_documents(state, state_path, stage="missing_access_audit", schema_version="missing-access-audit-v1", schema_name="missing-access-audit.schema.json", many=True)
+            structure_path = Path(args.input).resolve()
+            core.require(structure_path.is_file(), "input_not_found", f"Structure audit does not exist: {structure_path}")
+            relative = portable_relative_path(structure_path, state_path.parent)
+            core.require(not any(item.get("path") == relative for item in state["artifacts"]), "registered_output_collision", "Structure audit path is already registered.", relative)
+            structure = core.load_json(structure_path, "Structure audit")
+            core.validate_schema_document(structure, "structure-audit-v6.schema.json", "Structure audit")
+            validate_structure_audit_semantics(structure)
+            validate_heading_access_provenance(
+                structure,
+                (item[0] for item in locator_entries),
+                (item[0] for item in missing_entries),
+            )
+            core.require(structure["evaluation_id"] == state["evaluation_id"], "evaluation_identity_mismatch", "Structure audit evaluation_id differs from canonical state.")
+            core.require(structure["candidate_sha256"] == state["candidate"]["candidate_sha256"] == inventory["candidate_sha256"], "candidate_identity_mismatch", "Structure audit candidate identity differs from registered candidate artifacts.")
+            core.require(structure["audit_mode"] == state["configuration"]["audit_mode"], "audit_mode_identity_mismatch", "Structure audit mode differs from canonical state.")
+            core.require(candidate_record["sha256"] == state["candidate"]["normalized_sha256"] and inventory_record["path"] == state["candidate"]["item_inventory_path"], "candidate_identity_mismatch", "Canonical candidate artifact binding is inconsistent.")
+            _validate_structure_inventory(structure, inventory)
+            payload = structure_path.read_bytes()
+            stamp = now()
+            record = _artifact_record(state_path.parent, structure_path, payload, stage="structure_audit", artifact_type="structure_audit", schema_version="structure-audit-v6", stamp=stamp, input_sha256=(candidate_record["sha256"], inventory_record["sha256"]))
+            updated = _add_records_and_complete(state, state_path, "structure_audit", [record], "Validated and registered the native V8 structure audit atomically.")
+            save_state(state_path, updated)
+        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "artifacts_registered": [record["path"]], "artifacts_written": [str(state_path)], "next_actions": [next_stage(updated)], "warnings": warnings})
+    except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, ValueError) as exc:
+        if isinstance(exc, (core.CalculationError, StructureAuditError, HeadingAccessProvenanceError)):
+            error = {"code": exc.code, "message": exc.message, "details": exc.details}
+        else:
+            error = {"code": "structure_registration_error", "message": str(exc)}
+        core.emit({"command": command, "ok": False, "error": error}, 1)
+
+
+def _calculation_loaded_from_state(
+    state: Mapping[str, Any], state_path: Path, config_path: Path
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, Any]]:
+    policy, policy_record, policy_path = _registered_documents(state, state_path, stage="define_policy", schema_version="subject-index-evaluation-policy-v4", schema_name="evaluation-policy-v4.schema.json")[0]
+    validate_v8_policy(policy)
+    manifest, manifest_record, manifest_path = _registered_documents(state, state_path, stage="chunk_definition", schema_version="chunk-manifest-v1", schema_name="chunk-manifest.schema.json")[0]
+    locator_entries = _registered_documents(state, state_path, stage="locator_audit", schema_version="locator-audit-v2", schema_name="locator-audit-v2.schema.json", many=True)
+    missing_entries = _registered_documents(state, state_path, stage="missing_access_audit", schema_version="missing-access-audit-v1", schema_name="missing-access-audit.schema.json", many=True)
+    structure, structure_record, structure_path = _registered_documents(state, state_path, stage="structure_audit", schema_version="structure-audit-v6", schema_name="structure-audit-v6.schema.json")[0]
+    validate_structure_audit_semantics(structure)
+    validate_heading_access_provenance(
+        structure,
+        (item[0] for item in locator_entries),
+        (item[0] for item in missing_entries),
+    )
+    inventory, inventory_record, _ = _registered_documents(state, state_path, stage="candidate_normalization", schema_version="subject-index-item-inventory-v2", schema_name="item-inventory-v2.schema.json")[0]
+    candidate, _, _ = _registered_documents(state, state_path, stage="candidate_normalization", schema_version="candidate-index-v2", schema_name="candidate-index-v2.schema.json")[0]
+    core.require(inventory_record["path"] == state["candidate"]["item_inventory_path"] and candidate["candidate_sha256"] == inventory["candidate_sha256"], "candidate_identity_mismatch", "Registered candidate and item inventory differ.")
+
+    def reference(record: Mapping[str, Any]) -> dict[str, str]:
+        target = resolve_artifact_path(state_path, record["path"])
+        return {"path": Path(os.path.relpath(target, config_path.parent)).as_posix(), "sha256": record["sha256"]}
+
+    config = {
+        "schema_version": "subject-index-dimension-calculation-input-v2",
+        "evaluation_id": state["evaluation_id"],
+        "audit_mode": state["configuration"]["audit_mode"],
+        "inputs": {
+            "policy": reference(policy_record),
+            "chunk_manifest": reference(manifest_record),
+            "locator_audits": [reference(item[1]) for item in locator_entries],
+            "missing_access_audits": [reference(item[1]) for item in missing_entries],
+            "structure_audit": reference(structure_record),
+        },
+    }
+    core.validate_config_shape(config)
+    core.validate_schema_document(config, "dimension-calculation-input.schema.json", "Generated calculation input")
+    locator_loaded = []
+    missing_loaded = []
+    artifacts = [{"role": "policy", "path": config["inputs"]["policy"]["path"], "sha256": policy_record["sha256"], "schema_version": policy["schema_version"]}]
+    paths = [policy_path]
+    for prefix, source, destination in (("locator_audit", locator_entries, locator_loaded), ("missing_access_audit", missing_entries, missing_loaded)):
+        for index, (document, record, path) in enumerate(source):
+            artifact = {"role": f"{prefix}[{index}]", "path": reference(record)["path"], "sha256": record["sha256"], "schema_version": document["schema_version"]}
+            destination.append((document, artifact, path))
+            artifacts.append(artifact)
+            paths.append(path)
+    manifest_artifact = {"role": "chunk_manifest", "path": config["inputs"]["chunk_manifest"]["path"], "sha256": manifest_record["sha256"], "schema_version": manifest["schema_version"]}
+    structure_artifact = {"role": "structure_audit", "path": config["inputs"]["structure_audit"]["path"], "sha256": structure_record["sha256"], "schema_version": structure["schema_version"]}
+    artifacts.extend([structure_artifact, manifest_artifact])
+    paths.extend([structure_path, manifest_path])
+    loaded = {
+        "config": config,
+        "policy": policy,
+        "locator_documents": [item[0] for item in locator_loaded],
+        "missing_documents": [item[0] for item in missing_loaded],
+        "structure": structure,
+        "chunk_manifest": manifest,
+        "locator_input_entries": locator_loaded,
+        "missing_input_entries": missing_loaded,
+        "input_artifacts": artifacts,
+        "input_paths": paths,
+        "config_path": config_path,
+    }
+    return loaded, inventory, inventory_record, loaded["locator_documents"], loaded["missing_documents"], structure_record
+
+
+def command_score_state(args: argparse.Namespace) -> None:
+    command = "score-index"
+    state_path = Path(args.state).resolve()
+    try:
+        with evaluation_mutation_lock(state_path):
+            state, warnings = _transition_state(state_path, "scoring")
+            root = state_path.parent
+            output_dir = _state_output_path(root, args.output_dir)
+            outputs = {
+                "input": output_dir / "dimension-calculation-input.v2.json",
+                "calculation": output_dir / "dimension-calculations.v5.json",
+                "items": output_dir / "item-assessments.v7.json",
+                "metadata": output_dir / "projection-metadata.v2.json",
+                "result": output_dir / "evaluation-result.v11.json",
+            }
+            collisions = [str(path) for path in outputs.values() if path.exists()]
+            core.require(not collisions, "output_exists", "Refusing to overwrite scoring output.", collisions)
+            loaded, inventory, inventory_record, locator_documents, missing_documents, structure_record = _calculation_loaded_from_state(state, state_path, outputs["input"])
+            calculation = calculate_loaded(loaded)
+            core.require(calculation["status"] == "scored", "v8_score_incomplete", "Current full-state inputs did not produce a complete score.", calculation["status"])
+            core.validate_schema_document(calculation, "dimension-calculations-v5.schema.json", "Generated V8 calculation")
+            items = _current_item_assessments(inventory, inventory_record, calculation, loaded["structure"], locator_documents, missing_documents)
+            stamp = now()
+            input_payload = _json_bytes(loaded["config"])
+            calculation_payload = _json_bytes(calculation)
+            items_payload = _json_bytes(items)
+            input_hashes = [item["sha256"] for item in loaded["input_artifacts"]]
+            input_record = _artifact_record(root, outputs["input"], input_payload, stage="scoring", artifact_type="dimension_calculation_input", schema_version="subject-index-dimension-calculation-input-v2", stamp=stamp, input_sha256=input_hashes)
+            calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version="subject-index-dimension-calculations-v5", stamp=stamp, input_sha256=input_hashes)
+            items_record = _artifact_record(root, outputs["items"], items_payload, stage="scoring", artifact_type="item_assessments", schema_version="subject-index-item-assessments-v7", stamp=stamp, input_sha256=(calculation_record["sha256"], inventory_record["sha256"], structure_record["sha256"]))
+            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"])
+            metadata_payload = _json_bytes(metadata)
+            metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version="subject-index-v8-projection-metadata-v2", stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
+            result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)
+            result_payload = _json_bytes(result)
+            result_record = _artifact_record(root, outputs["result"], result_payload, stage="scoring", artifact_type="evaluation_result", schema_version="subject-index-evaluation-result-v11", stamp=stamp, visibility="public", input_sha256=(calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
+            records = [input_record, calculation_record, items_record, metadata_record, result_record]
+            updated = _add_records_and_complete(state, state_path, "scoring", records, "Assembled registered inputs, calculated V8 dimensions, and registered the validated V11 result atomically.")
+            for path, payload in zip(outputs.values(), (input_payload, calculation_payload, items_payload, metadata_payload, result_payload), strict=True):
+                _atomic_write(path, payload)
+            save_state(state_path, updated)
+        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "total_score": calculation["total_score"], "artifacts_registered": [record["path"] for record in records], "artifacts_written": [str(path) for path in outputs.values()] + [str(state_path)], "next_actions": [next_stage(updated)], "warnings": warnings})
+    except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, ValueError) as exc:
+        if isinstance(exc, (core.CalculationError, StructureAuditError, HeadingAccessProvenanceError)):
+            error = {"code": exc.code, "message": exc.message, "details": exc.details}
+        else:
+            error = {"code": "scoring_registration_error", "message": str(exc)}
+        core.emit({"command": command, "ok": False, "error": error}, 1)
+
+
+def command_build_report_state(args: argparse.Namespace) -> None:
+    command = "build-web-report"
+    state_path = Path(args.state).resolve()
+    try:
+        with evaluation_mutation_lock(state_path):
+            state, warnings = _transition_state(state_path, "web_report")
+            result, result_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-evaluation-result-v11", schema_name="evaluation-result-v11.schema.json")[0]
+            calculation, calculation_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-dimension-calculations-v5", schema_name="dimension-calculations-v5.schema.json")[0]
+            items, items_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-item-assessments-v7", schema_name="item-assessments-v7.schema.json")[0]
+            metadata, metadata_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-v8-projection-metadata-v2", schema_name="v8-projection-metadata-v2.schema.json")[0]
+            structure, structure_record, _ = _registered_documents(state, state_path, stage="structure_audit", schema_version="structure-audit-v6", schema_name="structure-audit-v6.schema.json")[0]
+            core.require(calculation["calculation_sha256"] == core.canonical_hash(calculation, "calculation_sha256"), "calculation_self_hash_mismatch", "Registered calculation self-hash does not reconstruct.")
+            core.require(metadata["projection_metadata_sha256"] == core.canonical_hash(metadata, "projection_metadata_sha256"), "projection_metadata_self_hash_mismatch", "Registered projection metadata self-hash does not reconstruct.")
+            core.require(result["evaluation_id"] == calculation["evaluation_id"] == items["evaluation_id"] == state["evaluation_id"], "evaluation_identity_mismatch", "Registered scoring artifacts use different evaluation identities.")
+            core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
+            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / "web-report.v9.json"))
+            core.require(not output.exists(), "output_exists", "Refusing to overwrite web report.", str(output))
+            report = _web_report(result=result, calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure=structure, structure_record=structure_record, metadata=metadata)
+            payload = _json_bytes(report)
+            stamp = now()
+            record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version="subject-index-web-report-v9", stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
+            updated = _add_records_and_complete(state, state_path, "web_report", [record], "Built and registered the validated current V8 web-report projection atomically.")
+            _atomic_write(output, payload)
+            save_state(state_path, updated)
+        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "report_id": report["report_id"], "artifacts_registered": [record["path"]], "artifacts_written": [str(output), str(state_path)], "next_actions": [], "warnings": warnings})
+    except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, ValueError) as exc:
+        if isinstance(exc, (core.CalculationError, StructureAuditError, HeadingAccessProvenanceError)):
+            error = {"code": exc.code, "message": exc.message, "details": exc.details}
+        else:
+            error = {"code": "web_report_registration_error", "message": str(exc)}
+        core.emit({"command": command, "ok": False, "error": error}, 1)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1504,21 +1808,22 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--input", required=True)
     preflight.add_argument("--output")
     preflight.set_defaults(func=command_preflight)
-    derive = subparsers.add_parser(
-        "derive-structure-review",
-        help="Derive displayed-locator, range-span, and atomic-assignment review evidence.",
-    )
-    derive.add_argument("--normalized-candidate", required=True)
-    derive.add_argument("--item-inventory", required=True)
-    derive.add_argument("--structure-audit", required=True)
-    derive.add_argument("--audit-mode", required=True, choices=("full", "pilot"))
-    derive.add_argument("--output", required=True)
-    derive.set_defaults(func=command_derive_structure_review)
     calculate = subparsers.add_parser("calculate", help="Derive all six V8 ratings from frozen ledgers.")
     calculate.add_argument("--input", required=True)
-    calculate.add_argument("--structure-locator-review", required=True)
     calculate.add_argument("--output")
     calculate.set_defaults(func=command_calculate)
+    register_structure = subparsers.add_parser("register-structure", help="Validate and atomically register the current native structure audit.")
+    register_structure.add_argument("--state", required=True)
+    register_structure.add_argument("--input", required=True)
+    register_structure.set_defaults(func=command_register_structure)
+    score = subparsers.add_parser("score", help="Build, validate, and atomically register all current V8 scoring artifacts from canonical state.")
+    score.add_argument("--state", required=True)
+    score.add_argument("--output-dir", default="scoring", help="Output directory inside the evaluation directory (default: scoring).")
+    score.set_defaults(func=command_score_state)
+    report = subparsers.add_parser("build-report", help="Build, validate, and atomically register the current V8 web report from canonical state.")
+    report.add_argument("--state", required=True)
+    report.add_argument("--output", help="Output path inside the evaluation directory (default: beside the registered result).")
+    report.set_defaults(func=command_build_report_state)
     return parser
 
 

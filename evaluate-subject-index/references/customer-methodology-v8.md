@@ -18,8 +18,6 @@ V8 changes Page-reference Reliability arithmetic by replacing weighted locator p
 
 V8 also clarifies several evidence-judgment rules, such as how comparative facts, attributed observations, contentless mentions, and differences in stance are classified. Those policy clarifications do not change a scoring formula, but they may change a locator's treatment classification or keep decision in a new V8 audit. When they do, any dimension that uses the changed judgment may produce a different result. For example, Editorial Selectivity retains its existing formula and credit mapping but may receive different treatment-class inputs.
 
-For that reason, “formula unchanged” does not mean that a new V8 evaluation must reproduce a V7 result. Existing frozen V7 evaluations are not changed or reinterpreted.
-
 ## Reliability method
 
 Each locator receives two diagnostic assessments: how much independently useful information is present and how well the complete index path fits it. Comparative or attributed wording does not reduce treatment by itself. The lower diagnostic score produces the displayed locator grade.
@@ -34,8 +32,10 @@ When heading access is adverse, the report lists the specific contributing cause
 
 A continuous page range counts as one displayed locator for scanning and subdivision review, while its pages remain separate atomic assignments for support auditing. More than six displayed locators or a range longer than ten pages triggers review, not an automatic penalty. A defect requires evidence that the structure materially harms retrieval and that a meaningful conceptual alternative exists.
 
+The structure artifact binds complete node, cross-reference, and locator-bearing-path denominators. Full audits store exceptions and one deterministic pass attestation instead of repeating a pass row for every heading. Pilot audits keep unreviewed identities explicitly unmeasured so uncertainty remains visible.
+
 ## Reproducibility
 
 The state file records the active configuration and artifact inventory. Hashes link related records and catch accidental mix-ups; they are not security attestations. Checkpoints are optional recovery snapshots and do not have to match an earlier archive checksum to resume.
 
-This repository supports the current V8 workflow only. Existing frozen evaluations must be newly instantiated and frozen to use V8.
+This repository supports the current V8 workflow and schemas.

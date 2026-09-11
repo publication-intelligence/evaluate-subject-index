@@ -89,14 +89,14 @@ def source_evidence_index(
     }
     decisions = {
         record.get("review_id"): record
-        for record in structure.get("v7_architecture_review_decisions", [])
+        for record in structure.get("locator_architecture", {}).get("triggered_reviews", [])
         if isinstance(record, Mapping) and isinstance(record.get("review_id"), str)
     }
     for source_id, record in (*nodes.items(), *references.items(), *decisions.items()):
         _add_source(sources, source_id, record)
         if source_id and source_id.startswith("ARCHREV-"):
             _add_source(sources, record.get("path_id"), record)
-    for defect in structure.get("v5_scoring_context", {}).get("defects", []):
+    for defect in structure.get("defects", []):
         if not isinstance(defect, Mapping):
             continue
         defect_id = defect.get("defect_id")
@@ -115,16 +115,29 @@ def source_evidence_index(
 def causal_provenance_by_node(structure: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Return the deterministic, display-safe projection in NODE-* order."""
 
+    exceptions = {
+        node.get("node_id"): node
+        for node in structure.get("node_judgments", [])
+        if isinstance(node, Mapping)
+    }
+    attestation = structure.get("full_scope_attestation", {})
+    pilot_passes = set(attestation.get("pilot_pass_node_ids", []))
     projected: list[dict[str, Any]] = []
-    for node in sorted(
-        structure.get("node_judgments", []), key=lambda item: str(item.get("node_id", ""))
-    ):
-        component = node.get("component_judgments", {}).get(
-            "heading_access_architecture", {}
-        )
+    for identity in structure.get("candidate_denominator", {}).get("nodes", []):
+        node_id = identity.get("node_id")
+        node = exceptions.get(node_id, {})
+        component = node.get("component_judgments", {}).get("heading_access_architecture", {})
+        status = component.get("status")
+        if status is None:
+            status = (
+                "passes"
+                if attestation.get("unlisted_node_disposition") == "passes"
+                or node_id in pilot_passes
+                else "not_measured"
+            )
         record = {
-            "node_id": node.get("node_id"),
-            "status": component.get("status"),
+            "node_id": node_id,
+            "status": status,
             "causal_findings": deepcopy(component.get("causal_findings", [])),
         }
         if "primary_finding_id" in component:

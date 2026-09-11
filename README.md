@@ -36,9 +36,22 @@ Important helpers:
 - `candidate_preparation_cli.py` — normalize, validate, and register a contract-valid candidate.
 - `page_chunk_cli.py` — prepare the complete registered-state locator-packet batch after candidate registration.
 - `parallel_candidate_audit_cli.py` — validate/register audit chunks returned by separate chats.
-- `dimension_score_v8_cli.py` — current V8 preflight, structure review, and calculation.
-- `item_grade_v8_cli.py` — current V8 item and heading-access causal projection.
-- `worker_prompt_cli.py` — locator and global-structure worker prompts, including the causal provenance contract.
+- `dimension_score_v8_cli.py` — register the native structure audit, then assemble, score, and report from canonical state. It also exposes low-level preflight and calculation checks.
+- `item_grade_v8_cli.py` — low-level current V8 item-projection validation.
+
+The final three state transitions are typed and atomic:
+
+```bash
+python evaluate-subject-index/scripts/dimension_score_v8_cli.py register-structure \
+  --state /path/to/evaluation/evaluation-state.json \
+  --input /path/to/evaluation/structure-audit.v6.json
+python evaluate-subject-index/scripts/dimension_score_v8_cli.py score \
+  --state /path/to/evaluation/evaluation-state.json
+python evaluate-subject-index/scripts/dimension_score_v8_cli.py build-report \
+  --state /path/to/evaluation/evaluation-state.json
+```
+
+Each command resolves the exact registered current-schema inputs, validates their bytes and cross-artifact identities before writing, registers its outputs, and advances the one canonical state. Failed validation leaves state unchanged.
 
 See [SKILL.md](evaluate-subject-index/SKILL.md) and [workflow.md](evaluate-subject-index/references/workflow.md) for the operating contract.
 
@@ -83,9 +96,9 @@ Import validates archive safety, inventory, and current state structure. It does
 
 Chunk workers return current-schema JSON artifacts. The coordinator validates and registers selected files directly in state. Branches and pull requests are optional review/transport tools; GitHub receipts, blob proofs, merge evidence, recovery receipts, and matching checkpoint hashes are not required.
 
-## Compatibility policy
+## Current contract
 
-Only the current V8 workflow is exposed. Existing frozen evaluations must be newly instantiated and frozen under the V8 policy; historical migration commands and aliases are not provided.
+Only the current V8 workflow is exposed. Start each evaluation with the current V8 policy and schemas.
 
 ## Test
 

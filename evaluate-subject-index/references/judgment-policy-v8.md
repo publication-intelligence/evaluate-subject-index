@@ -18,7 +18,7 @@ Calibration:
 - “For example, Young (1794),” without further information remains weak presence and is not kept.
 - A source saying a fact “may suggest” does not exactly fit a heading that asserts the conclusion as established. Preserve the stance mismatch even when page treatment is substantive.
 
-Record treatment class, scope, error codes, severity, evidence IDs, and fit rationale consistently. Never weaken scope, relationship, chronology, attribution, compound-heading, or stance checks.
+Record treatment class, `complete_path_fit`, scope, error codes, severity, evidence IDs, and fit rationale consistently. `complete_path_fit` must be `exact_fit`, `material_partial_fit`, `material_mismatch`, `severe_mismatch`, `no_fit`, or `uninspectable`; do not derive it later from prose. Never weaken scope, relationship, chronology, attribution, compound-heading, or stance checks.
 
 ## Diagnostic grade and rating credit
 

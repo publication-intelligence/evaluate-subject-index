@@ -422,19 +422,14 @@ def command_split_pdf(args: argparse.Namespace) -> None:
             "owned_page_count": len(owned),
             "context_page_count": len(context - owned),
         })
-    inventory = {
-        "schema_version": "source-chunk-inventory-v1",
-        "source_filename": source_path.name,
-        "page_map_sha256": page_map.get("page_map_sha256"),
-        "chunk_manifest_sha256": manifest.get("chunk_manifest_sha256"),
-        "chunks": chunk_files,
-    }
-    inventory_path = output_dir / "source-chunk-inventory.json"
-    save_json(inventory_path, inventory)
     emit({
         "ok": True,
         "command": "split-pdf",
-        "artifact_written": str(inventory_path.resolve()),
+        "artifacts_written": [
+            path
+            for chunk in chunk_files
+            for path in (chunk["pdf"], chunk["sidecar"])
+        ],
         "chunk_count": len(chunk_files),
         "chunks": chunk_files,
     })
@@ -459,22 +454,6 @@ def require_registered_artifact(
     require(path.is_file(), "file_not_found", f"Registered artifact is not accessible: {path}")
     require(record.get("sha256") == sha256_file(path), "registered_artifact_hash_mismatch", f"Registered artifact bytes changed: {relative}")
     return record
-
-
-def registered_candidate_reference(state: dict[str, Any], state_path: Path, candidate: dict[str, Any]) -> dict[str, Any]:
-    matches: list[tuple[dict[str, Any], Path]] = []
-    for record in state["artifacts"]:
-        if record.get("stage") != "candidate_normalization" or record.get("artifact_type") != "candidate_ref":
-            continue
-        path = resolve_artifact_path(state_path, record["path"])
-        document = load_json(path)
-        if document.get("candidate_id") == candidate["candidate_id"] and document.get("candidate_sha256") == candidate["candidate_sha256"]:
-            matches.append((document, path))
-    require(len(matches) == 1, "candidate_reference_not_registered", "Expected one registered current candidate reference matching state.candidate.")
-    document, path = matches[0]
-    require_current_schema(document, "candidate-ref.schema.json", "Candidate reference")
-    require_registered_artifact(state, state_path, path, stage="candidate_normalization", schema_version="candidate-ref-v1")
-    return document
 
 
 def validated_chunk_owners(manifest: dict[str, Any], page_map: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], dict[int, str]]:
@@ -605,7 +584,7 @@ def prepare_locator_documents(
         "exceptions": exceptions,
         "exception_count": len(exceptions),
     }
-    require_current_schema(ledger, "candidate-locator-routing-exceptions.schema.json", "Locator routing-exception ledger")
+    require_current_schema(ledger, "candidate-locator-routing-exceptions.schema.json", "Locator routing failure diagnostic")
     return packets, ledger
 
 
@@ -663,9 +642,10 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
         candidate_state = state.get("candidate")
         require(isinstance(candidate_state, dict), "candidate_not_registered", "Canonical state has no registered candidate.")
         require(candidate_state.get("candidate_id") == candidate["candidate_id"], "candidate_identity_mismatch", "Selected candidate ID differs from state.candidate.")
-        require(candidate_state.get("sha256") == candidate["candidate_sha256"], "candidate_identity_mismatch", "Selected candidate SHA-256 differs from state.candidate.")
+        require(candidate_state.get("candidate_sha256") == candidate["candidate_sha256"], "candidate_identity_mismatch", "Selected candidate SHA-256 differs from state.candidate.")
         require(candidate_state.get("schema_version") == candidate["schema_version"], "candidate_identity_mismatch", "Selected candidate schema differs from state.candidate.")
         require(resolve_artifact_path(state_path, candidate_state["normalized_path"]).resolve() == candidate_path, "candidate_path_mismatch", "Selected candidate is not the registered current normalized artifact.")
+        require(candidate_state.get("normalized_sha256") == sha256_file(candidate_path), "candidate_identity_mismatch", "Selected normalized candidate hash differs from state.candidate.")
         require(resolve_artifact_path(state_path, candidate_state["benchmark_path"]).resolve() == benchmark_path, "benchmark_path_mismatch", "Selected benchmark is not the candidate's registered frozen benchmark.")
         require(candidate_state.get("benchmark_sha256") == benchmark["benchmark_sha256"], "benchmark_identity_mismatch", "Candidate benchmark identity differs from the selected frozen benchmark.")
 
@@ -673,14 +653,9 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
         require_registered_artifact(state, state_path, page_map_path, stage="page_mapping", schema_version="page-map-v1")
         require_registered_artifact(state, state_path, manifest_path, stage="chunk_definition", schema_version="chunk-manifest-v1")
         require_registered_artifact(state, state_path, benchmark_path, stage="benchmark_freeze", schema_version="source-subject-benchmark-v2")
-        candidate_ref = registered_candidate_reference(state, state_path, candidate)
         source_sha = state["source"]["sha256"]
         require(page_map["source_sha256"] == source_sha, "page_map_identity_mismatch", "Page map source identity differs from canonical state.")
         require(candidate["page_map_sha256"] == page_map["page_map_sha256"], "candidate_page_map_mismatch", "Candidate references a different page map.")
-        require(candidate_ref["page_map_sha256"] == page_map["page_map_sha256"], "candidate_page_map_mismatch", "Candidate reference identifies a different page map.")
-        require(candidate_ref["chunk_manifest_sha256"] == manifest["chunk_manifest_sha256"], "candidate_chunk_manifest_mismatch", "Candidate reference identifies a different chunk manifest.")
-        require(candidate_ref["source"]["sha256"] == source_sha, "candidate_source_mismatch", "Candidate reference identifies a different source.")
-        require(candidate_ref["policy"]["rubric_version"] == state["configuration"]["rubric_version"], "candidate_rubric_mismatch", "Candidate reference does not identify the current V8 rubric.")
         require(manifest["page_map_sha256"] == page_map["page_map_sha256"], "chunk_manifest_identity_mismatch", "Chunk manifest references a different page map.")
         for field, expected in (
             ("evaluation_id", state["evaluation_id"]),
@@ -699,50 +674,51 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
             path = output_dir / f"candidate-locator-{packet['chunk_id']}.json"
             require_safe_output_path(path, root, "Candidate locator packet")
             packet_outputs.append((packet, path, json_bytes(packet)))
-        ledger_path = output_dir / "candidate-locator-routing-exceptions.json"
-        require_safe_output_path(ledger_path, root, "Locator routing-exception ledger")
-        ledger_bytes = json_bytes(ledger)
-        output_paths = {
-            path.resolve().relative_to(root.resolve()).as_posix()
-            for _, path, _ in packet_outputs
-        } | {ledger_path.resolve().relative_to(root.resolve()).as_posix()}
+        artifact_details = [
+            {"chunk_id": packet["chunk_id"], "path": path.resolve().relative_to(root.resolve()).as_posix(), "sha256": hashlib.sha256(payload).hexdigest(), **packet["summary"]}
+            for packet, path, payload in packet_outputs
+        ]
+        if ledger["exceptions"]:
+            diagnostic_path = output_dir / "candidate-locator-routing-exceptions.json"
+            require_safe_output_path(diagnostic_path, root, "Locator routing diagnostic")
+            diagnostic_relative = diagnostic_path.resolve().relative_to(root.resolve()).as_posix()
+            collision = next((item["path"] for item in state["artifacts"] if item.get("path") == diagnostic_relative), None)
+            require(collision is None, "registered_output_collision", "Locator routing diagnostic would overwrite a registered artifact.", [collision] if collision else [])
+            diagnostic_bytes = json_bytes(ledger)
+            replace_bytes_atomic(diagnostic_path, diagnostic_bytes)
+            diagnostic = {
+                "path": diagnostic_relative,
+                "sha256": hashlib.sha256(diagnostic_bytes).hexdigest(),
+                "exception_count": ledger["exception_count"],
+            }
+            emit({
+                "command": "prepare-locator-chunks", "ok": False,
+                "error": {
+                    "code": "locator_routing_exceptions",
+                    "message": "Resolve every routing exception before preparing locator packets.",
+                },
+                "evaluation_id": state["evaluation_id"], "candidate_id": candidate["candidate_id"],
+                "artifacts_written": [diagnostic["path"]],
+                "routing_diagnostic": diagnostic,
+                "counts": {"frozen_chunks": len(packets), "packets": 0, "routed_assignments": sum(item["locator_assignment_count"] for item in artifact_details), "routing_exceptions": ledger["exception_count"]},
+                "stage_status": stages["locator_chunk_preparation"]["status"],
+                "warnings": ["Resolve every routing exception before completing locator_chunk_preparation."],
+            }, 2)
+
+        output_paths = {item["path"] for item in artifact_details}
         collisions = sorted(
             item["path"] for item in state["artifacts"]
             if item.get("path") in output_paths and item.get("stage") != "locator_chunk_preparation"
         )
         require(not collisions, "registered_output_collision", "Locator output would overwrite an artifact registered to another stage.", collisions)
-
         for _, path, payload in packet_outputs:
             replace_bytes_atomic(path, payload)
-        replace_bytes_atomic(ledger_path, ledger_bytes)
-        artifact_details = [
-            {"chunk_id": packet["chunk_id"], "path": path.resolve().relative_to(root.resolve()).as_posix(), "sha256": hashlib.sha256(payload).hexdigest(), **packet["summary"]}
-            for packet, path, payload in packet_outputs
-        ]
-        ledger_detail = {
-            "path": ledger_path.resolve().relative_to(root.resolve()).as_posix(),
-            "sha256": hashlib.sha256(ledger_bytes).hexdigest(),
-            "exception_count": ledger["exception_count"],
-        }
-        if ledger["exceptions"]:
-            emit({
-                "command": "prepare-locator-chunks", "ok": False,
-                "evaluation_id": state["evaluation_id"], "candidate_id": candidate["candidate_id"],
-                "artifacts_written": [item["path"] for item in artifact_details] + [ledger_detail["path"]],
-                "locator_packets": artifact_details, "routing_exception_ledger": ledger_detail,
-                "counts": {"frozen_chunks": len(packets), "packets": len(packets), "routed_assignments": sum(item["locator_assignment_count"] for item in artifact_details), "routing_exceptions": ledger["exception_count"]},
-                "stage_status": stages["locator_chunk_preparation"]["status"],
-                "next_actions": [{"command": "resolve-locator-routing-exceptions", "available": True}],
-                "warnings": ["Resolve every routing exception before completing locator_chunk_preparation."],
-            }, 2)
-
         updated = deepcopy(state)
         stamp = utc_now()
         records = [
             locator_artifact_record(path, root, "candidate_locator_chunk", packet["schema_version"], stamp)
             for packet, path, _ in packet_outputs
         ]
-        records.append(locator_artifact_record(ledger_path, root, "candidate_locator_routing_exceptions", ledger["schema_version"], stamp))
         updated["artifacts"] = [item for item in updated["artifacts"] if item.get("stage") != "locator_chunk_preparation"] + records
         updated["artifacts"].sort(key=lambda item: item["path"])
         updated["stages"]["locator_chunk_preparation"] = {
@@ -757,8 +733,8 @@ def command_prepare_locator_chunks(args: argparse.Namespace) -> None:
     emit({
         "command": "prepare-locator-chunks", "ok": True,
         "evaluation_id": updated["evaluation_id"], "candidate_id": candidate["candidate_id"],
-        "artifacts_written": [item["path"] for item in artifact_details] + [ledger_detail["path"]],
-        "locator_packets": artifact_details, "routing_exception_ledger": ledger_detail,
+        "artifacts_written": [item["path"] for item in artifact_details],
+        "locator_packets": artifact_details,
         "counts": {"frozen_chunks": len(packets), "packets": len(packets), "routed_assignments": sum(item["locator_assignment_count"] for item in artifact_details), "routing_exceptions": 0},
         "stage_status": "completed", "next_actions": [] if action is None else [action],
         "warnings": [*warnings, *final_warnings],

@@ -12,7 +12,17 @@ python scripts/state_cli.py validate --state evaluation-state.json
 python scripts/state_cli.py set-stage --state evaluation-state.json ...
 ```
 
-State V6 is the only control inventory.
+State V6 is the only control inventory. Generic `set-stage` does not complete benchmark review, benchmark freeze, structure audit, scoring, or web report.
+
+## Benchmark review and freeze
+
+```bash
+python scripts/benchmark_review_cli.py screen --draft benchmark/source-benchmark.draft.v1.json --output validation/source-benchmark-review-inventory.json
+python scripts/benchmark_review_cli.py validate-review --draft benchmark/source-benchmark.draft.v1.json --inventory validation/source-benchmark-review-inventory.json --review validation/source-benchmark-review.v1.json
+python scripts/benchmark_review_cli.py freeze --state evaluation-state.json --draft benchmark/source-benchmark.draft.v1.json --inventory validation/source-benchmark-review-inventory.json --review validation/source-benchmark-review.v1.json --final benchmark/source-benchmark.v1.json
+```
+
+The inventory is a temporary deterministic queue. Freeze recomputes it, validates exact review coverage and approved changes, registers only the review ledger and final benchmark, and completes both stages atomically.
 
 ## Checkpoint and resume
 
@@ -32,6 +42,7 @@ python scripts/candidate_preparation_cli.py register --benchmark source-benchmar
 ```
 
 `normalize` validates the published candidate-layout schema before writing anything. Format-specific conversion is outside the skill. Registration is local and does not require publication evidence.
+Clean normalization writes only the normalized candidate, fidelity layout extraction, and item inventory. `validate-private` computes the full exact-set QA gate without writing a pass artifact. A fourth, non-empty issues report exists only when normalization found issues and must be dispositioned before registration.
 
 ## Locator-packet preparation
 
@@ -44,9 +55,9 @@ python scripts/page_chunk_cli.py prepare-locator-chunks \
   --benchmark source-benchmark.json
 ```
 
-All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk and one `candidate-locator-routing-exceptions-v1` ledger, completes `locator_chunk_preparation`, and makes `audit-locators` available. Any validation or routing exception leaves canonical state unchanged.
+All supplied artifacts must be the exact current files registered in state. The output directory defaults to `locator-packets/` beside the normalized candidate; use `--output-dir` only for another path inside the same canonical evaluation directory. Success writes and registers one `candidate-locator-chunk-v1` file per frozen chunk, completes `locator_chunk_preparation`, and makes `audit-locators` available. A routing exception writes an unregistered `candidate-locator-routing-exceptions-v1` diagnostic instead of packet files and leaves canonical state unchanged. Other validation failures write nothing.
 
-This command uses the local candidate/benchmark binding recorded by `candidate_preparation_cli.py register`. It accepts no publication, repository, branch, commit, pull-request, blob-proof, preparation-receipt, or legacy benchmark-lock input.
+This command uses the local candidate/benchmark binding recorded by `candidate_preparation_cli.py register`. It accepts no publication, repository, branch, commit, pull-request, blob-proof, preparation-receipt, or benchmark-lock input.
 
 ## Parallel audit chunks
 
@@ -58,6 +69,10 @@ python scripts/parallel_candidate_audit_cli.py register-audits --audit-kind miss
 ```
 
 Repeat `--audit` for the selected chunk files. Locator calls pair them with `--locator-packet`. Missing-access calls include the complete registered locator-audit set through repeated `--locator-audit`.
+Add `--replace-complete-batch` only when replacing an already registered locator
+or missing-access batch. Replacement requires exactly one valid audit per frozen
+chunk, completes that audit stage, and invalidates all later stage and artifact
+registrations without deleting their files.
 
 Source-discovery chunks use the same local pattern:
 
@@ -69,29 +84,32 @@ python scripts/parallel_discovery_cli.py register-discoveries ...
 ## Scoring
 
 ```bash
+python scripts/dimension_score_v8_cli.py register-structure \
+  --state evaluation-state.json \
+  --input structure-audit.v6.json
+python scripts/dimension_score_v8_cli.py score \
+  --state evaluation-state.json
+python scripts/dimension_score_v8_cli.py build-report \
+  --state evaluation-state.json
+```
+
+`register-structure` validates the native V6 ledger, its exact candidate denominator, and every adverse heading-access causal finding before registering it. `score` resolves and verifies the registered policy, manifest, candidate, inventory, locator audits, missing-access audits, and structure audit; it then writes and registers calculation input V2, calculations V5, item assessments V7, projection metadata V2, and result V11. `build-report` validates the registered scoring set and writes web report V9. Each successful command advances canonical state under its mutation lock. Validation failure writes no output and leaves state unchanged.
+
+For isolated calculation diagnostics, the lower-level commands remain available:
+
+```bash
 python scripts/dimension_score_v8_cli.py preflight --input dimension-calculation-input.json
-python scripts/dimension_score_v8_cli.py derive-structure-review \
-  --normalized-candidate candidate-index.json \
-  --item-inventory item-inventory.json \
-  --structure-audit structure-audit.json \
-  --audit-mode full \
-  --output structure-locator-review.json
 python scripts/dimension_score_v8_cli.py calculate \
   --input dimension-calculation-input.json \
-  --structure-locator-review structure-locator-review.json \
   --output dimension-calculations.json
 python scripts/item_grade_v8_cli.py build-assessments \
   --base-items base-item-assessments.json \
   --calculation dimension-calculations.json \
-  --structure-locator-review structure-locator-review.json \
   --structure-audit structure-audit.json \
   --locator-audit locator-audit.CHUNK-001.v2.json \
-  --missing-access-audit missing-access-audit.CHUNK-001.json \
   --output item-assessments.json
 ```
 
-Render the global-structure worker contract with `worker_prompt_cli.py render-structure-audit`. The generated prompt requires `structure-audit-v6` causal findings and explicitly keeps them outside scoring.
+For a frozen V5 structure audit, `item_grade_v8_cli.py project-structure-causality` creates an exact-hash-bound V6 copy that adds only score-free causal metadata.
 
-For a frozen V8 run whose structure audit predates the causal contract, `item_grade_v8_cli.py project-structure-causality` creates a new `structure-audit-v6` projection from the frozen V5 audit plus an exact-hash-bound `subject-index-heading-access-causal-projection-input-v1`. Repeat `--locator-audit` and `--missing-access-audit` so source and evidence IDs can be checked. When building item assessments from that projection, pass the unchanged V5 audit as `--causal-projection-source`; the CLI verifies exact non-causal content equivalence after removing projection metadata. The command reports `scores_recomputed: false` and never overwrites the frozen input.
-
-Historical migration and compatibility commands are intentionally absent.
+The calculation input binds `structure_audit` directly; no intermediate structure artifact or derivation command is needed. The canonical `score` command assembles that input from state, so hand-authoring it is unnecessary in a normal run.

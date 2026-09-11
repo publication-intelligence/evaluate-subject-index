@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SCHEMAS = ROOT / "references" / "schemas"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(ROOT / "tests"))
 
 from heading_access_provenance import (  # noqa: E402
     HeadingAccessProvenanceError,
@@ -21,6 +22,7 @@ from heading_access_provenance import (  # noqa: E402
     validate_heading_access_provenance,
 )
 from item_grade_v8_cli import build_v8_assessments  # noqa: E402
+from test_structure_audit import audit as native_audit  # noqa: E402
 
 
 def finding(
@@ -42,28 +44,26 @@ def finding(
 
 
 def structure(findings: list[dict] | None = None) -> dict:
-    return {
-        "schema_version": "structure-audit-v6",
-        "evaluation_id": "EVAL-1",
-        "candidate_sha256": "a" * 64,
-        "node_judgments": [
-            {
-                "node_id": "NODE-1",
+    document = native_audit(node_count=1)
+    document["schema_version"] = "structure-audit-v6"
+    document["evaluation_id"] = "EVAL-1"
+    document["node_judgments"] = [{
+        "node_id": "NODE-00001",
+        "evidence_ids": ["EVID-NODE"],
+        "component_judgments": {
+            "conceptual_stance_fidelity": {"status": "passes", "summary": "Passes.", "evidence_ids": []},
+            "heading_access_architecture": {
+                "status": "minor_issues",
+                "summary": "Generic summary cannot stand alone.",
                 "evidence_ids": ["EVID-NODE"],
-                "component_judgments": {
-                    "heading_access_architecture": {
-                        "status": "minor_issues",
-                        "summary": "Generic summary cannot stand alone.",
-                        "evidence_ids": ["EVID-NODE"],
-                        "causal_findings": list(findings or []),
-                    }
-                },
-            }
-        ],
-        "cross_reference_judgments": [],
-        "v7_architecture_review_decisions": [],
-        "v5_scoring_context": {"defects": []},
-    }
+                "causal_findings": list(findings or []),
+            },
+            "mechanics_consistency": {"status": "passes", "summary": "Passes.", "evidence_ids": []},
+        },
+        "summary": "Heading access needs work.",
+        "confidence": "high",
+    }]
+    return document
 
 
 LOCATORS = [
@@ -166,7 +166,7 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
         cause = finding(
             "HAF-ARCH",
             "confirmed_subdivision_architecture",
-            "NODE-1",
+            "NODE-00001",
             "EVID-NODE",
             "SUB",
         )
@@ -185,7 +185,7 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
             "locator_assessments": [],
             "path_assessments": [],
             "heading_node_assessments": [
-                {"node_id": "NODE-1", "grade": grade, "popover": {"grade": grade}}
+                {"node_id": "NODE-00001", "grade": grade, "popover": {"grade": grade}}
             ],
             "cross_reference_assessments": [],
             "source_subject_assessments": [],
@@ -207,13 +207,15 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
                 }
             ],
         }
-        review = {
-            "schema_version": "subject-index-structure-locator-review-v1",
-            "review_id": "STRUCTREV-AAAAAAAAAAAA",
-            "review_sha256": "a" * 64,
-            "path_reviews": [],
+        calculation["candidate_sha256"] = "a" * 64
+        calculation["evidence_identity"] = {"candidate_sha256": "a" * 64}
+        calculation["structure_audit"] = {
+            key: document[key]
+            for key in ("candidate_denominator", "full_scope_attestation", "locator_architecture", "uncertainties")
         }
-        projected = build_v8_assessments(base, calculation, review, document)
+        calculation["structure_audit"]["schema_version"] = "structure-audit-v5"
+        base["candidate_sha256"] = "a" * 64
+        projected = build_v8_assessments(base, calculation, document)
         self.assertEqual(
             [cause], projected["heading_node_assessments"][0]["heading_access_causal_findings"]
         )
@@ -226,7 +228,7 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
         cause = finding(
             "HAF-ARCH",
             "confirmed_subdivision_architecture",
-            "NODE-1",
+            "NODE-00001",
             "EVID-NODE",
             "SUB",
         )
@@ -241,7 +243,7 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
             "evaluation_id": frozen.get("evaluation_id"),
             "candidate_sha256": frozen.get("candidate_sha256"),
             "node_causal_provenance": [
-                {"node_id": "NODE-1", "status": "minor_issues", "causal_findings": [cause]}
+                {"node_id": "NODE-00001", "status": "minor_issues", "causal_findings": [cause]}
             ],
         }
         projected = build_structure_causal_projection(frozen, projection)
