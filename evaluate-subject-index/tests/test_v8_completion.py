@@ -403,6 +403,33 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual(1, len(items["source_subject_assessments"]))
         self.assertEqual(1, len(json.loads((self.root / "candidate/missing-access-audit.CHUNK-001.v1.json").read_text())["reader_task_results"]))
 
+    def test_build_report_selects_result_bound_calculation_from_history(self) -> None:
+        registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
+        self.assertEqual(0, registered.returncode, registered.stdout + registered.stderr)
+        scored = self.run_cli("score", "--state", str(self.state_path))
+        self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
+
+        current_path = self.root / "scoring/dimension-calculations.v6.json"
+        historical_path = self.root / "history/dimension-calculations.v6.json"
+        historical_path.parent.mkdir()
+        historical_path.write_text(json.dumps(json.loads(current_path.read_text())))
+        state = json.loads(self.state_path.read_text())
+        state["artifacts"].append(self.record(
+            historical_path,
+            "scoring",
+            "dimension_calculations",
+            "subject-index-dimension-calculations-v6",
+        ))
+        state["artifacts"].sort(key=lambda item: item["path"])
+        self.state_path.write_text(json.dumps(state, indent=2) + "\n")
+
+        reported = self.run_cli("build-report", "--state", str(self.state_path))
+
+        self.assertEqual(0, reported.returncode, reported.stdout + reported.stderr)
+        report = json.loads((self.root / "scoring/web-report.v10.json").read_text())
+        result = json.loads((self.root / "scoring/evaluation-result.v12.json").read_text())
+        self.assertEqual(result["dimension_calculations"]["sha256"], report["calculation_explainer"]["sha256"])
+
 
 STAGES_INDEX = {stage: index for index, stage in enumerate(state_cli.STAGES)}
 

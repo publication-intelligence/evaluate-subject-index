@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -98,6 +101,59 @@ MISSING = [
 
 
 class HeadingAccessProvenanceTests(unittest.TestCase):
+    def test_projection_command_serializes_decimal_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            frozen = structure([])
+            frozen["schema_version"] = "structure-audit-v5"
+            frozen["density"]["targets"][0]["fit_rating"] = 3.5
+            component = frozen["node_judgments"][0]["component_judgments"][
+                "heading_access_architecture"
+            ]
+            component.pop("causal_findings")
+            structure_path = root / "structure-audit.v5.json"
+            structure_path.write_text(json.dumps(frozen, indent=2) + "\n")
+            projection = {
+                "schema_version": "subject-index-heading-access-causal-projection-input-v1",
+                "evaluation_id": frozen["evaluation_id"],
+                "candidate_sha256": frozen["candidate_sha256"],
+                "structure_audit_file_sha256": hashlib.sha256(structure_path.read_bytes()).hexdigest(),
+                "node_causal_provenance": [{
+                    "node_id": "NODE-00001",
+                    "status": "minor_issues",
+                    "causal_findings": [finding(
+                        "HAF-ARCH",
+                        "confirmed_subdivision_architecture",
+                        "NODE-00001",
+                        "EVID-NODE",
+                        "SUB",
+                    )],
+                }],
+            }
+            projection_path = root / "projection.json"
+            projection_path.write_text(json.dumps(projection, indent=2) + "\n")
+            output_path = root / "structure-audit.v6.json"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "item_grade_v8_cli.py"),
+                    "project-structure-causality",
+                    "--structure-audit",
+                    str(structure_path),
+                    "--projection-input",
+                    str(projection_path),
+                    "--output",
+                    str(output_path),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertEqual(3.5, json.loads(output_path.read_text())["density"]["targets"][0]["fit_rating"])
+
     def test_schema_rejects_generic_only_adverse_component(self) -> None:
         schema = json.loads((SCHEMAS / "structure-audit-v6.schema.json").read_text())
         resolver = jsonschema.RefResolver.from_schema(schema)
