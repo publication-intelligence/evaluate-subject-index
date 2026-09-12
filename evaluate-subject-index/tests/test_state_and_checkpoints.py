@@ -54,7 +54,7 @@ class StateAndCheckpointTests(unittest.TestCase):
             self.assertEqual(state["configuration"]["rubric_version"], "subject-index-rubric-v8")
             self.assertEqual(
                 state["configuration"]["scoring_identity"]["dimension_calculation_profile"],
-                "subject-index-dimension-calculation-v4",
+                "subject-index-dimension-calculation-v5",
             )
 
     def test_v5_state_identity_is_rejected(self) -> None:

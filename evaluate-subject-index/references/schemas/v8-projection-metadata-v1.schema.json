@@ -58,12 +58,12 @@
       "type": "object",
       "required": ["schema_version", "artifact_path", "sha256", "calculation_sha256", "rubric_version", "calculation_profile"],
       "properties": {
-        "schema_version": {"const": "subject-index-dimension-calculations-v5"},
+        "schema_version": {"const": "subject-index-dimension-calculations-v6"},
         "artifact_path": {"$ref": "#/$defs/portablePath"},
         "sha256": {"$ref": "#/$defs/sha256"},
         "calculation_sha256": {"$ref": "#/$defs/sha256"},
         "rubric_version": {"const": "subject-index-rubric-v8"},
-        "calculation_profile": {"const": "subject-index-dimension-calculation-v4"}
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v5"}
       },
       "additionalProperties": false
     },

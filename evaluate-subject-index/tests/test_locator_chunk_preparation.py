@@ -289,7 +289,7 @@ class LocatorFixture:
                 "rubric_version": "subject-index-rubric-v8",
                 "scoring_identity": {
                     "rubric_version": "subject-index-rubric-v8",
-                    "dimension_calculation_profile": "subject-index-dimension-calculation-v4",
+                    "dimension_calculation_profile": "subject-index-dimension-calculation-v5",
                 },
             },
             "stages": stages,

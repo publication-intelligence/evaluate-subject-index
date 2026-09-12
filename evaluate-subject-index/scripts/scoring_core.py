@@ -14,7 +14,7 @@ from typing import Any, Iterable, Sequence
 from schema_validation import schema_errors
 
 
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v1"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v5"
 INPUT_SCHEMA = "subject-index-dimension-calculation-input-v2"
 
 WEIGHTS = {
@@ -116,7 +116,6 @@ CRITICAL_BASIS_OWNERS = {
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
-FIVE = Decimal(5)
 HALF = Decimal("0.5")
 HUNDRED = Decimal(100)
 SIX_PLACES = Decimal("0.000001")
@@ -176,11 +175,7 @@ def displayed_number(value: Decimal | None, places: Decimal | None = None) -> fl
     return float(value)
 
 
-def round_half_step(value: Decimal) -> Decimal:
-    return (value / HALF).quantize(Decimal(1), rounding=ROUND_HALF_UP) * HALF
-
-
-def round_points(value: Decimal) -> Decimal:
+def round_overall_percentage(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
@@ -1205,7 +1200,7 @@ def cap_record(
 ) -> dict[str, Any]:
     return {
         "cap_id": cap_id,
-        "maximum_rating": displayed_number(maximum),
+        "maximum_percentage": displayed_number(maximum),
         "triggered": bool(triggered),
         "threshold": threshold,
         "observed": observed,
@@ -1217,10 +1212,10 @@ def choose_cap(evaluations: list[dict[str, Any]]) -> dict[str, Any] | None:
     triggered = [item for item in evaluations if item["triggered"]]
     if not triggered:
         return None
-    selected = sorted(triggered, key=lambda item: (decimal_value(item["maximum_rating"]), item["cap_id"]))[0]
+    selected = sorted(triggered, key=lambda item: (decimal_value(item["maximum_percentage"]), item["cap_id"]))[0]
     return {
         "cap_id": selected["cap_id"],
-        "maximum_rating": selected["maximum_rating"],
+        "maximum_percentage": selected["maximum_percentage"],
         "affected_evidence_ids": selected["affected_evidence_ids"],
     }
 
@@ -1229,7 +1224,7 @@ def apply_cap(base: Decimal, evaluations: list[dict[str, Any]]) -> tuple[Decimal
     applied = choose_cap(evaluations)
     if applied is None:
         return base, None
-    return min(base, decimal_value(applied["maximum_rating"])), applied
+    return min(base, decimal_value(applied["maximum_percentage"])), applied
 
 
 def finish_dimension(
@@ -1242,8 +1237,6 @@ def finish_dimension(
     lower_caps: list[dict[str, Any]],
     upper_caps: list[dict[str, Any]],
     audit_mode: str,
-    final_rounding: bool = True,
-    fixed_points: tuple[Decimal, Decimal, Decimal] | None = None,
     warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     weight = WEIGHTS[dimension_id]
@@ -1253,26 +1246,16 @@ def finish_dimension(
     central_post, central_applied = apply_cap(central_base, central_caps)
     lower_post, lower_applied = apply_cap(lower_base, lower_caps)
     upper_post, upper_applied = apply_cap(upper_base, upper_caps)
-    if final_rounding:
-        central_rounded = round_half_step(central_post)
-        lower_rounded = round_half_step(lower_post)
-        upper_rounded = round_half_step(upper_post)
-    else:
-        central_rounded = central_post
-        lower_rounded = lower_post
-        upper_rounded = upper_post
+    central_percentage = central_post
+    lower_percentage = lower_post
+    upper_percentage = upper_post
     lower_cap_id = lower_applied["cap_id"] if lower_applied else None
     upper_cap_id = upper_applied["cap_id"] if upper_applied else None
-    stable = lower_rounded == upper_rounded and lower_cap_id == upper_cap_id
+    stable = lower_percentage == upper_percentage and lower_cap_id == upper_cap_id
     scored = not full_not_measured and not insufficient_component and stable
-    if fixed_points is None:
-        points = round_points(central_rounded / FIVE * Decimal(weight)) if scored else None
-        lower_points = round_points(lower_rounded / FIVE * Decimal(weight))
-        upper_points = round_points(upper_rounded / FIVE * Decimal(weight))
-    else:
-        points = fixed_points[0] if scored else None
-        lower_points = fixed_points[1]
-        upper_points = fixed_points[2]
+    contribution = central_percentage * Decimal(weight) / HUNDRED if scored else None
+    lower_contribution = lower_percentage * Decimal(weight) / HUNDRED
+    upper_contribution = upper_percentage * Decimal(weight) / HUNDRED
     if full_not_measured:
         status = "not_scored_incomplete_full_audit"
     elif insufficient_component or not stable:
@@ -1288,41 +1271,32 @@ def finish_dimension(
         "raw_status_counts": {},
         "credit_mappings": {},
         "components": [],
-        "base_rating": decimal_text(central_base),
-        "unrounded_rating": decimal_text(central_post),
+        "base_percentage": decimal_text(central_base),
         "cap_evaluations": central_caps,
         "applied_cap": central_applied,
-        "pre_cap_rating": decimal_text(central_base),
-        "post_cap_rating": decimal_text(central_post),
+        "pre_cap_percentage": decimal_text(central_base),
+        "post_cap_percentage": decimal_text(central_percentage),
         "missing_data_bounds": {
             "lower": {
-                "pre_cap_rating": decimal_text(lower_base),
-                "post_cap_rating": decimal_text(lower_post),
-                "rounded_rating": displayed_number(lower_rounded, Decimal("0.0001") if not final_rounding else None),
+                "pre_cap_percentage": decimal_text(lower_base),
+                "post_cap_percentage": decimal_text(lower_percentage),
                 "cap_evaluations": lower_caps,
                 "applied_cap_id": lower_cap_id,
-                "awarded_points": displayed_number(lower_points, Decimal("0.01")),
+                "weighted_contribution": decimal_text(lower_contribution),
             },
             "upper": {
-                "pre_cap_rating": decimal_text(upper_base),
-                "post_cap_rating": decimal_text(upper_post),
-                "rounded_rating": displayed_number(upper_rounded, Decimal("0.0001") if not final_rounding else None),
+                "pre_cap_percentage": decimal_text(upper_base),
+                "post_cap_percentage": decimal_text(upper_percentage),
                 "cap_evaluations": upper_caps,
                 "applied_cap_id": upper_cap_id,
-                "awarded_points": displayed_number(upper_points, Decimal("0.01")),
+                "weighted_contribution": decimal_text(upper_contribution),
             },
-            "stable_rating": lower_rounded == upper_rounded,
+            "stable_percentage": lower_percentage == upper_percentage,
             "stable_cap_outcome": lower_cap_id == upper_cap_id,
         },
-        "rounding": {
-            "mode": "ROUND_HALF_UP",
-            "quantum": "0.5" if final_rounding else "editorial_10_plus_5_equivalent",
-            "input": decimal_text(central_post),
-            "output": displayed_number(central_rounded, Decimal("0.0001") if not final_rounding else None) if scored else None,
-        },
-        "final_rating": displayed_number(central_rounded, Decimal("0.0001") if not final_rounding else None) if scored else None,
+        "dimension_percentage": decimal_text(central_percentage) if scored else None,
         "dimension_weight": weight,
-        "awarded_points": displayed_number(points, Decimal("0.01")) if points is not None else None,
+        "weighted_contribution": decimal_text(contribution),
         "warnings": warnings,
     }
 
@@ -1341,17 +1315,17 @@ def defect_subset(ledgers: dict[str, Any], owner: str, *, severities: set[str] |
 def essential_cap(missing: int, denominator: int) -> tuple[Decimal, str]:
     miss_rate = rate(missing, denominator)
     if missing == 0 or denominator == 0:
-        return FIVE, "0_percent"
+        return HUNDRED, "0_percent"
     for boundary, maximum, label in (
-        (Decimal("0.05"), Decimal("4.5"), "above_0_through_5_percent"),
-        (Decimal("0.10"), Decimal("4.0"), "above_5_through_10_percent"),
-        (Decimal("0.20"), Decimal("3.5"), "above_10_through_20_percent"),
-        (Decimal("0.35"), Decimal("3.0"), "above_20_through_35_percent"),
-        (Decimal("0.50"), Decimal("2.0"), "above_35_through_50_percent"),
+        (Decimal("0.05"), Decimal(90), "above_0_through_5_percent"),
+        (Decimal("0.10"), Decimal(80), "above_5_through_10_percent"),
+        (Decimal("0.20"), Decimal(70), "above_10_through_20_percent"),
+        (Decimal("0.35"), Decimal(60), "above_20_through_35_percent"),
+        (Decimal("0.50"), Decimal(40), "above_35_through_50_percent"),
     ):
         if miss_rate <= boundary:
             return maximum, label
-    return Decimal("1.0"), "above_50_percent"
+    return Decimal(20), "above_50_percent"
 
 
 def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
@@ -1377,9 +1351,9 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
     # Missing expected records have unknown priorities, so a full audit is blocked.  In pilot mode they
     # conservatively use the maximum priority weight for bounds.
     unknown_weight += Decimal(3 * len(missing_ids))
-    central_base = FIVE * measured_credit / weight_total if weight_total else ZERO
-    lower_base = FIVE * measured_credit / (weight_total + unknown_weight) if weight_total + unknown_weight else ZERO
-    upper_base = FIVE * (measured_credit + unknown_weight) / (weight_total + unknown_weight) if weight_total + unknown_weight else ZERO
+    central_base = HUNDRED * measured_credit / weight_total if weight_total else ZERO
+    lower_base = HUNDRED * measured_credit / (weight_total + unknown_weight) if weight_total + unknown_weight else ZERO
+    upper_base = HUNDRED * (measured_credit + unknown_weight) / (weight_total + unknown_weight) if weight_total + unknown_weight else ZERO
     attempt = ledgers["context"]["candidate_attempt"]["status"]
     if attempt != "meaningful_attempt":
         central_base = lower_base = upper_base = ZERO
@@ -1399,14 +1373,14 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
             cap_record(
                 "coverage.essential_miss_rate",
                 maximum,
-                maximum < FIVE,
+                maximum < HUNDRED,
                 {"table": "essential_miss_rate_v1", "band": band},
                 {"missing": missing_count, "essential_denominator": total, "rate": decimal_text(rate(missing_count, total))},
                 miss_evidence,
             ),
             cap_record(
                 "coverage.critical_central_omission",
-                Decimal(2),
+                Decimal(40),
                 bool(critical),
                 {"severity": "critical", "defect_kind": "central_omission"},
                 {"defect_count": len(critical)},
@@ -1427,7 +1401,7 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         "component_id": "priority_weighted_subject_access",
         "raw_numerator": decimal_text(measured_credit),
         "raw_denominator": decimal_text(weight_total),
-        "normalized_value": decimal_text(central_base / FIVE if FIVE else ZERO),
+        "normalized_value": decimal_text(central_base / HUNDRED),
         "weight": "1",
         "effective_weight": "1",
         "weight_renormalized": False,
@@ -1440,19 +1414,19 @@ def density_metric_rating(value: Decimal, acceptable_min: Decimal, ideal_min: De
     if value == 0:
         return ZERO
     if ideal_min <= value <= ideal_max:
-        return FIVE
+        return HUNDRED
     if acceptable_min <= value <= acceptable_max:
-        return Decimal(4)
+        return Decimal(80)
     if value < acceptable_min:
         distance = (acceptable_min - value) / acceptable_min if acceptable_min else Decimal("Infinity")
     else:
         distance = (value - acceptable_max) / acceptable_max if acceptable_max else Decimal("Infinity")
     if distance <= Decimal("0.25"):
-        return Decimal(3)
+        return Decimal(60)
     if distance <= Decimal("0.50"):
-        return Decimal(2)
+        return Decimal(40)
     if distance <= ONE:
-        return ONE
+        return Decimal(20)
     return ZERO
 
 
@@ -1532,35 +1506,32 @@ def calculate_density(ledgers: dict[str, Any]) -> tuple[Decimal, dict[str, Any]]
             },
             "path_rate": decimal_text(path_rate),
             "occurrence_rate": decimal_text(occurrence_rate),
-            "path_fit_rating": displayed_number(path_rating),
-            "occurrence_fit_rating": displayed_number(occurrence_rating),
-            "unit_fit_rating_unrounded": decimal_text(unit),
-            "unit_fit_rating": displayed_number(round_half_step(unit)),
+            "path_fit_percentage": decimal_text(path_rating),
+            "occurrence_fit_percentage": decimal_text(occurrence_rating),
+            "unit_fit_percentage": decimal_text(unit),
         })
     raw = weighted / Decimal(total_words)
-    final = round_half_step(raw)
-    return final, {
+    return raw, {
         "profile_id": "subject-index-standard-density-v1-v5-edge-correction",
         "aggregation": "indexable_source_word_weighted_mean",
         "metric_weights": {"paths": "0.5", "occurrences": "0.5"},
-        "fit_rating_unrounded": decimal_text(raw),
-        "fit_rating": displayed_number(final),
+        "fit_percentage": decimal_text(raw),
         "chapter_measurements": chapter_results,
-        "zero_metric_rule": "a metric value of zero receives 0/5",
+        "zero_metric_rule": "a metric value of zero receives 0%",
     }
 
 
 def selectivity_cap(rate_value: Decimal, count: int, unit_rate: Decimal) -> tuple[Decimal, bool, str]:
     systemic = count >= 10 and unit_rate >= Decimal("0.25")
     if not systemic or rate_value < Decimal("0.05"):
-        return FIVE, False, "below_5_percent_or_not_systemic"
+        return HUNDRED, False, "below_5_percent_or_not_systemic"
     if rate_value < Decimal("0.15"):
-        return Decimal(4), True, "5_to_below_15_percent"
+        return Decimal(80), True, "5_to_below_15_percent"
     if rate_value < Decimal("0.30"):
-        return Decimal(3), True, "15_to_below_30_percent"
+        return Decimal(60), True, "15_to_below_30_percent"
     if rate_value < Decimal("0.50"):
-        return Decimal(2), True, "30_to_below_50_percent"
-    return Decimal(1), True, "at_least_50_percent"
+        return Decimal(40), True, "30_to_below_50_percent"
+    return Decimal(20), True, "at_least_50_percent"
 
 
 def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
@@ -1614,9 +1585,9 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     if non_attempt or locator_output_without_supported_access:
         central_base = ZERO
     else:
-        central_base = FIVE * credit / Decimal(len(measured)) if measured else ZERO
-    lower_base = FIVE * credit / Decimal(len(measured) + len(uninspectable) + len(not_measured)) if applicable else ZERO
-    upper_base = FIVE * (credit + Decimal(len(uninspectable) + len(not_measured))) / Decimal(applicable) if applicable else ZERO
+        central_base = HUNDRED * credit / Decimal(len(measured)) if measured else ZERO
+    lower_base = HUNDRED * credit / Decimal(len(measured) + len(uninspectable) + len(not_measured)) if applicable else ZERO
+    upper_base = HUNDRED * (credit + Decimal(len(uninspectable) + len(not_measured))) / Decimal(applicable) if applicable else ZERO
     zero_measured = [item for item in measured if SELECTIVITY_CREDIT[item["treatment_class"]] == 0]
     unit_total = max(1, len(ledgers["source_units"]))
 
@@ -1650,26 +1621,18 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     upper_sub_post, _ = apply_cap(upper_base, upper_caps)
     if non_attempt:
         lower_sub_post = upper_sub_post = ZERO
-    central_sub = round_half_step(central_sub_post)
-    lower_sub = round_half_step(lower_sub_post)
-    upper_sub = round_half_step(upper_sub_post)
-    central_base_points = central_base / FIVE * Decimal(10) + density_rating
-    central_base_equivalent = central_base_points / Decimal(15) * FIVE
-    central_points = round_points(central_sub / FIVE * Decimal(10) + density_rating)
-    lower_points = round_points(lower_sub / FIVE * Decimal(10) + density_rating)
-    upper_points = round_points(upper_sub / FIVE * Decimal(10) + density_rating)
-    central_equivalent = central_points / Decimal(15) * FIVE
-    lower_equivalent = lower_points / Decimal(15) * FIVE
-    upper_equivalent = upper_points / Decimal(15) * FIVE
-    central_post_unrounded_equivalent = (central_sub_post / FIVE * Decimal(10) + density_rating) / Decimal(15) * FIVE
-    lower_pre_unrounded_equivalent = (lower_base / FIVE * Decimal(10) + density_rating) / Decimal(15) * FIVE
-    lower_post_unrounded_equivalent = (lower_sub_post / FIVE * Decimal(10) + density_rating) / Decimal(15) * FIVE
-    upper_pre_unrounded_equivalent = (upper_base / FIVE * Decimal(10) + density_rating) / Decimal(15) * FIVE
-    upper_post_unrounded_equivalent = (upper_sub_post / FIVE * Decimal(10) + density_rating) / Decimal(15) * FIVE
+    central_base_equivalent = (central_base * Decimal(10) + density_rating * Decimal(5)) / Decimal(15)
+    central_equivalent = (central_sub_post * Decimal(10) + density_rating * Decimal(5)) / Decimal(15)
+    lower_equivalent = (lower_sub_post * Decimal(10) + density_rating * Decimal(5)) / Decimal(15)
+    upper_equivalent = (upper_sub_post * Decimal(10) + density_rating * Decimal(5)) / Decimal(15)
+    central_post_unrounded_equivalent = central_equivalent
+    lower_pre_unrounded_equivalent = (lower_base * Decimal(10) + density_rating * Decimal(5)) / Decimal(15)
+    lower_post_unrounded_equivalent = lower_equivalent
+    upper_pre_unrounded_equivalent = (upper_base * Decimal(10) + density_rating * Decimal(5)) / Decimal(15)
+    upper_post_unrounded_equivalent = upper_equivalent
     result = finish_dimension(
         "editorial_selectivity", [substantive_denom, density_denom], central_equivalent, lower_equivalent, upper_equivalent,
-        [], [], [], audit_mode, final_rounding=False,
-        fixed_points=(central_points, lower_points, upper_points),
+        [], [], [], audit_mode,
     )
     # The consequence cap applies to the substantive subscore before 10+5 arithmetic.
     central_applied = choose_cap(central_caps)
@@ -1678,31 +1641,28 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     cap_stable = (lower_applied["cap_id"] if lower_applied else None) == (upper_applied["cap_id"] if upper_applied else None)
     if not cap_stable and result["status"] == "scored":
         result["status"] = "not_scored_insufficient_evidence"
-        result["final_rating"] = None
-        result["awarded_points"] = None
-        result["rounding"]["output"] = None
-    result["base_rating"] = decimal_text(central_base_equivalent)
-    result["pre_cap_rating"] = decimal_text(central_base_equivalent)
-    result["post_cap_rating"] = decimal_text(central_post_unrounded_equivalent)
-    result["unrounded_rating"] = decimal_text(central_post_unrounded_equivalent)
+        result["dimension_percentage"] = None
+        result["weighted_contribution"] = None
+    result["base_percentage"] = decimal_text(central_base_equivalent)
+    result["pre_cap_percentage"] = decimal_text(central_base_equivalent)
+    result["post_cap_percentage"] = decimal_text(central_post_unrounded_equivalent)
     result["cap_evaluations"] = central_caps
     result["applied_cap"] = central_applied
     result["missing_data_bounds"]["lower"]["applied_cap_id"] = lower_applied["cap_id"] if lower_applied else None
     result["missing_data_bounds"]["lower"]["cap_evaluations"] = lower_caps
-    result["missing_data_bounds"]["lower"]["pre_cap_rating"] = decimal_text(lower_pre_unrounded_equivalent)
-    result["missing_data_bounds"]["lower"]["post_cap_rating"] = decimal_text(lower_post_unrounded_equivalent)
+    result["missing_data_bounds"]["lower"]["pre_cap_percentage"] = decimal_text(lower_pre_unrounded_equivalent)
+    result["missing_data_bounds"]["lower"]["post_cap_percentage"] = decimal_text(lower_post_unrounded_equivalent)
     result["missing_data_bounds"]["upper"]["applied_cap_id"] = upper_applied["cap_id"] if upper_applied else None
     result["missing_data_bounds"]["upper"]["cap_evaluations"] = upper_caps
-    result["missing_data_bounds"]["upper"]["pre_cap_rating"] = decimal_text(upper_pre_unrounded_equivalent)
-    result["missing_data_bounds"]["upper"]["post_cap_rating"] = decimal_text(upper_post_unrounded_equivalent)
+    result["missing_data_bounds"]["upper"]["pre_cap_percentage"] = decimal_text(upper_pre_unrounded_equivalent)
+    result["missing_data_bounds"]["upper"]["post_cap_percentage"] = decimal_text(upper_post_unrounded_equivalent)
     result["missing_data_bounds"]["stable_cap_outcome"] = cap_stable
-    result["rounding"] = {"mode": "ROUND_HALF_UP", "quantum": "substantive_0.5_then_points_0.01", "input": decimal_text(central_sub_post), "output": result["final_rating"]}
     result["input_roles"] = ["locator_audit", "structure_audit_or_migration_supplement"]
     result["raw_status_counts"] = dict(Counter(item.get("treatment_class") for item in measured)) | {"uninspectable": len(uninspectable), "not_measured": len(not_measured)}
     result["credit_mappings"] = {"treatment_class": {key: decimal_text(value) for key, value in SELECTIVITY_CREDIT.items()}}
     result["components"] = [
-        {"component_id": "substantive_selectivity", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_sub_post / FIVE), "weight": "10/15", "effective_weight": "10/15", "weight_renormalized": False, "rounded_rating": displayed_number(central_sub)},
-        {"component_id": "density_fit", "raw_numerator": decimal_text(density_rating), "raw_denominator": "5", "normalized_value": decimal_text(density_rating / FIVE), "weight": "5/15", "effective_weight": "5/15", "weight_renormalized": False, "rounded_rating": displayed_number(density_rating), "details": density_detail},
+        {"component_id": "substantive_selectivity", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_sub_post / HUNDRED), "weight": "10/15", "effective_weight": "10/15", "weight_renormalized": False, "percentage": decimal_text(central_sub_post)},
+        {"component_id": "density_fit", "raw_numerator": decimal_text(density_rating), "raw_denominator": "100", "normalized_value": decimal_text(density_rating / HUNDRED), "weight": "5/15", "effective_weight": "5/15", "weight_renormalized": False, "percentage": decimal_text(density_rating), "details": density_detail},
     ]
     return result
 
@@ -1768,11 +1728,11 @@ def require_node_defect_binding(node: dict[str, Any], ledgers: dict[str, Any], o
 def calculate_concept(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
     measured, uninspectable, _, not_measured_ids, denominator = node_component(ledgers, "conceptual_stance_fidelity", NODE_CREDIT, "conceptual_stance_nodes")
     credit = sum((NODE_CREDIT[item["_status"]] for item in measured), ZERO)
-    central_base = FIVE * credit / Decimal(len(measured)) if measured else ZERO
+    central_base = HUNDRED * credit / Decimal(len(measured)) if measured else ZERO
     unknown = len(uninspectable) + len(not_measured_ids)
     applicable = len(measured) + unknown
-    lower_base = FIVE * credit / Decimal(applicable) if applicable else ZERO
-    upper_base = FIVE * (credit + Decimal(unknown)) / Decimal(applicable) if applicable else ZERO
+    lower_base = HUNDRED * credit / Decimal(applicable) if applicable else ZERO
+    upper_base = HUNDRED * (credit + Decimal(unknown)) / Decimal(applicable) if applicable else ZERO
     attempt = ledgers["context"]["candidate_attempt"]["status"]
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
@@ -1787,10 +1747,10 @@ def calculate_concept(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any
 
     def caps(major_fail_count: int, total: int, prevalence_evidence: Sequence[str]) -> list[dict[str, Any]]:
         return [
-            cap_record("concept.critical_defect", Decimal(2), bool(critical), {"severity": "critical", "codes": sorted(CONCEPT_CODES)}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
-            cap_record("concept.localized_major_defect", Decimal("4.5"), bool(local_major), {"severity": "major", "codes": sorted(CONCEPT_CODES)}, {"defect_count": len(local_major)}, [item["defect_id"] for item in local_major]),
-            cap_record("concept.major_stance_or_relationship", Decimal(4), bool(reversals), {"severity": "major", "defect_kinds": ["stance_reversal", "misleading_relationship"]}, {"defect_count": len(reversals)}, [item["defect_id"] for item in reversals]),
-            *prevalence_caps("concept", major_fail_count, total, list(prevalence_evidence), ((Decimal("0.05"), Decimal("3.5")), (Decimal("0.15"), Decimal("2.5")), (Decimal("0.30"), Decimal("1.5")))),
+            cap_record("concept.critical_defect", Decimal(40), bool(critical), {"severity": "critical", "codes": sorted(CONCEPT_CODES)}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
+            cap_record("concept.localized_major_defect", Decimal(90), bool(local_major), {"severity": "major", "codes": sorted(CONCEPT_CODES)}, {"defect_count": len(local_major)}, [item["defect_id"] for item in local_major]),
+            cap_record("concept.major_stance_or_relationship", Decimal(80), bool(reversals), {"severity": "major", "defect_kinds": ["stance_reversal", "misleading_relationship"]}, {"defect_count": len(reversals)}, [item["defect_id"] for item in reversals]),
+            *prevalence_caps("concept", major_fail_count, total, list(prevalence_evidence), ((Decimal("0.05"), Decimal(70)), (Decimal("0.15"), Decimal(50)), (Decimal("0.30"), Decimal(30)))),
         ]
 
     unknown_node_ids = [item["node_id"] for item in uninspectable] + not_measured_ids
@@ -1804,39 +1764,39 @@ def calculate_concept(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any
     result["input_roles"] = ["structure_audit", "structure_audit_or_migration_supplement"]
     result["raw_status_counts"] = dict(Counter(item["_status"] for item in measured)) | {"uninspectable": len(uninspectable), "not_measured": len(not_measured_ids)}
     result["credit_mappings"] = {"node_status": {key: decimal_text(value) for key, value in NODE_CREDIT.items()}}
-    result["components"] = [{"component_id": "conceptual_stance_nodes", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_base / FIVE), "weight": "1", "effective_weight": "1", "weight_renormalized": False}]
+    result["components"] = [{"component_id": "conceptual_stance_nodes", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_base / HUNDRED), "weight": "1", "effective_weight": "1", "weight_renormalized": False}]
     return result
 
 
 def high_value_cap(found: int, denominator: int) -> tuple[Decimal, bool, str]:
     if denominator == 0:
-        return FIVE, False, "inapplicable_no_high_value_treatments"
+        return HUNDRED, False, "inapplicable_no_high_value_treatments"
     value = rate(found, denominator)
     if value >= Decimal("0.90"):
-        return FIVE, False, "at_least_90_percent"
+        return HUNDRED, False, "at_least_90_percent"
     if value >= Decimal("0.75"):
-        return Decimal(4), True, "75_to_below_90_percent"
+        return Decimal(80), True, "75_to_below_90_percent"
     if value >= Decimal("0.50"):
-        return Decimal(3), True, "50_to_below_75_percent"
+        return Decimal(60), True, "50_to_below_75_percent"
     if value >= Decimal("0.25"):
-        return Decimal(2), True, "25_to_below_50_percent"
-    return Decimal(1), True, "below_25_percent"
+        return Decimal(40), True, "25_to_below_50_percent"
+    return Decimal(20), True, "below_25_percent"
 
 
 def reliability_pattern_cap(pattern_count: int, denominator: int, affected_units: int, unit_denominator: int) -> tuple[Decimal, bool, str]:
     value = rate(pattern_count, denominator)
     distributed = unit_denominator > 0 and rate(affected_units, unit_denominator) >= Decimal("0.25")
     if not distributed or value < Decimal("0.01"):
-        return FIVE, False, "below_1_percent_or_not_distributed"
+        return HUNDRED, False, "below_1_percent_or_not_distributed"
     if value < Decimal("0.03"):
-        return Decimal("4.5"), True, "1_to_below_3_percent"
+        return Decimal(90), True, "1_to_below_3_percent"
     if value < Decimal("0.075"):
-        return Decimal(4), True, "3_to_below_7_5_percent"
+        return Decimal(80), True, "3_to_below_7_5_percent"
     if value < Decimal("0.15"):
-        return Decimal("3.5"), True, "7_5_to_below_15_percent"
+        return Decimal(70), True, "7_5_to_below_15_percent"
     if value < Decimal("0.30"):
-        return Decimal("2.5"), True, "15_to_below_30_percent"
-    return Decimal("1.5"), True, "at_least_30_percent"
+        return Decimal(50), True, "15_to_below_30_percent"
+    return Decimal(30), True, "at_least_30_percent"
 
 
 def f1(precision: Decimal, recall: Decimal) -> Decimal:
@@ -1871,9 +1831,9 @@ def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         central_base = lower_base = upper_base = ZERO
         mark_defined_zero(precision_denom, "expected_treatments_but_no_locator_assignments")
     else:
-        central_base = FIVE * f1(p, r)
-        lower_base = FIVE * f1(p_lower, r_lower)
-        upper_base = FIVE * f1(p_upper, r_upper)
+        central_base = HUNDRED * f1(p, r)
+        lower_base = HUNDRED * f1(p_lower, r_lower)
+        upper_base = HUNDRED * f1(p_upper, r_upper)
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
         for component in (precision_denom, recall_denom):
@@ -1906,7 +1866,7 @@ def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         high_max, high_triggered, high_band = high_value_cap(high_found_value, high_total)
         pattern_max, pattern_triggered, pattern_band = reliability_pattern_cap(pattern_count, locator_total, units, unit_denominator)
         return [
-            cap_record("reliability.critical_locator", Decimal(2), bool(critical), {"severity": "critical", "defect_kinds": ["fabricated_locator", "nonexistent_locator", "out_of_scope_locator"]}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
+            cap_record("reliability.critical_locator", Decimal(40), bool(critical), {"severity": "critical", "defect_kinds": ["fabricated_locator", "nonexistent_locator", "out_of_scope_locator"]}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
             cap_record("reliability.high_value_treatment_recall", high_max, high_triggered, {"table": "pooled_principal_and_synthesis_recall_v1", "band": high_band}, {"found": high_found_value, "expected": high_total, "rate": decimal_text(rate(high_found_value, high_total))}, high_miss_evidence),
             cap_record("reliability.distributed_unsupported_pattern", pattern_max, pattern_triggered, {"minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band}, {"unsupported_count": pattern_count, "keep_precision_denominator": locator_total, "rate": decimal_text(rate(pattern_count, locator_total)), "affected_source_units": units, "source_unit_denominator": unit_denominator, "source_unit_rate": decimal_text(rate(units, unit_denominator))}, pattern_evidence),
         ]
@@ -2072,18 +2032,18 @@ def task_component(
 def reference_rate_caps(unsupported: int, denominator: int, evidence_ids: list[str]) -> list[dict[str, Any]]:
     value = rate(unsupported, denominator)
     return [
-        cap_record("findability.reference_unsupported_10_percent", Decimal(4), unsupported >= 2 and value >= Decimal("0.10"), {"minimum_count": 2, "operator": ">=", "rate": "0.10"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.reference_unsupported_25_percent", Decimal(3), unsupported >= 2 and value >= Decimal("0.25"), {"minimum_count": 2, "operator": ">=", "rate": "0.25"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.reference_unsupported_50_percent", Decimal(2), unsupported >= 3 and value >= Decimal("0.50"), {"minimum_count": 3, "operator": ">=", "rate": "0.50"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.reference_unsupported_10_percent", Decimal(80), unsupported >= 2 and value >= Decimal("0.10"), {"minimum_count": 2, "operator": ">=", "rate": "0.10"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.reference_unsupported_25_percent", Decimal(60), unsupported >= 2 and value >= Decimal("0.25"), {"minimum_count": 2, "operator": ">=", "rate": "0.25"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.reference_unsupported_50_percent", Decimal(40), unsupported >= 3 and value >= Decimal("0.50"), {"minimum_count": 3, "operator": ">=", "rate": "0.50"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
     ]
 
 
 def task_failure_caps(failures: int, denominator: int, evidence_ids: Sequence[str]) -> list[dict[str, Any]]:
     value = rate(failures, denominator)
     return [
-        cap_record("findability.task_failure_10_percent", Decimal(4), denominator > 0 and value >= Decimal("0.10"), {"operator": ">=", "rate": "0.10"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.task_failure_25_percent", Decimal(3), denominator > 0 and value >= Decimal("0.25"), {"operator": ">=", "rate": "0.25"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.task_failure_50_percent", Decimal(2), denominator > 0 and value >= Decimal("0.50"), {"operator": ">=", "rate": "0.50"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.task_failure_10_percent", Decimal(80), denominator > 0 and value >= Decimal("0.10"), {"operator": ">=", "rate": "0.10"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.task_failure_25_percent", Decimal(60), denominator > 0 and value >= Decimal("0.25"), {"operator": ">=", "rate": "0.25"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.task_failure_50_percent", Decimal(40), denominator > 0 and value >= Decimal("0.50"), {"operator": ">=", "rate": "0.50"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
     ]
 
 
@@ -2132,9 +2092,9 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         for component in (task_denom, arch_denom, ref_denom):
             mark_defined_zero(component, f"candidate_attempt:{attempt}", non_attempt=True)
     else:
-        central_base = FIVE * (weights[0] * task_central + weights[1] * arch_central + weights[2] * ref_central)
-        lower_base = FIVE * (weights[0] * task_lower + weights[1] * arch_lower + weights[2] * ref_lower)
-        upper_base = FIVE * (weights[0] * task_upper + weights[1] * arch_upper + weights[2] * ref_upper)
+        central_base = HUNDRED * (weights[0] * task_central + weights[1] * arch_central + weights[2] * ref_central)
+        lower_base = HUNDRED * (weights[0] * task_lower + weights[1] * arch_lower + weights[2] * ref_lower)
+        upper_base = HUNDRED * (weights[0] * task_upper + weights[1] * arch_upper + weights[2] * ref_upper)
     nav_critical = defect_subset(ledgers, "findability_navigation", severities={"critical"})
     nav_major = defect_subset(ledgers, "findability_navigation", severities={"major"})
     destructive = [item for item in nav_major if item.get("defect_kind") in {"substitutive_see", "circular_or_chained_reference", "misleading_access_route"} and item.get("high_priority_access_destroyed")]
@@ -2154,11 +2114,11 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         reference_evidence: Sequence[str],
     ) -> list[dict[str, Any]]:
         return [
-            cap_record("findability.critical_navigation", Decimal(2), bool(nav_critical), {"severity": "critical"}, {"defect_count": len(nav_critical)}, [item["defect_id"] for item in nav_critical]),
-            cap_record("findability.localized_major_navigation", Decimal("4.5"), bool(nav_major), {"severity": "major"}, {"defect_count": len(nav_major)}, [item["defect_id"] for item in nav_major]),
-            cap_record("findability.destructive_access_route", Decimal("3.5"), bool(destructive), {"severity": "major", "high_priority_access_destroyed": True}, {"defect_count": len(destructive)}, [item["defect_id"] for item in destructive]),
+            cap_record("findability.critical_navigation", Decimal(40), bool(nav_critical), {"severity": "critical"}, {"defect_count": len(nav_critical)}, [item["defect_id"] for item in nav_critical]),
+            cap_record("findability.localized_major_navigation", Decimal(90), bool(nav_major), {"severity": "major"}, {"defect_count": len(nav_major)}, [item["defect_id"] for item in nav_major]),
+            cap_record("findability.destructive_access_route", Decimal(70), bool(destructive), {"severity": "major", "high_priority_access_destroyed": True}, {"defect_count": len(destructive)}, [item["defect_id"] for item in destructive]),
             *task_failure_caps(task_failures, task_total, task_evidence),
-            *prevalence_caps("findability.architecture", architecture_bad, architecture_total, list(architecture_evidence), ((Decimal("0.05"), Decimal(4)), (Decimal("0.15"), Decimal(3)), (Decimal("0.30"), Decimal(2)))),
+            *prevalence_caps("findability.architecture", architecture_bad, architecture_total, list(architecture_evidence), ((Decimal("0.05"), Decimal(80)), (Decimal("0.15"), Decimal(60)), (Decimal("0.30"), Decimal(40)))),
             *reference_rate_caps(ref_bad, ref_total, list(reference_evidence)),
         ]
 
@@ -2214,12 +2174,12 @@ def mechanics_pattern_caps(ledgers: dict[str, Any]) -> list[dict[str, Any]]:
         recurrent = count >= 3 and (item_rate >= Decimal("0.01") or len(family["structural_sections"]) >= 2)
         systematic = count >= 3 and (item_rate >= Decimal("0.10") or section_rate >= Decimal("0.50"))
         observed = {"root_cause_family": family_id, "affected_count": count, "node_denominator": node_total, "affected_rate": decimal_text(item_rate), "affected_structural_sections": len(family["structural_sections"]), "structural_section_denominator": section_denominator, "structural_section_rate": decimal_text(section_rate)}
-        records.append(cap_record(f"mechanics.recurrent_major.{family_id}", Decimal(4), recurrent, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.01"}, {"structural_sections": ">=2"}]}, observed, family["defects"]))
-        records.append(cap_record(f"mechanics.systematic_major.{family_id}", Decimal(3), systematic, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.10"}, {"structural_section_rate": ">=0.50"}]}, observed, family["defects"]))
+        records.append(cap_record(f"mechanics.recurrent_major.{family_id}", Decimal(80), recurrent, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.01"}, {"structural_sections": ">=2"}]}, observed, family["defects"]))
+        records.append(cap_record(f"mechanics.systematic_major.{family_id}", Decimal(60), systematic, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.10"}, {"structural_section_rate": ">=0.50"}]}, observed, family["defects"]))
     if not records:
         records.extend([
-            cap_record("mechanics.recurrent_major.none", Decimal(4), False, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.01"}, {"structural_sections": ">=2"}]}, {"root_cause_family_count": 0}),
-            cap_record("mechanics.systematic_major.none", Decimal(3), False, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.10"}, {"structural_section_rate": ">=0.50"}]}, {"root_cause_family_count": 0}),
+            cap_record("mechanics.recurrent_major.none", Decimal(80), False, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.01"}, {"structural_sections": ">=2"}]}, {"root_cause_family_count": 0}),
+            cap_record("mechanics.systematic_major.none", Decimal(60), False, {"minimum_count": 3, "any_of": [{"item_rate": ">=0.10"}, {"structural_section_rate": ">=0.50"}]}, {"root_cause_family_count": 0}),
         ])
     return records
 
@@ -2228,19 +2188,19 @@ def mechanics_aggregate_caps(affected: int, denominator: int, evidence_ids: Sequ
     affected_rate = rate(affected, denominator)
     observed = {"affected_count": affected, "node_denominator": denominator, "rate": decimal_text(affected_rate)}
     return [
-        cap_record("mechanics.aggregate_cosmetic_minor_5_percent", Decimal("4.5"), denominator > 0 and affected_rate >= Decimal("0.05"), {"operator": ">=", "rate": "0.05"}, observed, evidence_ids),
-        cap_record("mechanics.aggregate_cosmetic_minor_20_percent", Decimal(4), denominator > 0 and affected_rate >= Decimal("0.20"), {"operator": ">=", "rate": "0.20"}, observed, evidence_ids),
+        cap_record("mechanics.aggregate_cosmetic_minor_5_percent", Decimal(90), denominator > 0 and affected_rate >= Decimal("0.05"), {"operator": ">=", "rate": "0.05"}, observed, evidence_ids),
+        cap_record("mechanics.aggregate_cosmetic_minor_20_percent", Decimal(80), denominator > 0 and affected_rate >= Decimal("0.20"), {"operator": ">=", "rate": "0.20"}, observed, evidence_ids),
     ]
 
 
 def calculate_mechanics(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
     measured, uninspectable, _, not_measured_ids, denominator = node_component(ledgers, "mechanics_consistency", MECHANICS_CREDIT, "mechanics_nodes")
     credit = sum((MECHANICS_CREDIT[item["_status"]] for item in measured), ZERO)
-    central_base = FIVE * credit / Decimal(len(measured)) if measured else ZERO
+    central_base = HUNDRED * credit / Decimal(len(measured)) if measured else ZERO
     unknown = len(uninspectable) + len(not_measured_ids)
     applicable = len(measured) + unknown
-    lower_base = FIVE * credit / Decimal(applicable) if applicable else ZERO
-    upper_base = FIVE * (credit + Decimal(unknown)) / Decimal(applicable) if applicable else ZERO
+    lower_base = HUNDRED * credit / Decimal(applicable) if applicable else ZERO
+    upper_base = HUNDRED * (credit + Decimal(unknown)) / Decimal(applicable) if applicable else ZERO
     attempt = ledgers["context"]["candidate_attempt"]["status"]
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
@@ -2261,8 +2221,8 @@ def calculate_mechanics(ledgers: dict[str, Any], audit_mode: str) -> dict[str, A
     def caps(aggregate_count: int, total: int) -> list[dict[str, Any]]:
         return [
             cap_record("mechanics.structurally_incomplete_or_unparseable", ZERO, attempt in {"structurally_incomplete", "unparseable"}, {"candidate_attempt_status": ["structurally_incomplete", "unparseable"]}, {"candidate_attempt_status": attempt}, ledgers["context"]["candidate_attempt"]["evidence_ids"]),
-            cap_record("mechanics.critical_defect", Decimal(2), bool(critical), {"severity": "critical"}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
-            cap_record("mechanics.localized_major", Decimal("4.5"), bool(major), {"severity": "major"}, {"defect_count": len(major)}, [item["defect_id"] for item in major]),
+            cap_record("mechanics.critical_defect", Decimal(40), bool(critical), {"severity": "critical"}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
+            cap_record("mechanics.localized_major", Decimal(90), bool(major), {"severity": "major"}, {"defect_count": len(major)}, [item["defect_id"] for item in major]),
             *mechanics_pattern_caps(ledgers),
             *mechanics_aggregate_caps(aggregate_count, total, [item["node_id"] for item in aggregate]),
         ]
@@ -2274,7 +2234,7 @@ def calculate_mechanics(ledgers: dict[str, Any], audit_mode: str) -> dict[str, A
     result["input_roles"] = ["structure_audit", "structure_audit_or_migration_supplement"]
     result["raw_status_counts"] = dict(Counter(item["_status"] for item in measured)) | {"uninspectable": len(uninspectable), "not_measured": len(not_measured_ids)}
     result["credit_mappings"] = {"node_status": {key: decimal_text(value) for key, value in MECHANICS_CREDIT.items()}}
-    result["components"] = [{"component_id": "mechanics_nodes", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_base / FIVE if FIVE else ZERO), "weight": "1", "effective_weight": "1", "weight_renormalized": False}]
+    result["components"] = [{"component_id": "mechanics_nodes", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_base / HUNDRED), "weight": "1", "effective_weight": "1", "weight_renormalized": False}]
     return result
 
 

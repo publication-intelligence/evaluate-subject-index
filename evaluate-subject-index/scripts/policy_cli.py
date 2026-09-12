@@ -228,7 +228,7 @@ def build_policy(source: dict[str, Any], standard_path: Path) -> dict[str, Any]:
             "status": "scored",
             "measurement_level": "chapter_or_approved_intellectual_unit",
             "aggregation": "indexable_source_word_weighted_mean",
-            "rounding": "nearest_0.5_after_aggregation",
+            "rounding": "none_dimension_and_contribution; overall_nearest_0.01",
             "metrics": DENSITY_METRICS,
             "short_unit_rule": "Treat an unstable short unit as descriptive or combine it with a declared adjacent unit.",
             "rationale": "Permissive calibration for finished-index scale and distribution; never a subject-discovery quota or hard ceiling.",

@@ -42,10 +42,10 @@
         "diagnostic_grades_used_in_dimension_arithmetic": {"const": false},
         "selectivity_mapping_unchanged": {"const": true},
         "weak_presence_selectivity_credit": {"const": 0},
-        "counts_by_treatment_tier": {"$ref": "dimension-calculations-v5.schema.json#/$defs/treatmentTierCounts"},
-        "counts_by_fit_tier": {"$ref": "dimension-calculations-v5.schema.json#/$defs/fitTierCounts"},
-        "counts_by_diagnostic_credit_value": {"$ref": "dimension-calculations-v5.schema.json#/$defs/diagnosticCreditCounts"},
-        "counts_by_rating_credit_value": {"$ref": "dimension-calculations-v5.schema.json#/$defs/ratingCreditCounts"}
+        "counts_by_treatment_tier": {"$ref": "dimension-calculations-v6.schema.json#/$defs/treatmentTierCounts"},
+        "counts_by_fit_tier": {"$ref": "dimension-calculations-v6.schema.json#/$defs/fitTierCounts"},
+        "counts_by_diagnostic_credit_value": {"$ref": "dimension-calculations-v6.schema.json#/$defs/diagnosticCreditCounts"},
+        "counts_by_rating_credit_value": {"$ref": "dimension-calculations-v6.schema.json#/$defs/ratingCreditCounts"}
       },
       "additionalProperties": false
     },
@@ -59,8 +59,8 @@
       },
       "additionalProperties": false
     },
-    "locator_fit_compatibility": {"description": "Projected score-free compatibility and unresolved-fit provenance; conflict supplementation never rewrites the locator's historical non-fit fields.", "$ref": "dimension-calculations-v5.schema.json#/properties/locator_fit_compatibility"},
-    "locator_fit_supplement": {"$ref": "dimension-calculations-v5.schema.json#/properties/locator_fit_supplement"},
+    "locator_fit_compatibility": {"description": "Projected score-free compatibility and unresolved-fit provenance; conflict supplementation never rewrites the locator's historical non-fit fields.", "$ref": "dimension-calculations-v6.schema.json#/properties/locator_fit_compatibility"},
+    "locator_fit_supplement": {"$ref": "dimension-calculations-v6.schema.json#/properties/locator_fit_supplement"},
     "color_legend": {"$ref": "item-assessments.schema.json#/properties/color_legend"},
     "locator_assessments": {
       "type": "array",
@@ -74,7 +74,7 @@
               "locator_id": {"type": "string", "pattern": "^LOC-"},
               "path_id": {"type": "string", "pattern": "^PATH-"},
               "dimension_reliability_credit": {"enum": ["1", "0", null]},
-              "locator_utility": {"$ref": "dimension-calculations-v5.schema.json#/$defs/utilityAssignment"},
+              "locator_utility": {"$ref": "dimension-calculations-v6.schema.json#/$defs/utilityAssignment"},
               "locator_explanation": {"$ref": "#/$defs/locatorExplanation"}
             }
           }

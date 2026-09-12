@@ -6,14 +6,14 @@
 - standard policy: `subject-index-standard-policy-v8`
 - evaluation policy: `subject-index-evaluation-policy-v4`
 - calculation input: `subject-index-dimension-calculation-input-v2`
-- calculation profile: `subject-index-dimension-calculation-v4`
-- calculation artifact: `subject-index-dimension-calculations-v5`
-- result: `subject-index-evaluation-result-v10`
+- calculation profile: `subject-index-dimension-calculation-v5`
+- calculation artifact: `subject-index-dimension-calculations-v6`
+- result: `subject-index-evaluation-result-v11`
 - item policy: `subject-index-item-grading-v4`
 - explanation contract: `locator-explanations-v2`
 - item artifact: `subject-index-item-assessments-v6`
 - projection metadata: `subject-index-v8-projection-metadata-v1`
-- web report: `subject-index-web-report-v8`
+- web report: `subject-index-web-report-v9`
 - locator-fit preflight: `subject-index-v8-locator-fit-preflight-v1`
 - locator audit: `locator-audit-v2`
 
@@ -23,7 +23,7 @@ Runtime commands accept the current identities only. A V8 calculation input must
 
 V8 makes two distinct kinds of change:
 
-- **Arithmetic:** Page-reference Reliability replaces weighted locator-utility precision with binary keep precision. This directly changes that dimension's precision input. Its recall measure, F1 form, caps, gates, uncertainty handling, weighting, and rounding remain unchanged.
+- **Arithmetic:** Page-reference Reliability replaces weighted locator-utility precision with binary keep precision. All six dimensions remain percentage-native at full precision: genuine caps are percentage ceilings, weighted contributions are not rounded, and only the summed overall percentage is rounded to the nearest hundredth.
 - **Judgment policy:** V8 clarifies how source evidence is classified, including comparative facts, attributed observations, contentless mentions, and complete-path stance. These are not formula changes. They may nevertheless change a locator's treatment class or keep decision in a new V8 audit, which can change any downstream input or result that uses that judgment. In particular, a treatment-class change may affect Editorial Selectivity even though its formula and treatment-credit mapping are unchanged.
 
 An unchanged formula therefore does not guarantee an unchanged result when its underlying V8 judgments differ. Frozen V7 evaluations remain unchanged and are not reinterpreted.
@@ -82,13 +82,15 @@ Expected-treatment recall remains:
 R_T=\frac{N_{found}}{N_{found}+N_{missed}}
 \]
 
-The Page-reference Reliability base rating is:
+The Page-reference Reliability base percentage is:
 
 \[
-F_1=\frac{2P_KR_T}{P_K+R_T},\qquad \text{base rating}=5F_1
+F_1=\frac{2P_KR_T}{P_K+R_T},\qquad \text{base percentage}=100F_1
 \]
 
-Existing caps, gates, uncertainty bounds, weights, and rounding apply unchanged. A `supported + mixed + exact_fit` locator therefore reports diagnostic grade 70 and rating credit 1.
+Existing cap triggers, gates, uncertainty bounds, and weights apply unchanged. Caps are expressed as percentage ceilings (for example, the former 2/5 ceiling is 40%). A `supported + mixed + exact_fit` locator therefore reports diagnostic grade 70 and rating credit 1.
+
+For dimension percentage \(D_i\) and weight \(w_i\), the contribution is \(D_iw_i/100\). Retain the exact decimal through every dimension and contribution, sum the six contributions, and apply `ROUND_HALF_UP` to `0.01` only to that final sum. Half-point dimension rounding and per-contribution cent rounding are not part of V8.
 
 ## Structure quantities
 

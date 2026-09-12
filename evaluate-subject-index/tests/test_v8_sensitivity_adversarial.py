@@ -184,7 +184,10 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         result = v8.calculate_reliability(reliability_ledgers(locators), "full")
         self.assertEqual(Decimal("0.1"), reliability_value(result, "keep_precision"))
         self.assertEqual(10, result["reliability_provenance"]["keep_precision_numerator"])
-        self.assertEqual(Decimal("1"), Decimal(str(result["final_rating"])))
+        self.assertEqual(
+            Decimal("18.18181818181818181818181818"),
+            Decimal(result["dimension_percentage"]),
+        )
 
     def test_high_locator_precision_with_poor_recall_is_depressed_by_unchanged_f1(self) -> None:
         locators = [
@@ -212,7 +215,10 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             Decimal("0.3913043478260869565217391304"),
             reliability_value(result, "reliability_f1"),
         )
-        self.assertEqual(Decimal("2"), Decimal(str(result["final_rating"])))
+        self.assertEqual(
+            Decimal("39.13043478260869565217391304"),
+            Decimal(result["dimension_percentage"]),
+        )
 
     def test_one_fabricated_locator_keeps_critical_cap_despite_high_precision(self) -> None:
         locators = [
@@ -244,7 +250,8 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         )
         self.assertEqual(Decimal("0.99"), reliability_value(result, "keep_precision"))
         self.assertEqual("reliability.critical_locator", result["applied_cap"]["cap_id"])
-        self.assertEqual(Decimal("2"), Decimal(str(result["final_rating"])))
+        self.assertEqual(Decimal("40"), Decimal(result["dimension_percentage"]))
+        self.assertEqual(Decimal("40"), Decimal(str(result["applied_cap"]["maximum_percentage"])))
 
     def test_wrong_relationship_and_stance_retain_treatment_but_receive_fit_penalties(self) -> None:
         result = v8.calculate_reliability(
@@ -341,7 +348,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         self.assertEqual("1", provenance["keep_precision"])
         self.assertEqual(2, provenance["keep_precision_numerator"])
         self.assertEqual("0.85", provenance["mean_diagnostic_credit"])
-        self.assertEqual(Decimal("5"), Decimal(str(result["final_rating"])))
+        self.assertEqual(Decimal("100"), Decimal(result["dimension_percentage"]))
 
     def test_uninspectable_locator_retains_neutral_keep_bounds(self) -> None:
         result = v8.calculate_reliability(
@@ -387,7 +394,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             "expected_treatments_but_no_locator_assignments",
             keep_denominator["defined_zero_rule"],
         )
-        self.assertEqual(0, result["final_rating"])
+        self.assertEqual(Decimal("0"), Decimal(result["dimension_percentage"]))
 
     def test_item_projection_keeps_diagnostic_grade_separate_from_rating_credit(self) -> None:
         assignment = assign_locator_utility(
@@ -419,7 +426,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             "source_subject_assessments": [],
         }
         calculation = {
-            "schema_version": "subject-index-dimension-calculations-v5",
+            "schema_version": "subject-index-dimension-calculations-v6",
             "evaluation_id": "EVAL-TEST",
             "evidence_identity": evidence_identity,
             "dimensions": [{
@@ -460,7 +467,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
                 "dimension_id": dimension_id,
                 "status": "scored",
                 "input_roles": ["structure_audit"],
-                "awarded_points": 0,
+                "weighted_contribution": "0",
                 "unchanged_sentinel": dimension_id,
             }
 
@@ -500,6 +507,56 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             if item["dimension_id"] != "page_reference_reliability"
         }
         self.assertEqual({dimension_id: dimension_id for dimension_id in dimension_ids}, observed)
+        self.assertEqual(0, calculation["overall_percentage"])
+        self.assertEqual(
+            {"mode": "ROUND_HALF_UP", "quantum": "0.01", "input": "0", "output": "0"},
+            calculation["final_rounding"],
+        )
+
+    def test_only_the_final_overall_percentage_is_rounded(self) -> None:
+        contributions = ["1.004"] * 5 + ["1.005"]
+        dimensions = [
+            {
+                "dimension_id": dimension_id,
+                "status": "scored",
+                "input_roles": ["structure_audit"],
+                "weighted_contribution": contribution,
+            }
+            for dimension_id, contribution in zip(
+                [
+                    "meaningful_coverage",
+                    "editorial_selectivity",
+                    "conceptual_stance_fidelity",
+                    "page_reference_reliability",
+                    "findability_navigation",
+                    "mechanics_consistency",
+                ],
+                contributions,
+            )
+        ]
+        ledgers = {
+            "identity": {field: "a" * 64 for field in v5.CALCULATION_EVIDENCE_IDENTITY_FIELDS},
+            "expected_subject_ids": [],
+        }
+        loaded = {
+            "config": {"evaluation_id": "EVAL-TEST", "audit_mode": "full"},
+            "input_artifacts": [{"role": "policy", "path": "policy.json", "sha256": "b" * 64, "schema_version": "subject-index-evaluation-policy-v4"}],
+        }
+        fit_report = {"invalid_or_contradictory_state": [], "unresolved_complete_path_fit": [], "compatibility_classifications": [], "group_counts": {}, "unresolved_reason_counts": {}}
+        patches = [
+            mock.patch.object(v8, "preflight_loaded", return_value=(ledgers, [])),
+            mock.patch.object(v8, "locator_fit_preflight", return_value=fit_report),
+            mock.patch.object(v8, "calculate_reliability", return_value=dimensions[3]),
+            mock.patch.object(v8.v5, "calculate_coverage", return_value=dimensions[0]),
+            mock.patch.object(v8.v5, "calculate_selectivity", return_value=dimensions[1]),
+            mock.patch.object(v8.v5, "calculate_concept", return_value=dimensions[2]),
+            mock.patch.object(v8.v5, "calculate_findability", return_value=dimensions[4]),
+            mock.patch.object(v8.v5, "calculate_mechanics", return_value=dimensions[5]),
+        ]
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+            calculation = v8.calculate_loaded(loaded)
+        self.assertEqual(6.03, calculation["overall_percentage"])
+        self.assertEqual("6.025", calculation["final_rounding"]["input"])
 
 
 if __name__ == "__main__":

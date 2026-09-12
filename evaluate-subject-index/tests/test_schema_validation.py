@@ -17,11 +17,11 @@ from schema_validation import schema_errors
 class SharedSchemaValidationTests(unittest.TestCase):
     def test_v8_identity_contracts_reject_retired_identities(self) -> None:
         cases = [
-            ("dimension-calculations-v5.schema.json", "subject-index-dimension-calculations-v5", "subject-index-dimension-calculations-v4"),
+            ("dimension-calculations-v6.schema.json", "subject-index-dimension-calculations-v6", "subject-index-dimension-calculations-v5"),
             ("item-assessments-v6.schema.json", "subject-index-item-assessments-v6", "subject-index-item-assessments-v5"),
-            ("evaluation-result-v10.schema.json", "subject-index-evaluation-result-v10", "subject-index-evaluation-result-v9"),
+            ("evaluation-result-v11.schema.json", "subject-index-evaluation-result-v11", "subject-index-evaluation-result-v10"),
             ("evaluation-state.schema.json", "subject-index-evaluation-state-v6", "subject-index-evaluation-state-v5"),
-            ("web-report-v8.schema.json", "subject-index-web-report-v8", "subject-index-web-report-v7"),
+            ("web-report-v9.schema.json", "subject-index-web-report-v9", "subject-index-web-report-v8"),
             ("evaluation-policy-v4.schema.json", "subject-index-evaluation-policy-v4", "subject-index-evaluation-policy-v3"),
             ("dimension-calculation-input.schema.json", "subject-index-dimension-calculation-input-v2", "subject-index-dimension-calculation-input-v1"),
             ("v8-projection-metadata-v1.schema.json", "subject-index-v8-projection-metadata-v1", "subject-index-v7-projection-metadata-v2"),
@@ -37,12 +37,25 @@ class SharedSchemaValidationTests(unittest.TestCase):
 
     def test_v8_native_result_and_report_have_no_migration_requirement(self) -> None:
         schema_root = ROOT / "references" / "schemas"
-        result_schema = json.loads((schema_root / "evaluation-result-v10.schema.json").read_text())
-        report_schema = json.loads((schema_root / "web-report-v8.schema.json").read_text())
+        result_schema = json.loads((schema_root / "evaluation-result-v11.schema.json").read_text())
+        report_schema = json.loads((schema_root / "web-report-v9.schema.json").read_text())
         self.assertNotIn("score_migration", result_schema["required"])
         self.assertNotIn("score_migration", result_schema["properties"])
         self.assertNotIn("migration_comparison", report_schema["required"])
         self.assertNotIn("migration_comparison", report_schema["properties"])
+
+    def test_v8_score_contract_is_percentage_native_and_final_rounding_only(self) -> None:
+        schema_root = ROOT / "references" / "schemas"
+        calculation = json.loads((schema_root / "dimension-calculations-v6.schema.json").read_text())
+        dimension = calculation["$defs"]["dimension"]
+        self.assertIn("dimension_percentage", dimension["required"])
+        self.assertIn("weighted_contribution", dimension["required"])
+        self.assertNotIn("final_rating", dimension["properties"])
+        self.assertNotIn("rounding", dimension["properties"])
+        self.assertIn("final_rounding", calculation["required"])
+        cap = json.loads((schema_root / "dimension-calculations.schema.json").read_text())["$defs"]["cap"]
+        self.assertIn("maximum_percentage", cap["required"])
+        self.assertNotIn("maximum_rating", cap["properties"])
 
     def test_locator_audit_nested_shape_is_owned_by_schema(self) -> None:
         audit = {

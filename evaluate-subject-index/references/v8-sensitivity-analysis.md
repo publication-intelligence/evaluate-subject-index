@@ -21,10 +21,10 @@ The minimum remains an independent diagnostic ceiling. It is not weighted into P
 
 | Synthetic case | V8 outcome | Independent safeguard |
 | --- | --- | --- |
-| Two supported locators, one substantive and one mixed, with perfect recall | keep precision 1; mean diagnostic credit 0.85; reliability rating 5.0 | Mixed treatment remains visible in the item diagnostic |
-| 10 kept locators and 90 non-kept weak mentions | keep precision 0.10; reliability rating 1.0 after unchanged rounding/caps | Weak presence remains zero for Editorial Selectivity and remains gate/cap evidence where applicable |
-| Keep precision 0.90 but expected-treatment recall 0.25 | F1 0.391304…; rating 2.0 | Unchanged recall and high-value-recall caps prevent precision from hiding omissions |
-| 99 kept locators plus one fabricated destination | keep precision 0.99; critical cap yields rating 2.0 | Fabrication gate and cap remain independent |
+| Two supported locators, one substantive and one mixed, with perfect recall | keep precision 1; mean diagnostic credit 0.85; reliability 100% | Mixed treatment remains visible in the item diagnostic |
+| 10 kept locators and 90 non-kept weak mentions | keep precision 0.10; reliability 18.1818…% before any genuine cap | Weak presence remains zero for Editorial Selectivity and remains gate/cap evidence where applicable |
+| Keep precision 0.90 but expected-treatment recall 0.25 | F1 and reliability 39.1304…% | Unchanged recall and high-value-recall caps prevent precision from hiding omissions |
+| 99 kept locators plus one fabricated destination | keep precision 0.99; critical cap yields 40% | Fabrication gate and cap remain independent |
 | One minor wrong relationship and one major wrong stance on substantive pages | diagnostic credits 0.35 and 0.15; both rating credits 0 | Complete-path and stance rules remain strict |
 
 ## Uncertainty and completeness
@@ -35,4 +35,4 @@ An uninspectable locator contributes no central rating credit and retains a neut
 
 Six displayed locators and a ten-page range do not trigger review; seven and eleven do. Trigger status never changes an architecture grade without structured semantic findings.
 
-At the arithmetic level, V8 directly changes only the Page-reference Reliability precision input and related diagnostic/reporting identities. Recall, caps, gates, uncertainty handling, structure calculations, Editorial Selectivity, and all other dimension formulas remain unchanged. At the judgment-policy level, however, V8 may classify source evidence differently. A resulting treatment-class or keep-decision change may flow into Page-reference Reliability, Editorial Selectivity, or another downstream result that consumes that judgment. An unchanged formula is therefore not a guarantee of an unchanged V8 result.
+At the arithmetic level, V8 changes Page-reference Reliability's precision input and uses percentage-native, final-only rounding throughout the scorecard. Recall, cap triggers and ceilings, gates, uncertainty handling, structure calculations, Editorial Selectivity, and all other substantive dimension formulas remain unchanged. At the judgment-policy level, however, V8 may classify source evidence differently. A resulting treatment-class or keep-decision change may flow into Page-reference Reliability, Editorial Selectivity, or another downstream result that consumes that judgment.

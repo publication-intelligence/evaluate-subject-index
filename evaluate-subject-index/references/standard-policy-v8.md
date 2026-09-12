@@ -34,7 +34,7 @@ Treatment scores are 1.00 for substantive, 0.70 for mixed, 0.25 for weak presenc
 
 Rating credit is separate and binary: `supported` receives 1; `partially_supported` and `unsupported` receive 0. `uninspectable` and `not_measured` receive no central credit and retain their existing uncertainty or incomplete-audit handling. Thus `supported + mixed + exact_fit` has diagnostic grade 70 and rating credit 1; do not relabel it substantive.
 
-Page-reference Reliability uses keep precision, `supported / assessable`, and unchanged expected-treatment recall in the existing F1, cap, gate, uncertainty, weighting, and rounding pipeline. This is V8's direct arithmetic change. Editorial Selectivity remains a separate dimension with unchanged arithmetic and treatment-credit mapping. Its input treatment classes are policy-governed, however, so a different V8 classification may change its result without changing its formula.
+Page-reference Reliability uses keep precision, `supported / assessable`, and unchanged expected-treatment recall in the existing F1, cap, gate, uncertainty, and weighting pipeline. All dimensions retain full-precision percentages; caps are independent percentage ceilings; only the final overall percentage is rounded to the nearest hundredth. Editorial Selectivity remains a separate dimension with unchanged treatment-credit mapping.
 
 ## Locator strings and ranges
 

@@ -144,17 +144,17 @@
         "effective_weight": {"type": "string", "minLength": 1},
         "weight_renormalized": {"type": "boolean"},
         "label": {"type": "string"},
-        "rounded_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "percentage": {"$ref": "#/$defs/decimal"},
         "details": {"type": "object"}
       },
       "additionalProperties": false
     },
     "cap": {
       "type": "object",
-      "required": ["cap_id", "maximum_rating", "triggered", "threshold", "observed", "affected_evidence_ids"],
+      "required": ["cap_id", "maximum_percentage", "triggered", "threshold", "observed", "affected_evidence_ids"],
       "properties": {
         "cap_id": {"type": "string", "minLength": 1},
-        "maximum_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "maximum_percentage": {"type": "number", "minimum": 0, "maximum": 100},
         "triggered": {"type": "boolean"},
         "threshold": {"type": "object", "minProperties": 1},
         "observed": {"type": "object", "minProperties": 1},
@@ -164,30 +164,29 @@
     },
     "appliedCap": {
       "type": ["object", "null"],
-      "required": ["cap_id", "maximum_rating", "affected_evidence_ids"],
+      "required": ["cap_id", "maximum_percentage", "affected_evidence_ids"],
       "properties": {
         "cap_id": {"type": "string"},
-        "maximum_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "maximum_percentage": {"type": "number", "minimum": 0, "maximum": 100},
         "affected_evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
       },
       "additionalProperties": false
     },
     "bound": {
       "type": "object",
-      "required": ["pre_cap_rating", "post_cap_rating", "rounded_rating", "cap_evaluations", "applied_cap_id", "awarded_points"],
+      "required": ["pre_cap_percentage", "post_cap_percentage", "cap_evaluations", "applied_cap_id", "weighted_contribution"],
       "properties": {
-        "pre_cap_rating": {"$ref": "#/$defs/decimal"},
-        "post_cap_rating": {"$ref": "#/$defs/decimal"},
-        "rounded_rating": {"type": "number", "minimum": 0, "maximum": 5},
+        "pre_cap_percentage": {"$ref": "#/$defs/decimal"},
+        "post_cap_percentage": {"$ref": "#/$defs/decimal"},
         "cap_evaluations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cap"}},
         "applied_cap_id": {"type": ["string", "null"]},
-        "awarded_points": {"type": "number", "minimum": 0}
+        "weighted_contribution": {"$ref": "#/$defs/decimal"}
       },
       "additionalProperties": false
     },
     "dimension": {
       "type": "object",
-      "required": ["dimension_id", "status", "formula_id", "input_roles", "input_artifacts", "denominators", "raw_status_counts", "credit_mappings", "components", "base_rating", "unrounded_rating", "cap_evaluations", "applied_cap", "pre_cap_rating", "post_cap_rating", "missing_data_bounds", "rounding", "final_rating", "dimension_weight", "awarded_points", "warnings"],
+      "required": ["dimension_id", "status", "formula_id", "input_roles", "input_artifacts", "denominators", "raw_status_counts", "credit_mappings", "components", "base_percentage", "cap_evaluations", "applied_cap", "pre_cap_percentage", "post_cap_percentage", "missing_data_bounds", "dimension_percentage", "dimension_weight", "weighted_contribution", "warnings"],
       "properties": {
         "dimension_id": {"enum": ["meaningful_coverage", "editorial_selectivity", "conceptual_stance_fidelity", "page_reference_reliability", "findability_navigation", "mechanics_consistency"]},
         "status": {"enum": ["scored", "not_scored_incomplete_full_audit", "not_scored_insufficient_evidence"]},
@@ -203,37 +202,25 @@
         "raw_status_counts": {"type": "object"},
         "credit_mappings": {"type": "object"},
         "components": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/component"}},
-        "base_rating": {"$ref": "#/$defs/decimal"},
-        "unrounded_rating": {"$ref": "#/$defs/decimal"},
+        "base_percentage": {"$ref": "#/$defs/decimal"},
         "cap_evaluations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/cap"}},
         "applied_cap": {"$ref": "#/$defs/appliedCap"},
-        "pre_cap_rating": {"$ref": "#/$defs/decimal"},
-        "post_cap_rating": {"$ref": "#/$defs/decimal"},
+        "pre_cap_percentage": {"$ref": "#/$defs/decimal"},
+        "post_cap_percentage": {"$ref": "#/$defs/decimal"},
         "missing_data_bounds": {
           "type": "object",
-          "required": ["lower", "upper", "stable_rating", "stable_cap_outcome"],
+          "required": ["lower", "upper", "stable_percentage", "stable_cap_outcome"],
           "properties": {
             "lower": {"$ref": "#/$defs/bound"},
             "upper": {"$ref": "#/$defs/bound"},
-            "stable_rating": {"type": "boolean"},
+            "stable_percentage": {"type": "boolean"},
             "stable_cap_outcome": {"type": "boolean"}
           },
           "additionalProperties": false
         },
-        "rounding": {
-          "type": "object",
-          "required": ["mode", "quantum", "input", "output"],
-          "properties": {
-            "mode": {"const": "ROUND_HALF_UP"},
-            "quantum": {"type": "string"},
-            "input": {"$ref": "#/$defs/decimal"},
-            "output": {"type": ["number", "null"], "minimum": 0, "maximum": 5}
-          },
-          "additionalProperties": false
-        },
-        "final_rating": {"type": ["number", "null"], "minimum": 0, "maximum": 5},
+        "dimension_percentage": {"$ref": "#/$defs/decimal"},
         "dimension_weight": {"enum": [5, 15, 20, 25]},
-        "awarded_points": {"type": ["number", "null"], "minimum": 0},
+        "weighted_contribution": {"$ref": "#/$defs/decimal"},
         "warnings": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": false

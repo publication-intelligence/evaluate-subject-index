@@ -1,12 +1,12 @@
 # Web report fields — V8
 
-New reports use `subject-index-web-report-v8` and point to the current V8 calculation and item-assessment artifacts.
+New reports use `subject-index-web-report-v9` and point to the current V8 calculation and item-assessment artifacts.
 
 The report exposes:
 
 - evaluation identity and status;
-- six dimension ratings and points;
-- total score and uncertainty where applicable;
+- six full-precision dimension percentages and weighted contributions;
+- the overall percentage, rounded only after summing all contributions, and uncertainty where applicable;
 - gate outcomes;
 - item-level findings and evidence links;
 - keep precision, treatment recall, and reliability F1;

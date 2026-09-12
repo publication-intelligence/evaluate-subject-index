@@ -63,9 +63,9 @@ VALID_VISIBILITY = {"public", "private", "restricted"}
 VALID_RETENTION = {"required", "cache"}
 STATE_SCHEMA_VERSION = "subject-index-evaluation-state-v6"
 SCORE_RUBRIC_VERSION = "subject-index-rubric-v8"
-DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
-SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v10"
-WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v8"
+DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v5"
+SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v11"
+WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v9"
 
 
 def now() -> str:

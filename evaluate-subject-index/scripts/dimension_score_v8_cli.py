@@ -3,8 +3,9 @@
 
 V8 uses the frozen keep judgment as binary rating credit while retaining the
 independent page-treatment and complete-path-fit minimum as a diagnostic grade.
-Every non-reliability formula, cap, gate, recall rule, and rounding rule is
-unchanged.
+Every substantive formula, cap trigger, gate, and recall rule is preserved.
+Dimensions and contributions retain full-precision percentages, and only the
+summed overall percentage is rounded to the nearest hundredth.
 """
 
 from __future__ import annotations
@@ -42,8 +43,8 @@ from structure_locator_review import (
 
 
 RUBRIC_VERSION = "subject-index-rubric-v8"
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
-CALCULATION_SCHEMA = "subject-index-dimension-calculations-v5"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v5"
+CALCULATION_SCHEMA = "subject-index-dimension-calculations-v6"
 ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
 SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA = (
     "subject-index-v7-architecture-review-supplement-v1"
@@ -52,7 +53,6 @@ SUPPLEMENTAL_ARCHITECTURE_REVIEW_SCHEMA = (
 ZERO = Decimal(0)
 ONE = Decimal(1)
 TWO = Decimal(2)
-FIVE = Decimal(5)
 
 write_json = v5.write_json
 
@@ -735,9 +735,9 @@ def calculate_reliability(
         central_base = lower_base = upper_base = ZERO
         v5.mark_defined_zero(keep_denom, "expected_treatments_but_no_locator_assignments")
     else:
-        central_base = FIVE * v5.f1(keep_precision, recall)
-        lower_base = FIVE * v5.f1(keep_lower, recall_lower)
-        upper_base = FIVE * v5.f1(keep_upper, recall_upper)
+        central_base = Decimal(100) * v5.f1(keep_precision, recall)
+        lower_base = Decimal(100) * v5.f1(keep_lower, recall_lower)
+        upper_base = Decimal(100) * v5.f1(keep_upper, recall_upper)
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
         for denominator in (keep_denom, recall_denom):
@@ -790,7 +790,7 @@ def calculate_reliability(
         return [
             v5.cap_record(
                 "reliability.critical_locator",
-                Decimal(2),
+                Decimal(40),
                 bool(critical),
                 {"severity": "critical", "defect_kinds": ["fabricated_locator", "nonexistent_locator", "out_of_scope_locator"]},
                 {"defect_count": len(critical)},
@@ -949,8 +949,8 @@ def calculate_reliability(
             "raw_numerator": v5.decimal_text(TWO * keep_precision * recall),
             "raw_denominator": v5.decimal_text(f1_denominator),
             "normalized_value": v5.decimal_text(v5.f1(keep_precision, recall)),
-            "weight": "base_rating_times_5",
-            "effective_weight": "base_rating_times_5",
+            "weight": "base_percentage_times_100",
+            "effective_weight": "base_percentage_times_100",
             "weight_renormalized": False,
         },
         {
@@ -1021,15 +1021,14 @@ def calculate_reliability(
         "rating_credit_source": "locator_utility_assignments[].rating_credit",
         "diagnostic_grade_formula": "100 * diagnostic_credit",
         "diagnostic_grades_used_in_dimension_arithmetic": False,
-        "pre_cap_rating": result["pre_cap_rating"],
+        "pre_cap_percentage": result["pre_cap_percentage"],
         "cap_evaluations": result["cap_evaluations"],
         "applied_cap": result["applied_cap"],
         "uncertainty_lower": result["missing_data_bounds"]["lower"],
         "uncertainty_upper": result["missing_data_bounds"]["upper"],
-        "rounding": result["rounding"],
-        "final_rating": result["final_rating"],
+        "dimension_percentage": result["dimension_percentage"],
         "dimension_weight": result["dimension_weight"],
-        "awarded_points": result["awarded_points"],
+        "weighted_contribution": result["weighted_contribution"],
     }
     return result
 
@@ -1193,11 +1192,12 @@ def calculate_loaded(
         dimension["input_artifacts"] = selected
 
     all_scored = all(item["status"] == "scored" for item in dimensions)
-    total = (
-        v5.round_points(sum((v5.decimal_value(item["awarded_points"]) for item in dimensions), ZERO))
+    unrounded_total = (
+        sum((v5.decimal_value(item["weighted_contribution"]) for item in dimensions), ZERO)
         if all_scored
         else None
     )
+    total = v5.round_overall_percentage(unrounded_total) if unrounded_total is not None else None
     result = {
         "schema_version": CALCULATION_SCHEMA,
         "calculation_id": f"CALC-{v5.canonical_hash({'evaluation_id': loaded['config']['evaluation_id'], 'audit_mode': audit_mode, 'rubric_version': RUBRIC_VERSION, 'calculation_profile': CALCULATION_PROFILE, 'inputs': calculation_artifacts})[:12].upper()}",
@@ -1222,9 +1222,10 @@ def calculate_loaded(
             "policy": "separate_claim_restrictions_unchanged_from_v6",
         },
         "dimensions": dimensions,
-        "total_score": v5.displayed_number(total, Decimal("0.01")) if total is not None else None,
-        "maximum_score": 100,
-        "arithmetic_check": all_scored and total == sum((v5.decimal_value(item["awarded_points"]) for item in dimensions), ZERO).quantize(Decimal("0.01"), rounding=v5.ROUND_HALF_UP),
+        "overall_percentage": v5.displayed_number(total, Decimal("0.01")) if total is not None else None,
+        "maximum_percentage": 100,
+        "final_rounding": {"mode": "ROUND_HALF_UP", "quantum": "0.01", "input": v5.decimal_text(unrounded_total), "output": v5.decimal_text(total)},
+        "arithmetic_check": all_scored and total == unrounded_total.quantize(Decimal("0.01"), rounding=v5.ROUND_HALF_UP),
     }
     if structure_review is not None:
         result["structure_locator_review"] = {
@@ -1474,12 +1475,12 @@ def command_calculate(args: argparse.Namespace) -> None:
             structure_review=review,
             structure_review_artifact=review_artifact,
         )
-        v5.validate_schema_document(result, "dimension-calculations-v5.schema.json", "Generated V8 dimension calculations")
+        v5.validate_schema_document(result, "dimension-calculations-v6.schema.json", "Generated V8 dimension calculations")
         if args.output:
             output_path = Path(args.output).resolve()
             v5.require(not v5.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Calculation output must not overwrite frozen evidence.")
             write_json(output_path, result)
-            response = {"command": "calculate-v8-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "total_score": result["total_score"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
+            response = {"command": "calculate-v8-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "overall_percentage": result["overall_percentage"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
         else:
             response = {"command": "calculate-v8-dimensions", "ok": True, **result}
         v5.emit(response)
@@ -1505,7 +1506,7 @@ def build_parser() -> argparse.ArgumentParser:
     derive.add_argument("--audit-mode", required=True, choices=("full", "pilot"))
     derive.add_argument("--output", required=True)
     derive.set_defaults(func=command_derive_structure_review)
-    calculate = subparsers.add_parser("calculate", help="Derive all six V8 ratings from frozen ledgers.")
+    calculate = subparsers.add_parser("calculate", help="Derive all six V8 percentages from frozen ledgers.")
     calculate.add_argument("--input", required=True)
     calculate.add_argument("--structure-locator-review", required=True)
     calculate.add_argument("--output")

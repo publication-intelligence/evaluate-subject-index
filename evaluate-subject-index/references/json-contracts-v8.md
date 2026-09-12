@@ -12,11 +12,11 @@ The active workflow uses these primary identities:
 | Candidate locator packet | `candidate-locator-chunk-v1` |
 | Locator routing exceptions | `candidate-locator-routing-exceptions-v1` |
 | Calculation input | `subject-index-dimension-calculation-input-v2` |
-| Dimension calculations | `subject-index-dimension-calculations-v5` |
+| Dimension calculations | `subject-index-dimension-calculations-v6` |
 | Item assessments | `subject-index-item-assessments-v6` |
-| Evaluation result | `subject-index-evaluation-result-v10` |
+| Evaluation result | `subject-index-evaluation-result-v11` |
 | Projection metadata | `subject-index-v8-projection-metadata-v1` |
-| Web report | `subject-index-web-report-v8` |
+| Web report | `subject-index-web-report-v9` |
 | Checkpoint bundle | `subject-index-bundle-v2` |
 
 ## Contract rules
@@ -32,6 +32,8 @@ The active workflow uses these primary identities:
 - Locator-packet preparation registers exactly one packet per frozen manifest chunk plus an empty routing-exception ledger; any unresolved or ownerless assignment prevents the state transition.
 - The candidate's frozen benchmark path and canonical benchmark identity in state are the locator-preparation binding. There is no candidate-benchmark repository-lock contract.
 - Explanation fields are metadata, not calculation inputs.
+- Dimension rows use percentage fields and `weighted_contribution`; caps use `maximum_percentage`. `overall_percentage` is the only rounded score field, with its exact input recorded in `final_rounding`.
 - Checkpoint import validates safe ZIP structure, inventory membership, and current state shape; it does not require a previously published checksum.
 
 Runtime commands accept current schemas only; they do not advertise migration or compatibility entry points.
+The percentage-native arithmetic is a breaking score-contract change: calculation V5/profile V4, result V10, and report V8 artifacts are not accepted as current. Rebuild scoring and report projections from the unchanged frozen evidence under the identities above; do not relabel an older rounded artifact.
