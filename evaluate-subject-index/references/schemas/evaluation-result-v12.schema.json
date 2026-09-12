@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evaluation-result-v12.schema.json",
+  "title": "V8 scored result with heading-access causal provenance",
+  "type": "object",
+  "required": ["schema_version", "evaluation_id", "candidate", "provenance", "audit_scope", "dimension_calculations", "scorecard", "overall_percentage", "interpretation", "metrics", "item_assessments", "heading_access_causal_provenance", "structure_audit", "projection_metadata", "critical_gates", "defect_counts", "comparison_key", "limitations"],
+  "properties": {
+    "schema_version": {"const": "subject-index-evaluation-result-v12"},
+    "evaluation_id": {"$ref": "evaluation-result-v10.schema.json#/properties/evaluation_id"},
+    "candidate": {"$ref": "evaluation-result-v10.schema.json#/properties/candidate"},
+    "provenance": {
+      "type": "object",
+      "required": ["source_sha256", "judgment_policy_sha256", "benchmark_sha256", "rubric_version", "dimension_calculation_profile"],
+      "properties": {
+        "source_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"},
+        "judgment_policy_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"},
+        "benchmark_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"},
+        "rubric_version": {"const": "subject-index-rubric-v8"},
+        "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v5"}
+      },
+      "additionalProperties": true
+    },
+    "audit_scope": {"$ref": "evaluation-result-v10.schema.json#/properties/audit_scope"},
+    "dimension_calculations": {"allOf": [{"$ref": "evaluation-result-v10.schema.json#/$defs/artifact"}, {"required": ["calculation_profile"], "properties": {"schema_version": {"const": "subject-index-dimension-calculations-v6"}, "calculation_profile": {"const": "subject-index-dimension-calculation-v5"}}}]},
+    "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "object", "required": ["dimension_id", "weight", "dimension_percentage", "weighted_contribution", "formula_id"], "properties": {"dimension_id": {"type": "string"}, "weight": {"type": "number"}, "dimension_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "weighted_contribution": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v5:"}}, "additionalProperties": false}},
+    "overall_percentage": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+    "interpretation": {"$ref": "evaluation-result-v10.schema.json#/properties/interpretation"},
+    "metrics": {"$ref": "evaluation-result-v10.schema.json#/properties/metrics"},
+    "item_assessments": {
+      "allOf": [
+        {"$ref": "evaluation-result-v10.schema.json#/$defs/artifact"},
+        {"required": ["grading_policy", "summary"], "properties": {"schema_version": {"const": "subject-index-item-assessments-v7"}, "grading_policy": {"const": "subject-index-item-grading-v4"}, "summary": {"type": "object"}}}
+      ]
+    },
+    "heading_access_causal_provenance": {"$ref": "item-assessments-v7.schema.json#/properties/heading_access_causal_provenance"},
+    "structure_audit": {
+      "allOf": [
+        {"$ref": "evaluation-result-v10.schema.json#/$defs/artifact"},
+        {"properties": {"schema_version": {"const": "structure-audit-v6"}}}
+      ]
+    },
+    "projection_metadata": {
+      "allOf": [
+        {"$ref": "evaluation-result-v10.schema.json#/$defs/artifact"},
+        {"required": ["projection_metadata_sha256"], "properties": {"schema_version": {"const": "subject-index-v8-projection-metadata-v2"}, "projection_metadata_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"}}}
+      ]
+    },
+    "critical_gates": {"$ref": "evaluation-result-v10.schema.json#/properties/critical_gates"},
+    "defect_counts": {"$ref": "evaluation-result-v10.schema.json#/properties/defect_counts"},
+    "comparison_key": {"type": "object", "required": ["source_sha256", "benchmark_sha256", "judgment_policy_sha256", "page_map_sha256", "chunk_manifest_sha256", "inclusion_policy", "audit_mode", "uncertainty_policy", "rubric_version", "dimension_calculation_profile"], "properties": {"source_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"}, "benchmark_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"}, "judgment_policy_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"}, "page_map_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"}, "chunk_manifest_sha256": {"$ref": "evaluation-result-v10.schema.json#/$defs/sha256"}, "inclusion_policy": {"type": "string"}, "audit_mode": {"enum": ["full", "pilot"]}, "uncertainty_policy": {"type": "string"}, "rubric_version": {"const": "subject-index-rubric-v8"}, "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v5"}}, "additionalProperties": true},
+    "limitations": {"$ref": "evaluation-result-v10.schema.json#/properties/limitations"}
+  },
+  "additionalProperties": false
+}

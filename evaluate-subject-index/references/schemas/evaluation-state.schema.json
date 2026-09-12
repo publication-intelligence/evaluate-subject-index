@@ -77,7 +77,7 @@
           "required": ["rubric_version", "dimension_calculation_profile"],
           "properties": {
             "rubric_version": {"const": "subject-index-rubric-v8"},
-            "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v4"}
+            "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v5"}
           },
           "additionalProperties": false
         },

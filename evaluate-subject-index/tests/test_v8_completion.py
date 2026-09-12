@@ -253,7 +253,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
             "updated_at": "2026-01-01T00:00:00Z",
             "source": {"title": "Synthetic source", "filename": "synthetic.pdf", "sha256": SOURCE_SHA, "document_page_span": [1, 1]},
             "candidate": {"candidate_id": candidate["candidate_id"], "candidate_sha256": CANDIDATE_SHA, "schema_version": "candidate-index-v2", "normalized_path": candidate_record["path"], "normalized_sha256": candidate_record["sha256"], "item_inventory_path": next(item["path"] for item in records if item["artifact_type"] == "item_inventory"), "benchmark_path": next(item["path"] for item in records if item["stage"] == "benchmark_freeze"), "benchmark_sha256": BENCHMARK_SHA},
-            "configuration": {"audit_mode": "full", "index_type": "subject_index", "intended_readership": "general", "readership_provenance": {"basis": "inferred", "confidence": "high", "rationale": "Synthetic fixture."}, "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8", "rubric_version": "subject-index-rubric-v8", "scoring_identity": {"rubric_version": "subject-index-rubric-v8", "dimension_calculation_profile": "subject-index-dimension-calculation-v4"}},
+            "configuration": {"audit_mode": "full", "index_type": "subject_index", "intended_readership": "general", "readership_provenance": {"basis": "inferred", "confidence": "high", "rationale": "Synthetic fixture."}, "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8", "rubric_version": "subject-index-rubric-v8", "scoring_identity": {"rubric_version": "subject-index-rubric-v8", "dimension_calculation_profile": "subject-index-dimension-calculation-v5"}},
             "stages": {stage: {"status": "completed" if STAGES_INDEX[stage] <= STAGES_INDEX["missing_access_audit"] else "not_started", "updated_at": "2026-01-01T00:00:00Z" if STAGES_INDEX[stage] <= STAGES_INDEX["missing_access_audit"] else None, "notes": []} for stage in state_cli.STAGES},
             "artifacts": sorted(records, key=lambda item: item["path"]),
             "blockers": [],
@@ -277,7 +277,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         scored = self.run_cli("score", "--state", str(self.state_path))
         self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
 
-        calculations = json.loads((self.root / "scoring/dimension-calculations.v5.json").read_text())
+        calculations = json.loads((self.root / "scoring/dimension-calculations.v6.json").read_text())
         dimensions = {item["dimension_id"]: item for item in calculations["dimensions"]}
         for component_id in ("conceptual_stance_fidelity", "mechanics_consistency"):
             self.assertEqual("scored", dimensions[component_id]["status"])
@@ -316,7 +316,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         scored = self.run_cli("score", "--state", str(self.state_path))
         self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
 
-        calculations = json.loads((self.root / "scoring/dimension-calculations.v5.json").read_text())
+        calculations = json.loads((self.root / "scoring/dimension-calculations.v6.json").read_text())
         concept_dimension = next(item for item in calculations["dimensions"] if item["dimension_id"] == "conceptual_stance_fidelity")
         localized_cap = next(item for item in concept_dimension["cap_evaluations"] if item["cap_id"] == "concept.localized_major_defect")
         self.assertTrue(localized_cap["triggered"])
@@ -377,7 +377,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         scored = self.run_cli("score", "--state", str(self.state_path))
         self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
 
-        result_path = self.root / "scoring/evaluation-result.v11.json"
+        result_path = self.root / "scoring/evaluation-result.v12.json"
         result_bytes = result_path.read_bytes()
         state_before_report_failure = self.state_path.read_bytes()
         result_path.write_bytes(result_bytes + b" ")
@@ -393,11 +393,11 @@ class CurrentV8CompletionTests(unittest.TestCase):
         state = json.loads(self.state_path.read_text())
         self.assertTrue(all(item["status"] == "completed" for item in state["stages"].values()))
         result = json.loads(result_path.read_text())
-        report = json.loads((self.root / "scoring/web-report.v9.json").read_text())
+        report = json.loads((self.root / "scoring/web-report.v10.json").read_text())
         items = json.loads((self.root / "scoring/item-assessments.v7.json").read_text())
-        self.assertEqual("subject-index-evaluation-result-v11", result["schema_version"])
-        self.assertEqual("subject-index-web-report-v9", report["schema_version"])
-        self.assertIsNotNone(result["total_score"])
+        self.assertEqual("subject-index-evaluation-result-v12", result["schema_version"])
+        self.assertEqual("subject-index-web-report-v10", report["schema_version"])
+        self.assertIsNotNone(result["overall_percentage"])
         self.assertEqual("mixed", items["locator_assessments"][0]["locator_utility"]["treatment_category"])
         self.assertEqual("1", items["locator_assessments"][0]["dimension_reliability_credit"])
         self.assertEqual(1, len(items["source_subject_assessments"]))

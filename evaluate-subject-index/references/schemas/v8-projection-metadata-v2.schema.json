@@ -19,7 +19,19 @@
     "defects": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/defects"},
     "examples": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/examples"},
     "limitations": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/limitations"},
-    "canonical_calculation": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/canonical_calculation"},
+    "canonical_calculation": {
+      "type": "object",
+      "required": ["schema_version", "artifact_path", "sha256", "calculation_sha256", "rubric_version", "calculation_profile"],
+      "properties": {
+        "schema_version": {"const": "subject-index-dimension-calculations-v6"},
+        "artifact_path": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/portablePath"},
+        "sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"},
+        "calculation_sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"},
+        "rubric_version": {"const": "subject-index-rubric-v8"},
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v5"}
+      },
+      "additionalProperties": false
+    },
     "canonical_structure_audit": {
       "type": "object",
       "required": ["schema_version", "artifact_path", "sha256"],

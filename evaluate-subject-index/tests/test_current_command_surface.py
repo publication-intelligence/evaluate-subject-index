@@ -76,10 +76,10 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
                 "missing-access-audit.schema.json",
                 "structure-audit-v6.schema.json",
                 "dimension-calculation-input.schema.json",
-                "dimension-calculations-v5.schema.json",
+                "dimension-calculations-v6.schema.json",
                 "item-assessments-v7.schema.json",
-                "evaluation-result-v11.schema.json",
-                "web-report-v9.schema.json",
+                "evaluation-result-v12.schema.json",
+                "web-report-v10.schema.json",
             )
         )
         self.assertNotIn("subject-index-rubric-v4", runtime)

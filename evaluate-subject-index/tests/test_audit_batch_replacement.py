@@ -149,7 +149,7 @@ class ReplacementFixture:
                 "readership_provenance": {"basis": "inferred", "confidence": "high", "rationale": "Synthetic fixture."},
                 "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8",
                 "rubric_version": "subject-index-rubric-v8",
-                "scoring_identity": {"rubric_version": "subject-index-rubric-v8", "dimension_calculation_profile": "subject-index-dimension-calculation-v4"},
+                "scoring_identity": {"rubric_version": "subject-index-rubric-v8", "dimension_calculation_profile": "subject-index-dimension-calculation-v5"},
             },
             "stages": {stage: {"status": "completed", "updated_at": "2026-09-09T00:00:00Z", "notes": []} for stage in STAGES},
             "artifacts": sorted(records, key=lambda item: item["path"]),

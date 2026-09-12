@@ -191,7 +191,7 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
             "source_subject_assessments": [],
         }
         calculation = {
-            "schema_version": "subject-index-dimension-calculations-v5",
+            "schema_version": "subject-index-dimension-calculations-v6",
             "evaluation_id": "EVAL-1",
             "evidence_identity": {},
             "dimensions": [

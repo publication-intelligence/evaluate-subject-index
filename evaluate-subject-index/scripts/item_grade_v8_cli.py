@@ -201,7 +201,7 @@ def build_v8_assessments(
 
     if base_items.get("schema_version") != "subject-index-item-assessments-v3":
         raise ValueError("base_item_assessments_required")
-    if calculation.get("schema_version") != "subject-index-dimension-calculations-v5":
+    if calculation.get("schema_version") != "subject-index-dimension-calculations-v6":
         raise ValueError("v8_calculation_required")
     if base_items.get("evaluation_id") != calculation.get("evaluation_id"):
         raise ValueError("item_calculation_evaluation_mismatch")
@@ -469,7 +469,7 @@ def command_build_assessments(args: argparse.Namespace) -> None:
             base_items, "item-assessments-v3.schema.json", "Base item assessments"
         )
         core.validate_schema_document(
-            calculation, "dimension-calculations-v5.schema.json", "V8 calculation"
+            calculation, "dimension-calculations-v6.schema.json", "V8 calculation"
         )
         core.validate_schema_document(
             structure,

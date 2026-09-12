@@ -14,7 +14,7 @@ Parallel chats may process independent frozen chunks. Their output becomes canon
 
 ## What changed in V8
 
-V8 changes Page-reference Reliability arithmetic by replacing weighted locator precision with a binary question: should each locator be kept unchanged? This directly changes the precision input to that dimension; its recall measure and F1 calculation remain the same.
+V8 changes Page-reference Reliability arithmetic by replacing weighted locator precision with a binary question: should each locator be kept unchanged? This directly changes the precision input to that dimension; its recall measure and F1 calculation remain the same. Each dimension is calculated as a full-precision percentage. Genuine rubric caps are applied as percentage ceilings, each percentage is multiplied by its weight without rounding, and only the sum of the six contributions is rounded to the nearest hundredth.
 
 V8 also clarifies several evidence-judgment rules, such as how comparative facts, attributed observations, contentless mentions, and differences in stance are classified. Those policy clarifications do not change a scoring formula, but they may change a locator's treatment classification or keep decision in a new V8 audit. When they do, any dimension that uses the changed judgment may produce a different result. For example, Editorial Selectivity retains its existing formula and credit mapping but may receive different treatment-class inputs.
 
@@ -22,7 +22,7 @@ V8 also clarifies several evidence-judgment rules, such as how comparative facts
 
 Each locator receives two diagnostic assessments: how much independently useful information is present and how well the complete index path fits it. Comparative or attributed wording does not reduce treatment by itself. The lower diagnostic score produces the displayed locator grade.
 
-Rating credit is separate: a locator marked `supported` is kept unchanged and receives full credit; any assessable locator not kept as delivered receives zero. Expected-treatment recall is combined with this binary keep precision using the unchanged F1 calculation.
+Rating credit is separate: a locator marked `supported` is kept unchanged and receives full credit; any assessable locator not kept as delivered receives zero. Expected-treatment recall is combined with this binary keep precision using the unchanged F1 calculation. Dimension results are not converted to ratings out of five, and neither dimensions nor weighted contributions are rounded.
 
 Free-text rationale explains structured decisions but never supplies a score. Uninspectable material is represented through explicit uncertainty rather than guessed.
 

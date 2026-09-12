@@ -13,11 +13,11 @@ The active workflow uses these primary identities:
 | Candidate normalization issues | `candidate-normalization-issues-v1` (only when non-empty) |
 | Locator routing failure diagnostic | `candidate-locator-routing-exceptions-v1` |
 | Calculation input | `subject-index-dimension-calculation-input-v2` |
-| Dimension calculations | `subject-index-dimension-calculations-v5` |
+| Dimension calculations | `subject-index-dimension-calculations-v6` |
 | Item assessments | `subject-index-item-assessments-v7` |
-| Evaluation result | `subject-index-evaluation-result-v11` |
+| Evaluation result | `subject-index-evaluation-result-v12` |
 | Projection metadata | `subject-index-v8-projection-metadata-v2` |
-| Web report | `subject-index-web-report-v9` |
+| Web report | `subject-index-web-report-v10` |
 | Checkpoint bundle | `subject-index-bundle-v2` |
 
 `subject-index-heading-access-causal-projection-input-v1` is a score-free, exact-hash-bound input used only to project a frozen `structure-audit-v5` into a new V6 reporting artifact. It does not migrate or recalculate scores.

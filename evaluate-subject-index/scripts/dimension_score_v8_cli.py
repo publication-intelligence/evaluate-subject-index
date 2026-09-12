@@ -54,15 +54,14 @@ from structure_audit import (
 
 
 RUBRIC_VERSION = "subject-index-rubric-v8"
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v4"
-CALCULATION_SCHEMA = "subject-index-dimension-calculations-v5"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v5"
+CALCULATION_SCHEMA = "subject-index-dimension-calculations-v6"
 ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
 POLICY_PROFILE = "subject-index-standard-policy-v8"
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
 TWO = Decimal(2)
-FIVE = Decimal(5)
 
 write_json = core.write_json
 
@@ -605,9 +604,9 @@ def calculate_reliability(
         central_base = lower_base = upper_base = ZERO
         core.mark_defined_zero(keep_denom, "expected_treatments_but_no_locator_assignments")
     else:
-        central_base = FIVE * core.f1(keep_precision, recall)
-        lower_base = FIVE * core.f1(keep_lower, recall_lower)
-        upper_base = FIVE * core.f1(keep_upper, recall_upper)
+        central_base = Decimal(100) * core.f1(keep_precision, recall)
+        lower_base = Decimal(100) * core.f1(keep_lower, recall_lower)
+        upper_base = Decimal(100) * core.f1(keep_upper, recall_upper)
     if attempt in {"empty", "structurally_incomplete", "unparseable"}:
         central_base = lower_base = upper_base = ZERO
         for denominator in (keep_denom, recall_denom):
@@ -660,7 +659,7 @@ def calculate_reliability(
         return [
             core.cap_record(
                 "reliability.critical_locator",
-                Decimal(2),
+                Decimal(40),
                 bool(critical),
                 {"severity": "critical", "defect_kinds": ["fabricated_locator", "nonexistent_locator", "out_of_scope_locator"]},
                 {"defect_count": len(critical)},
@@ -819,8 +818,8 @@ def calculate_reliability(
             "raw_numerator": core.decimal_text(TWO * keep_precision * recall),
             "raw_denominator": core.decimal_text(f1_denominator),
             "normalized_value": core.decimal_text(core.f1(keep_precision, recall)),
-            "weight": "base_rating_times_5",
-            "effective_weight": "base_rating_times_5",
+            "weight": "base_percentage_times_100",
+            "effective_weight": "base_percentage_times_100",
             "weight_renormalized": False,
         },
         {
@@ -874,15 +873,14 @@ def calculate_reliability(
         "rating_credit_source": "locator_utility_assignments[].rating_credit",
         "diagnostic_grade_formula": "100 * diagnostic_credit",
         "diagnostic_grades_used_in_dimension_arithmetic": False,
-        "pre_cap_rating": result["pre_cap_rating"],
+        "pre_cap_percentage": result["pre_cap_percentage"],
         "cap_evaluations": result["cap_evaluations"],
         "applied_cap": result["applied_cap"],
         "uncertainty_lower": result["missing_data_bounds"]["lower"],
         "uncertainty_upper": result["missing_data_bounds"]["upper"],
-        "rounding": result["rounding"],
-        "final_rating": result["final_rating"],
+        "dimension_percentage": result["dimension_percentage"],
         "dimension_weight": result["dimension_weight"],
-        "awarded_points": result["awarded_points"],
+        "weighted_contribution": result["weighted_contribution"],
     }
     return result
 
@@ -932,11 +930,8 @@ def calculate_loaded(
         dimension["input_artifacts"] = selected
 
     all_scored = all(item["status"] == "scored" for item in dimensions)
-    total = (
-        core.round_points(sum((core.decimal_value(item["awarded_points"]) for item in dimensions), ZERO))
-        if all_scored
-        else None
-    )
+    unrounded_total = sum((core.decimal_value(item["weighted_contribution"]) for item in dimensions), ZERO) if all_scored else None
+    total = core.round_overall_percentage(unrounded_total) if unrounded_total is not None else None
     result = {
         "schema_version": CALCULATION_SCHEMA,
         "calculation_id": f"CALC-{core.canonical_hash({'evaluation_id': loaded['config']['evaluation_id'], 'audit_mode': audit_mode, 'rubric_version': RUBRIC_VERSION, 'calculation_profile': CALCULATION_PROFILE, 'inputs': calculation_artifacts})[:12].upper()}",
@@ -961,9 +956,15 @@ def calculate_loaded(
             "policy": "separate_claim_restrictions",
         },
         "dimensions": dimensions,
-        "total_score": core.displayed_number(total, Decimal("0.01")) if total is not None else None,
-        "maximum_score": 100,
-        "arithmetic_check": all_scored and total == sum((core.decimal_value(item["awarded_points"]) for item in dimensions), ZERO).quantize(Decimal("0.01"), rounding=core.ROUND_HALF_UP),
+        "overall_percentage": core.displayed_number(total, Decimal("0.01")) if total is not None else None,
+        "maximum_percentage": 100,
+        "final_rounding": {
+            "mode": "ROUND_HALF_UP",
+            "quantum": "0.01",
+            "input": core.decimal_text(unrounded_total) if unrounded_total is not None else None,
+            "output": core.decimal_text(total) if total is not None else None,
+        },
+        "arithmetic_check": all_scored and total == unrounded_total.quantize(Decimal("0.01"), rounding=core.ROUND_HALF_UP),
     }
     architecture = loaded["structure"]["locator_architecture"]
     result["structure_audit"] = {
@@ -1061,12 +1062,12 @@ def command_calculate(args: argparse.Namespace) -> None:
     try:
         loaded = load_v8_inputs(Path(args.input).resolve())
         result = calculate_loaded(loaded)
-        core.validate_schema_document(result, "dimension-calculations-v5.schema.json", "Generated V8 dimension calculations")
+        core.validate_schema_document(result, "dimension-calculations-v6.schema.json", "Generated V8 dimension calculations")
         if args.output:
             output_path = Path(args.output).resolve()
             core.require(not core.aliases_existing_file(output_path, {loaded["config_path"], *loaded["input_paths"]}), "output_aliases_frozen_input", "Calculation output must not overwrite frozen evidence.")
             write_json(output_path, result)
-            response = {"command": "calculate-v8-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "total_score": result["total_score"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
+            response = {"command": "calculate-v8-dimensions", "ok": True, "evaluation_id": result["evaluation_id"], "status": result["status"], "overall_percentage": result["overall_percentage"], "calculation_sha256": result["calculation_sha256"], "artifact_written": str(output_path)}
         else:
             response = {"command": "calculate-v8-dimensions", "ok": True, **result}
         core.emit(response)
@@ -1373,13 +1374,13 @@ def _current_item_assessments(
     return result
 
 
-def _scorecard(calculation: Mapping[str, Any], *, web: bool = False) -> list[dict[str, Any]]:
+def _scorecard(calculation: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [
         {
             "dimension_id": item["dimension_id"],
             "weight": item["dimension_weight"],
-            "rating": item["final_rating"],
-            ("awarded_points" if web else "points"): item["awarded_points"],
+            "dimension_percentage": item["dimension_percentage"],
+            "weighted_contribution": item["weighted_contribution"],
             "formula_id": item["formula_id"],
         }
         for item in calculation["dimensions"]
@@ -1454,7 +1455,7 @@ def _projection_metadata(
         "report_id": f"{calculation['evaluation_id']}-v8",
         "headline": "Subject-index evaluation",
         "summary": "Current-V8 source-grounded evaluation from validated registered artifacts.",
-        "interpretation": f"The validated V8 calculation produced {calculation['total_score']} of 100 points.",
+        "interpretation": f"The validated V8 calculation produced an overall percentage of {calculation['overall_percentage']}%.",
         "defect_counts": dict(sorted(Counter(item["severity"] for item in structure["defects"]).items())),
         "strengths": deepcopy(structure["strengths"]),
         "defects": deepcopy(structure["defects"]),
@@ -1485,7 +1486,7 @@ def _evaluation_result(
     identity = calculation["evidence_identity"]
     reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
     result = {
-        "schema_version": "subject-index-evaluation-result-v11",
+        "schema_version": "subject-index-evaluation-result-v12",
         "evaluation_id": calculation["evaluation_id"],
         "candidate": {"label": metadata["candidate_label"], "sha256": identity["candidate_sha256"]},
         "provenance": {
@@ -1498,7 +1499,7 @@ def _evaluation_result(
         "audit_scope": {"mode": calculation["audit_mode"], "complete": calculation["status"] == "scored"},
         "dimension_calculations": _calculation_reference(calculation_record, calculation),
         "scorecard": _scorecard(calculation),
-        "total_score": calculation["total_score"],
+        "overall_percentage": calculation["overall_percentage"],
         "interpretation": metadata["interpretation"],
         "metrics": {"keep_precision": {key: reliability[key] for key in ("keep_precision_numerator", "keep_precision_denominator", "keep_precision", "treatment_recall", "reliability_f1")}},
         "item_assessments": {"schema_version": items["schema_version"], "artifact_path": items_record["path"], "sha256": items_record["sha256"], "grading_policy": items["grading_policy"], "summary": deepcopy(items["summary"])},
@@ -1521,7 +1522,7 @@ def _evaluation_result(
         },
         "limitations": deepcopy(metadata["limitations"]),
     }
-    core.validate_schema_document(result, "evaluation-result-v11.schema.json", "Generated V8 evaluation result")
+    core.validate_schema_document(result, "evaluation-result-v12.schema.json", "Generated V8 evaluation result")
     return result
 
 
@@ -1554,12 +1555,12 @@ def _web_report(
     structure_ref = _structure_reference(structure_record)
     precision = deepcopy(result["metrics"]["keep_precision"])
     report = {
-        "schema_version": "subject-index-web-report-v9",
+        "schema_version": "subject-index-web-report-v10",
         "report_id": metadata["report_id"],
         "headline": metadata["headline"],
         "summary": metadata["summary"],
-        "grade": {"score": calculation["total_score"], "maximum": 100, "label": _grade_label(calculation["total_score"])},
-        "scorecard": _scorecard(calculation, web=True),
+        "grade": {"score": calculation["overall_percentage"], "maximum": 100, "label": _grade_label(calculation["overall_percentage"])},
+        "scorecard": _scorecard(calculation),
         "calculation_explainer": {**calculation_ref, "item_grades_used": False, "gates_used": False},
         "precision_diagnostics": precision,
         "structure_audit": {**deepcopy(calculation["structure_audit"]), **structure_ref},
@@ -1572,7 +1573,7 @@ def _web_report(
         "item_grade_index": {"schema_version": items["schema_version"], "artifact_path": items_record["path"], "sha256": items_record["sha256"], "grading_policy": items["grading_policy"], "summary": deepcopy(items["summary"]), "color_legend": deepcopy(items["color_legend"]), "interaction": {"color_source": "grade.color_token", "popover_source": "popover", "not_measured_behavior": "neutral_not_failure"}},
         "locator_explanations": [deepcopy(item["locator_explanation"]) for item in items["locator_assessments"]],
         "heading_access_causal_provenance": deepcopy(items["heading_access_causal_provenance"]),
-        "score_views": {"primary_view_id": "canonical_as_delivered", "adjustment_status": "none", "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "score": calculation["total_score"], "maximum": 100, "calculation": calculation_ref, "structure_audit": structure_ref, "causal_attribution": "primary_observed_result", "provenance_artifacts": []}]},
+        "score_views": {"primary_view_id": "canonical_as_delivered", "adjustment_status": "none", "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "score": calculation["overall_percentage"], "maximum": 100, "calculation": calculation_ref, "structure_audit": structure_ref, "causal_attribution": "primary_observed_result", "provenance_artifacts": []}]},
         "methodology": {
             "rubric_version": calculation["rubric_version"],
             "calculation_profile": calculation["calculation_profile"],
@@ -1590,7 +1591,7 @@ def _web_report(
         "limitations": deepcopy(result["limitations"]),
         "evidence_index": {"calculation": calculation_ref, "structure_audit": structure_ref, "item_assessments": {"artifact_path": items_record["path"], "sha256": items_record["sha256"]}},
     }
-    core.validate_schema_document(report, "web-report-v9.schema.json", "Generated V8 web report")
+    core.validate_schema_document(report, "web-report-v10.schema.json", "Generated V8 web report")
     return report
 
 
@@ -1728,17 +1729,17 @@ def command_score_state(args: argparse.Namespace) -> None:
             output_dir = _state_output_path(root, args.output_dir)
             outputs = {
                 "input": output_dir / "dimension-calculation-input.v2.json",
-                "calculation": output_dir / "dimension-calculations.v5.json",
+                "calculation": output_dir / "dimension-calculations.v6.json",
                 "items": output_dir / "item-assessments.v7.json",
                 "metadata": output_dir / "projection-metadata.v2.json",
-                "result": output_dir / "evaluation-result.v11.json",
+                "result": output_dir / "evaluation-result.v12.json",
             }
             collisions = [str(path) for path in outputs.values() if path.exists()]
             core.require(not collisions, "output_exists", "Refusing to overwrite scoring output.", collisions)
             loaded, inventory, inventory_record, locator_documents, missing_documents, structure_record = _calculation_loaded_from_state(state, state_path, outputs["input"])
             calculation = calculate_loaded(loaded)
             core.require(calculation["status"] == "scored", "v8_score_incomplete", "Current full-state inputs did not produce a complete score.", calculation["status"])
-            core.validate_schema_document(calculation, "dimension-calculations-v5.schema.json", "Generated V8 calculation")
+            core.validate_schema_document(calculation, "dimension-calculations-v6.schema.json", "Generated V8 calculation")
             items = _current_item_assessments(inventory, inventory_record, calculation, loaded["structure"], locator_documents, missing_documents)
             stamp = now()
             input_payload = _json_bytes(loaded["config"])
@@ -1746,20 +1747,20 @@ def command_score_state(args: argparse.Namespace) -> None:
             items_payload = _json_bytes(items)
             input_hashes = [item["sha256"] for item in loaded["input_artifacts"]]
             input_record = _artifact_record(root, outputs["input"], input_payload, stage="scoring", artifact_type="dimension_calculation_input", schema_version="subject-index-dimension-calculation-input-v2", stamp=stamp, input_sha256=input_hashes)
-            calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version="subject-index-dimension-calculations-v5", stamp=stamp, input_sha256=input_hashes)
+            calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version="subject-index-dimension-calculations-v6", stamp=stamp, input_sha256=input_hashes)
             items_record = _artifact_record(root, outputs["items"], items_payload, stage="scoring", artifact_type="item_assessments", schema_version="subject-index-item-assessments-v7", stamp=stamp, input_sha256=(calculation_record["sha256"], inventory_record["sha256"], structure_record["sha256"]))
             metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"])
             metadata_payload = _json_bytes(metadata)
             metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version="subject-index-v8-projection-metadata-v2", stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)
             result_payload = _json_bytes(result)
-            result_record = _artifact_record(root, outputs["result"], result_payload, stage="scoring", artifact_type="evaluation_result", schema_version="subject-index-evaluation-result-v11", stamp=stamp, visibility="public", input_sha256=(calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
+            result_record = _artifact_record(root, outputs["result"], result_payload, stage="scoring", artifact_type="evaluation_result", schema_version="subject-index-evaluation-result-v12", stamp=stamp, visibility="public", input_sha256=(calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
             records = [input_record, calculation_record, items_record, metadata_record, result_record]
-            updated = _add_records_and_complete(state, state_path, "scoring", records, "Assembled registered inputs, calculated V8 dimensions, and registered the validated V11 result atomically.")
+            updated = _add_records_and_complete(state, state_path, "scoring", records, "Assembled registered inputs, calculated V8 dimensions, and registered the validated V12 result atomically.")
             for path, payload in zip(outputs.values(), (input_payload, calculation_payload, items_payload, metadata_payload, result_payload), strict=True):
                 _atomic_write(path, payload)
             save_state(state_path, updated)
-        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "total_score": calculation["total_score"], "artifacts_registered": [record["path"] for record in records], "artifacts_written": [str(path) for path in outputs.values()] + [str(state_path)], "next_actions": [next_stage(updated)], "warnings": warnings})
+        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "overall_percentage": calculation["overall_percentage"], "artifacts_registered": [record["path"] for record in records], "artifacts_written": [str(path) for path in outputs.values()] + [str(state_path)], "next_actions": [next_stage(updated)], "warnings": warnings})
     except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, ValueError) as exc:
         if isinstance(exc, (core.CalculationError, StructureAuditError, HeadingAccessProvenanceError)):
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
@@ -1774,8 +1775,8 @@ def command_build_report_state(args: argparse.Namespace) -> None:
     try:
         with evaluation_mutation_lock(state_path):
             state, warnings = _transition_state(state_path, "web_report")
-            result, result_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-evaluation-result-v11", schema_name="evaluation-result-v11.schema.json")[0]
-            calculation, calculation_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-dimension-calculations-v5", schema_name="dimension-calculations-v5.schema.json")[0]
+            result, result_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-evaluation-result-v12", schema_name="evaluation-result-v12.schema.json")[0]
+            calculation, calculation_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-dimension-calculations-v6", schema_name="dimension-calculations-v6.schema.json")[0]
             items, items_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-item-assessments-v7", schema_name="item-assessments-v7.schema.json")[0]
             metadata, metadata_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-v8-projection-metadata-v2", schema_name="v8-projection-metadata-v2.schema.json")[0]
             structure, structure_record, _ = _registered_documents(state, state_path, stage="structure_audit", schema_version="structure-audit-v6", schema_name="structure-audit-v6.schema.json")[0]
@@ -1783,12 +1784,12 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             core.require(metadata["projection_metadata_sha256"] == core.canonical_hash(metadata, "projection_metadata_sha256"), "projection_metadata_self_hash_mismatch", "Registered projection metadata self-hash does not reconstruct.")
             core.require(result["evaluation_id"] == calculation["evaluation_id"] == items["evaluation_id"] == state["evaluation_id"], "evaluation_identity_mismatch", "Registered scoring artifacts use different evaluation identities.")
             core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
-            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / "web-report.v9.json"))
+            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / "web-report.v10.json"))
             core.require(not output.exists(), "output_exists", "Refusing to overwrite web report.", str(output))
             report = _web_report(result=result, calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure=structure, structure_record=structure_record, metadata=metadata)
             payload = _json_bytes(report)
             stamp = now()
-            record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version="subject-index-web-report-v9", stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
+            record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version="subject-index-web-report-v10", stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
             updated = _add_records_and_complete(state, state_path, "web_report", [record], "Built and registered the validated current V8 web-report projection atomically.")
             _atomic_write(output, payload)
             save_state(state_path, updated)
