@@ -3,15 +3,22 @@
 
 from __future__ import annotations
 
+import argparse
+import contextlib
+import hashlib
+import io
+import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "evaluate-subject-index" / "scripts"))
 
-from candidate_preparation_cli import normalize_layout, split_heading_and_payload  # noqa: E402
+from candidate_preparation_cli import command_normalize, normalize_layout, split_heading_and_payload  # noqa: E402
 
 
 def page_map() -> dict:
@@ -143,7 +150,7 @@ class HeadingPayloadTests(unittest.TestCase):
 
 class WhitespaceLayoutNormalizationTests(unittest.TestCase):
     def test_first_whitespace_delimited_locator_is_preserved_and_expanded(self) -> None:
-        candidate, _, exceptions, _ = normalize_layout(
+        candidate, _, issues = normalize_layout(
             layout([
                 ("Aachen 171", 0),
                 ("Académie française 47, 49, 50", 0),
@@ -176,7 +183,53 @@ class WhitespaceLayoutNormalizationTests(unittest.TestCase):
         self.assertEqual("Other", records["Mixed 50; see also Other"]["cross_references"][0]["target"])
         self.assertEqual(10, candidate["normalization"]["displayed_locator_count"])
         self.assertEqual(17, candidate["normalization"]["expanded_locator_assignment_count"])
-        self.assertEqual([], exceptions["exceptions"])
+        self.assertEqual([], issues["issues"])
+
+    def test_clean_normalization_writes_only_three_canonical_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            candidate_file = root / "candidate.txt"
+            candidate_file.write_text("Aachen 171\n")
+            candidate_layout = layout([("Aachen 171", 0)])
+            digest = hashlib.sha256(candidate_file.read_bytes()).hexdigest()
+            candidate_layout["candidate_sha256"] = digest
+            candidate_layout["pdf_metadata"]["sha256"] = digest
+            layout_path = root / "layout.json"
+            layout_path.write_text(json.dumps(candidate_layout))
+            args = argparse.Namespace(
+                state=str(root / "state.json"), page_map=str(root / "page-map.json"),
+                chunk_manifest=str(root / "chunks.json"), policy=str(root / "policy.json"),
+                candidate_file=str(candidate_file), layout=str(layout_path), candidate_id="whitespace-regression",
+                source_edition=None, output_dir=str(root / "output"), force=False,
+            )
+            identities = {"source_sha256": "0" * 64, "page_map": page_map()}
+            stream = io.StringIO()
+            with patch("candidate_preparation_cli.load_source_identities", return_value=identities), contextlib.redirect_stdout(stream):
+                with self.assertRaises(SystemExit) as emitted:
+                    command_normalize(args)
+            self.assertEqual(0, emitted.exception.code)
+            result = json.loads(stream.getvalue())
+            self.assertEqual(3, len(result["artifacts_written"]))
+            self.assertEqual(
+                {"layout_extraction", "candidate_index", "item_inventory"},
+                {item["artifact"] for item in result["artifacts_written"]},
+            )
+            self.assertFalse((root / "output" / "validation" / "candidate-normalization-issues.whitespace-regression.v1.json").exists())
+
+            candidate_layout = layout([(", 171", 0)])
+            candidate_layout["candidate_sha256"] = digest
+            candidate_layout["pdf_metadata"]["sha256"] = digest
+            layout_path.write_text(json.dumps(candidate_layout))
+            args.output_dir = str(root / "issues-output")
+            stream = io.StringIO()
+            with patch("candidate_preparation_cli.load_source_identities", return_value=identities), contextlib.redirect_stdout(stream):
+                with self.assertRaises(SystemExit) as emitted:
+                    command_normalize(args)
+            self.assertEqual(0, emitted.exception.code)
+            result = json.loads(stream.getvalue())
+            self.assertEqual(4, len(result["artifacts_written"]))
+            issue_path = root / "issues-output" / "validation" / "candidate-normalization-issues.whitespace-regression.v1.json"
+            self.assertEqual("needs_review", json.loads(issue_path.read_text())["issues"][0]["status"])
 
 
 if __name__ == "__main__":

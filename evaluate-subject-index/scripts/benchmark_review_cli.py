@@ -9,11 +9,22 @@ import json
 import re
 import unicodedata
 from collections import Counter, defaultdict
+from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
 from schema_validation import schema_errors
+from state_cli import (
+    artifact_id,
+    evaluation_mutation_lock,
+    next_stage,
+    now,
+    portable_relative_path,
+    resolve_artifact_path,
+    save_state,
+    validate_state,
+)
 
 
 INVENTORY_SCHEMA = "source-benchmark-review-inventory-v1"
@@ -48,15 +59,6 @@ def file_sha256(path: Path) -> str:
 def canonical_hash(value: dict[str, Any]) -> str:
     clone = dict(value)
     clone.pop("benchmark_sha256", None)
-    encoded = json.dumps(clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def benchmark_content_hash(value: dict[str, Any]) -> str:
-    """Hash editorial benchmark content while ignoring draft/freeze wrapper fields."""
-    clone = dict(value)
-    for field in ("schema_version", "benchmark_sha256", "synthesis", "freeze"):
-        clone.pop(field, None)
     encoded = json.dumps(clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -119,9 +121,37 @@ def final_benchmark_structure_errors(benchmark: dict[str, Any]) -> list[str]:
     return errors
 
 
+def draft_benchmark_structure_errors(benchmark: dict[str, Any]) -> list[str]:
+    errors = schema_errors(benchmark, "source-benchmark-draft.schema.json")
+    if errors:
+        return errors
+    subjects = benchmark["subjects"]
+    relationships = benchmark["relationships"]
+    tasks = benchmark["reader_tasks"]
+    subject_ids = [subject_id(item) for item in subjects]
+    relationship_ids = [relationship_id(item) for item in relationships]
+    task_ids = [task_id(item) for item in tasks]
+    known_subject_ids = set(subject_ids)
+    if len(subject_ids) != len(known_subject_ids):
+        errors.append("Subject identifiers must be unique.")
+    if len(relationship_ids) != len(set(relationship_ids)):
+        errors.append("Relationship identifiers must be unique.")
+    if len(task_ids) != len(set(task_ids)):
+        errors.append("Reader-task identifiers must be unique.")
+    for relationship in relationships:
+        if relationship["source_subject_id"] not in known_subject_ids:
+            errors.append(f"Relationship {relationship['relationship_id']} has an unknown source subject.")
+        if relationship.get("target_subject_id") not in known_subject_ids and "target_subject_id" in relationship:
+            errors.append(f"Relationship {relationship['relationship_id']} has an unknown target subject.")
+    for task in tasks:
+        if not set(task["subject_ids"]).issubset(known_subject_ids):
+            errors.append(f"Reader task {task['task_id']} refers to an unknown subject.")
+    return errors
+
+
 def build_inventory(draft_path: Path, threshold: float) -> dict[str, Any]:
     draft = load_json(draft_path)
-    structural_errors = schema_errors(draft, "source-benchmark-draft.schema.json")
+    structural_errors = draft_benchmark_structure_errors(draft)
     if structural_errors:
         fail("schema_validation_failed", "Benchmark draft is structurally invalid.", structural_errors)
     subjects = draft["subjects"]
@@ -213,10 +243,8 @@ def build_inventory(draft_path: Path, threshold: float) -> dict[str, Any]:
         "schema_version": INVENTORY_SCHEMA,
         "evaluation_id": draft.get("evaluation_id"),
         "draft": {
-            "path": draft_path.name,
             "version": draft.get("version"),
-            "file_sha256": file_sha256(draft_path),
-            "canonical_sha256": canonical_hash(draft),
+            "sha256": file_sha256(draft_path),
             "candidate_blindness": draft.get("candidate_blindness"),
         },
         "review_requirements": {
@@ -269,20 +297,27 @@ def validate_review_data(draft_path: Path, inventory_path: Path, review_path: Pa
     inventory = load_json(inventory_path)
     review = load_json(review_path)
     errors = [
-        *(f"draft: {error}" for error in schema_errors(draft, "source-benchmark-draft.schema.json")),
+        *(f"draft: {error}" for error in draft_benchmark_structure_errors(draft)),
         *(f"inventory: {error}" for error in schema_errors(inventory, "source-benchmark-review-inventory.schema.json")),
         *(f"review: {error}" for error in schema_errors(review, "source-benchmark-review.schema.json")),
     ]
     if errors:
         return errors, review
+    threshold = inventory.get("diagnostics", {}).get("near_duplicate_threshold")
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not 0.0 < threshold <= 1.0:
+        errors.append("inventory diagnostics.near_duplicate_threshold must be greater than 0 and no more than 1.")
+    elif inventory != build_inventory(draft_path, float(threshold)):
+        errors.append("Review inventory does not exactly match the deterministic inventory recomputed from the draft.")
     for value, label in ((inventory, "inventory"), (review, "review")):
         if value.get("evaluation_id") != draft.get("evaluation_id"):
             errors.append(f"{label} evaluation_id does not match the draft.")
     draft_ref = review["draft"]
-    if draft_ref.get("file_sha256") != file_sha256(draft_path):
-        errors.append("Review draft file_sha256 does not match the supplied draft.")
-    if draft_ref.get("canonical_sha256") != canonical_hash(draft):
-        errors.append("Review draft canonical_sha256 does not match the supplied draft.")
+    if draft_ref != inventory.get("draft"):
+        errors.append("Review draft identity does not match the deterministic inventory.")
+    if draft_ref.get("sha256") != file_sha256(draft_path):
+        errors.append("Review draft sha256 does not identify the supplied draft.")
+    if draft.get("candidate_blindness") != "preserved":
+        errors.append("Benchmark draft candidate blindness must be preserved.")
     if review.get("candidate_blindness") != "preserved":
         errors.append("Candidate blindness must be preserved for an approved benchmark review.")
     independence = review["reviewer_independence"]
@@ -323,6 +358,125 @@ def validate_review_data(draft_path: Path, inventory_path: Path, review_path: Pa
     return errors, review
 
 
+def approved_changes(draft: dict[str, Any], final: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the smallest stable-ID ledger that describes the semantic revision."""
+    changes: list[dict[str, Any]] = []
+    collections = (
+        ("subject", "subjects", "subject_id"),
+        ("relationship", "relationships", "relationship_id"),
+        ("reader_task", "reader_tasks", "task_id"),
+    )
+    for entity_type, collection, id_field in collections:
+        before = {item[id_field]: item for item in draft[collection]}
+        after = {item[id_field]: item for item in final[collection]}
+        for entity_id in sorted(before.keys() | after.keys()):
+            if entity_id not in before:
+                changes.append({"entity_type": entity_type, "entity_id": entity_id, "action": "add"})
+            elif entity_id not in after:
+                changes.append({"entity_type": entity_type, "entity_id": entity_id, "action": "remove"})
+            else:
+                fields = sorted(
+                    field for field in before[entity_id].keys() | after[entity_id].keys()
+                    if field != id_field and (
+                        (field in before[entity_id]) != (field in after[entity_id])
+                        or before[entity_id].get(field) != after[entity_id].get(field)
+                    )
+                )
+                if fields:
+                    changes.append({"entity_type": entity_type, "entity_id": entity_id, "action": "update", "fields": fields})
+
+    wrappers = {
+        "schema_version", "benchmark_sha256", "synthesis", "freeze", "version",
+        "benchmark_id", "evaluation_id", "source_sha256", "policy_sha256",
+        "page_map_sha256", "chunk_manifest_sha256", "candidate_blindness",
+        "subjects", "relationships", "reader_tasks",
+    }
+    fields = sorted(
+        field for field in draft.keys() | final.keys()
+        if field not in wrappers and (
+            (field in draft) != (field in final) or draft.get(field) != final.get(field)
+        )
+    )
+    if fields:
+        changes.append({
+            "entity_type": "benchmark", "entity_id": draft["benchmark_id"],
+            "action": "update", "fields": fields,
+        })
+    return changes
+
+
+def normalized_changes(changes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized = [
+        {**change, **({"fields": sorted(change["fields"])} if "fields" in change else {})}
+        for change in changes
+    ]
+    return sorted(normalized, key=lambda item: (
+        item["entity_type"], item["entity_id"], item["action"], item.get("fields", [])
+    ))
+
+
+def registered_identity_matches(
+    state: dict[str, Any], state_path: Path, stage: str, field: str, expected: str
+) -> bool:
+    for item in state.get("artifacts", []):
+        if not isinstance(item, dict) or item.get("stage") != stage:
+            continue
+        try:
+            path = resolve_artifact_path(state_path, item["path"])
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (KeyError, OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            continue
+        if (
+            isinstance(document, dict)
+            and file_sha256(path) == item.get("sha256")
+            and document.get(field) == expected
+        ):
+            return True
+    return False
+
+
+def validate_final_data(
+    draft_path: Path,
+    inventory_path: Path,
+    review_path: Path,
+    final_path: Path,
+) -> tuple[list[str], dict[str, Any], dict[str, Any]]:
+    errors, review = validate_review_data(draft_path, inventory_path, review_path)
+    draft = load_json(draft_path)
+    final = load_json(final_path)
+    errors.extend(final_benchmark_structure_errors(final))
+    if errors:
+        return errors, review, final
+    for field in (
+        "benchmark_id", "evaluation_id", "source_sha256", "policy_sha256",
+        "page_map_sha256", "chunk_manifest_sha256",
+    ):
+        if final.get(field) != draft.get(field):
+            errors.append(f"Final benchmark changed frozen identity field: {field}")
+    if final.get("candidate_blindness") != "preserved":
+        errors.append("Final benchmark candidate blindness must be preserved.")
+    if final.get("benchmark_sha256") != canonical_hash(final):
+        errors.append("Final benchmark canonical hash does not recompute.")
+
+    actual_changes = normalized_changes(approved_changes(draft, final))
+    if normalized_changes(review.get("approved_changes", [])) != actual_changes:
+        errors.append("Review approved_changes does not exactly match the final benchmark revision.")
+    recommendation = review.get("recommendation")
+    if recommendation == "retain_draft":
+        if actual_changes:
+            errors.append("retain_draft review must preserve the draft's semantic benchmark content.")
+        if final.get("version") != draft.get("version"):
+            errors.append("retain_draft review must retain the draft version.")
+    elif recommendation == "approve_revised":
+        if not actual_changes:
+            errors.append("approve_revised review requires a substantive approved change.")
+        if final.get("version", 0) <= draft.get("version", 0):
+            errors.append("A revised benchmark must increment the benchmark version.")
+    else:
+        errors.append("Review recommendation does not authorize final freeze.")
+    return errors, review, final
+
+
 def command_screen(args: argparse.Namespace) -> None:
     if not 0.0 < args.near_duplicate_threshold <= 1.0:
         fail("invalid_threshold", "near-duplicate-threshold must be greater than 0 and no more than 1.")
@@ -352,46 +506,98 @@ def command_validate_review(args: argparse.Namespace) -> None:
     }, 0 if not errors else 1)
 
 
-def command_validate_final(args: argparse.Namespace) -> None:
+def command_freeze(args: argparse.Namespace) -> None:
+    state_path = Path(args.state).resolve()
     draft_path = Path(args.draft)
     final_path = Path(args.final)
-    errors, review = validate_review_data(draft_path, Path(args.inventory), Path(args.review))
-    draft = load_json(draft_path)
-    final = load_json(final_path)
-    errors.extend(final_benchmark_structure_errors(final))
-    for field in ("evaluation_id", "source_sha256", "policy_sha256", "page_map_sha256", "chunk_manifest_sha256"):
-        if final.get(field) != draft.get(field):
-            errors.append(f"Final benchmark changed frozen identity field: {field}")
-    if final.get("candidate_blindness") != "preserved":
-        errors.append("Final benchmark candidate blindness must be preserved.")
-    stored_hash = final.get("benchmark_sha256")
-    actual_hash = canonical_hash(final)
-    if stored_hash != actual_hash:
-        errors.append("Final benchmark canonical hash does not recompute.")
-    recommendation = review.get("recommendation")
-    same_bytes = file_sha256(draft_path) == file_sha256(final_path)
-    same_canonical_content = benchmark_content_hash(draft) == benchmark_content_hash(final)
-    if recommendation == "retain_draft":
-        if not same_canonical_content:
-            errors.append("retain_draft review must preserve the draft's canonical benchmark content.")
-        if final.get("version") != draft.get("version"):
-            errors.append("retain_draft review must retain the draft version.")
-    elif recommendation == "approve_revised":
-        if same_bytes:
-            errors.append("approve_revised review requires a substantively different final benchmark.")
-        if not isinstance(final.get("version"), int) or final.get("version", 0) <= draft.get("version", 0):
-            errors.append("A revised benchmark must increment the benchmark version.")
-    else:
-        errors.append("Review recommendation does not authorize final freeze.")
+    inventory_path = Path(args.inventory)
+    review_path = Path(args.review)
+    errors, review, final = validate_final_data(
+        draft_path, inventory_path, review_path, final_path
+    )
+    state = load_json(state_path)
+    state_errors, warnings = validate_state(state, state_path=state_path)
+    errors.extend(f"state: {error}" for error in state_errors)
+    if state.get("evaluation_id") != final.get("evaluation_id"):
+        errors.append("Final benchmark evaluation_id does not match canonical state.")
+    if state.get("source", {}).get("sha256") != final.get("source_sha256"):
+        errors.append("Final benchmark source_sha256 does not match canonical state.")
+    if state.get("stages", {}).get("benchmark_synthesis", {}).get("status") != "completed":
+        errors.append("Benchmark synthesis must be complete before freeze.")
+    for stage in ("benchmark_review", "benchmark_freeze"):
+        if state.get("stages", {}).get(stage, {}).get("status") == "completed":
+            errors.append(f"{stage} is already completed.")
+    for stage, field in (
+        ("page_mapping", "page_map_sha256"),
+        ("chunk_definition", "chunk_manifest_sha256"),
+        ("define_policy", "policy_sha256"),
+    ):
+        if not registered_identity_matches(state, state_path, stage, field, final.get(field)):
+            errors.append(f"Final benchmark {field} does not identify a registered {stage} artifact.")
+
+    root = state_path.parent
+    draft_relative = portable_relative_path(draft_path, root)
+    review_relative = portable_relative_path(review_path, root)
+    final_relative = portable_relative_path(final_path, root)
+    if review_relative == final_relative:
+        errors.append("Review ledger and final benchmark must be separate artifacts.")
+    draft_digest = file_sha256(draft_path)
+    if not any(
+        item.get("stage") == "benchmark_synthesis"
+        and item.get("path") == draft_relative
+        and item.get("sha256") == draft_digest
+        and item.get("schema_version") == "source-subject-benchmark-draft-v1"
+        for item in state.get("artifacts", []) if isinstance(item, dict)
+    ):
+        errors.append("Supplied draft is not the exact registered benchmark_synthesis artifact.")
+    if errors:
+        emit({
+            "command": "freeze", "ok": False,
+            "evaluation_id": final.get("evaluation_id"), "errors": errors,
+            "warnings": warnings,
+        }, 1)
+
+    stamp = now()
+    updated = deepcopy(state)
+    records = []
+    for path, relative, stage, artifact_type, schema_version in (
+        (review_path, review_relative, "benchmark_review", "source_benchmark_review", REVIEW_SCHEMA),
+        (final_path, final_relative, "benchmark_freeze", "source_benchmark", "source-subject-benchmark-v2"),
+    ):
+        digest = file_sha256(path)
+        records.append({
+            "artifact_id": artifact_id(relative, digest), "stage": stage,
+            "artifact_type": artifact_type, "path": relative, "sha256": digest,
+            "media_type": "application/json", "schema_version": schema_version,
+            "visibility": "private", "retention": "required", "frozen": True,
+            "recorded_at": stamp,
+        })
+    registered_paths = {record["path"] for record in records}
+    updated["artifacts"] = [
+        item for item in updated.get("artifacts", []) if item.get("path") not in registered_paths
+    ] + records
+    updated["artifacts"].sort(key=lambda item: item["path"])
+    updated["stages"]["benchmark_review"] = {
+        "status": "completed", "updated_at": stamp,
+        "notes": ["Validated independent candidate-blind review ledger."],
+    }
+    updated["stages"]["benchmark_freeze"] = {
+        "status": "completed", "updated_at": stamp,
+        "notes": ["Validated and registered the approved final benchmark atomically with review."],
+    }
+    updated["updated_at"] = stamp
+    state_errors, warnings = validate_state(updated, state_path=state_path)
+    if state_errors:
+        fail("canonical_state_invalid", "Benchmark freeze would leave invalid canonical state.", state_errors)
+    save_state(state_path, updated)
+    action = next_stage(updated)
     emit({
-        "command": "validate-final",
-        "ok": not errors,
-        "evaluation_id": final.get("evaluation_id"),
-        "version": final.get("version"),
-        "benchmark_sha256": actual_hash,
-        "errors": errors,
-        "warnings": [],
-    }, 0 if not errors else 1)
+        "command": "freeze", "ok": True, "evaluation_id": final["evaluation_id"],
+        "version": final["version"], "benchmark_sha256": final["benchmark_sha256"],
+        "artifacts_registered": [record["path"] for record in records],
+        "artifacts_written": [str(state_path)],
+        "next_actions": [] if action is None else [action], "warnings": warnings,
+    })
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -407,18 +613,23 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--inventory", required=True)
     review.add_argument("--review", required=True)
     review.set_defaults(func=command_validate_review)
-    final = subparsers.add_parser("validate-final")
-    final.add_argument("--draft", required=True)
-    final.add_argument("--inventory", required=True)
-    final.add_argument("--review", required=True)
-    final.add_argument("--final", required=True)
-    final.set_defaults(func=command_validate_final)
+    freeze = subparsers.add_parser("freeze")
+    freeze.add_argument("--state", required=True)
+    freeze.add_argument("--draft", required=True)
+    freeze.add_argument("--inventory", required=True)
+    freeze.add_argument("--review", required=True)
+    freeze.add_argument("--final", required=True)
+    freeze.set_defaults(func=command_freeze)
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    args.func(args)
+    if args.command == "freeze":
+        with evaluation_mutation_lock(Path(args.state)):
+            args.func(args)
+    else:
+        args.func(args)
 
 
 if __name__ == "__main__":

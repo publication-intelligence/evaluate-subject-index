@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "candidate-locator-routing-exceptions.schema.json",
-  "title": "Candidate locator routing exceptions",
+  "title": "Candidate locator routing failure diagnostic",
   "type": "object",
   "required": ["schema_version", "candidate_id", "candidate_sha256", "benchmark_sha256", "page_map_sha256", "chunk_manifest_sha256", "exceptions", "exception_count"],
   "properties": {

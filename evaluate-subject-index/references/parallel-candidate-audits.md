@@ -15,9 +15,16 @@ python scripts/page_chunk_cli.py prepare-locator-chunks \
   --benchmark source-benchmark.json
 ```
 
-This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator remains in the routing-exception ledger and blocks worker registration.
+This command must complete `locator_chunk_preparation`; an unresolved or ownerless locator produces an unregistered routing diagnostic and blocks worker registration.
 
 Each chat receives the current checkpoint or equivalent evaluation files plus one locator packet. It returns one `locator-audit-v2` artifact covering every and only the packet's assignments.
+
+Every locator row must state `complete_path_fit` as one of `exact_fit`, `material_partial_fit`, `material_mismatch`, `severe_mismatch`, `no_fit`, or `uninspectable`. It is a native judgment field and is never reconstructed from prose.
+
+Worker output does not need to repeat global source, policy, page-map, manifest,
+candidate-file, inventory-file, or audit-set hashes. If older V8 artifacts retain
+those values in `provenance`, they are informational only; registration validates
+the packet, candidate, evaluation, stable IDs, and exact owned denominator.
 
 Validate without mutation:
 
@@ -31,11 +38,23 @@ python scripts/parallel_candidate_audit_cli.py validate-audits \
 
 Use `register-audits` with the same inputs to copy validated files to the canonical candidate audit directory and update the single state. Partial batches leave `locator_audit` in progress. Full frozen-chunk coverage completes it.
 
+To correct an already registered audit batch, rerun `register-audits` with
+`--replace-complete-batch`. This explicit mode requires exactly one valid audit
+and, for locator audits, exactly one valid packet for every frozen chunk. It
+validates the entire selected set before replacing canonical audit files, marks
+the selected audit stage complete, and resets every later stage while removing
+its artifact registrations. Later output files remain on disk but are no longer
+current.
+
 ## Missing-access audits
 
 Missing-access work starts only after locator auditing is complete. Each worker uses the frozen benchmark, normalized candidate and inventory, and complete registered locator-audit set. Source PDFs are not routine inputs.
 
 Pass `--audit-kind missing_access`, the audit files being registered, and one `--locator-audit` for every frozen chunk. Completion requires exact coverage of owned subjects, reader tasks, and treatments.
+
+The coordinator derives each missing-access workset from the canonical inputs and
+computes global audit-set identities from the files selected for calculation.
+Workers do not predict or copy either global audit-set hash.
 
 ## Recovery and collaboration
 
@@ -48,5 +67,5 @@ Workers may return files through attachments, shared storage, branches, or pull 
 - Validate all selected files before mutating state.
 - Do not assign a document page or judgment ID to multiple chunks.
 - Do not publish restricted source or candidate material.
-- Do not silently overwrite a different already-registered audit; resolve that content conflict explicitly.
+- Do not overwrite a different already-registered audit without the explicit complete-batch replacement mode.
 - Keep checkpointing separate from registration so checkpoint failure cannot roll back accepted work.

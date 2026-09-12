@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "v8-projection-metadata-v2.schema.json",
+  "title": "V8 result, web, and score-view projection metadata with causal source binding",
+  "type": "object",
+  "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_audit", "canonical_heading_access_source", "projection_metadata_sha256"],
+  "properties": {
+    "schema_version": {"const": "subject-index-v8-projection-metadata-v2"},
+    "candidate_label": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/candidate_label"},
+    "inclusion_policy": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/inclusion_policy"},
+    "uncertainty_policy": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/uncertainty_policy"},
+    "critical_gates": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/critical_gates"},
+    "report_id": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/report_id"},
+    "headline": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/headline"},
+    "summary": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/summary"},
+    "interpretation": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/interpretation"},
+    "defect_counts": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/defect_counts"},
+    "strengths": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/strengths"},
+    "defects": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/defects"},
+    "examples": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/examples"},
+    "limitations": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/limitations"},
+    "canonical_calculation": {
+      "type": "object",
+      "required": ["schema_version", "artifact_path", "sha256", "calculation_sha256", "rubric_version", "calculation_profile"],
+      "properties": {
+        "schema_version": {"const": "subject-index-dimension-calculations-v6"},
+        "artifact_path": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/portablePath"},
+        "sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"},
+        "calculation_sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"},
+        "rubric_version": {"const": "subject-index-rubric-v8"},
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v5"}
+      },
+      "additionalProperties": false
+    },
+    "canonical_structure_audit": {
+      "type": "object",
+      "required": ["schema_version", "artifact_path", "sha256"],
+      "properties": {
+        "schema_version": {"const": "structure-audit-v6"},
+        "artifact_path": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/portablePath"},
+        "sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "canonical_heading_access_source": {
+      "allOf": [
+        {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/artifactReference"},
+        {"properties": {"role": {"const": "heading_access_causal_source"}, "schema_version": {"const": "structure-audit-v6"}}}
+      ]
+    },
+    "counterfactual_score_views": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/counterfactual_score_views"},
+    "projection_metadata_sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/properties/projection_metadata_sha256"}
+  },
+  "additionalProperties": false
+}

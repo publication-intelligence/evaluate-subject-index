@@ -18,7 +18,7 @@ evaluation/
 └── reports/
 ```
 
-All registered paths are relative to the evaluation directory. Restricted source and candidate material stays private. Portable exports omit restricted artifacts by default.
+All registered paths are relative to the evaluation directory. Restricted source and candidate material stays private. Portable checkpoints omit restricted artifacts by default.
 
 ## When to checkpoint
 

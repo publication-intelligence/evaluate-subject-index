@@ -29,15 +29,10 @@ from state_cli import (
 from schema_validation import schema_errors
 
 
-PRIVATE_ARTIFACT_KEYS = (
-    "candidate_ref",
-    "layout_profile",
+CANONICAL_ARTIFACT_KEYS = (
     "layout_extraction",
     "candidate_index",
     "item_inventory",
-    "normalization_exceptions",
-    "normalization_report",
-    "normalization_qa",
 )
 FORBIDDEN_PREJUDGMENT_KEYS = {
     "score",
@@ -567,7 +562,7 @@ def locator_assignments_for_display(
     return [assignment], {"display_id": display_id, "displayed_locator": token, "kind": "point", "range_id": None, "mapping_status": "unresolved", "locator_ids": [locator_id]}, exceptions
 
 
-def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     require_schema(layout, "candidate-layout-extraction.schema.json", "Candidate layout extraction")
     require_schema(page_map, "page-map.schema.json", "Page map")
     candidate_id = layout["candidate_id"]
@@ -586,7 +581,7 @@ def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[
         reference_only = not heading and bool(payload) and bool(heading_stack)
         if not heading and not reference_only:
             exception_id = stable_id("EXC", candidate_sha, {"record_index": record_index, "type": "missing_heading", "text": text})
-            exceptions.append({"exception_id": exception_id, "type": "missing_heading", "status": "unresolved", "related_ids": group["line_ids"], "displayed_form": text, "detail": "No entry or subentry heading could be identified."})
+            exceptions.append({"exception_id": exception_id, "type": "missing_heading", "status": "needs_review", "related_ids": group["line_ids"], "displayed_form": text, "detail": "No entry or subentry heading could be identified."})
             continue
         indentation_gap = indent > len(heading_stack)
         if reference_only:
@@ -602,7 +597,7 @@ def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[
         record_id = stable_id("REC", candidate_sha, {"record_index": record_index, "line_ids": group["line_ids"]})
         if indentation_gap:
             exception_id = stable_id("EXC", candidate_sha, {"record_id": record_id, "type": "indentation_gap"})
-            exceptions.append({"exception_id": exception_id, "type": "indentation_gap", "status": "unresolved", "related_ids": [record_id, *group["line_ids"]], "displayed_form": text, "detail": "Delivered indentation skipped an available parent level; the available parent chain was preserved without editorial repair."})
+            exceptions.append({"exception_id": exception_id, "type": "indentation_gap", "status": "needs_review", "related_ids": [record_id, *group["line_ids"]], "displayed_form": text, "detail": "Delivered indentation skipped an available parent level; the available parent chain was preserved without editorial repair."})
 
         locator_text, reference_specs, malformed_reference = split_references(payload)
         locator_tokens = [item.strip() for item in re.split(r"[,;]", locator_text) if item.strip()]
@@ -619,7 +614,7 @@ def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[
                 exception_id = stable_id("EXC", candidate_sha, {"record_id": record_id, "display_id": display_id, "type": exception["type"]})
                 exceptions.append({
                     "exception_id": exception_id,
-                    "status": "unresolved",
+                    "status": "needs_review",
                     "record_id": record_id,
                     "line_ids": group["line_ids"],
                     "detail": "The displayed locator was retained exactly and was not guessed or repaired.",
@@ -638,10 +633,10 @@ def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[
             })
             if not spec["target"]:
                 exception_id = stable_id("EXC", candidate_sha, {"reference_id": reference_id, "type": "malformed_cross_reference"})
-                exceptions.append({"exception_id": exception_id, "type": "malformed_cross_reference", "status": "unresolved", "related_ids": [record_id, reference_id], "record_id": record_id, "line_ids": group["line_ids"], "displayed_form": text, "detail": "Cross-reference target is empty."})
+                exceptions.append({"exception_id": exception_id, "type": "malformed_cross_reference", "status": "needs_review", "related_ids": [record_id, reference_id], "record_id": record_id, "line_ids": group["line_ids"], "displayed_form": text, "detail": "Cross-reference target is empty."})
         if malformed_reference:
             exception_id = stable_id("EXC", candidate_sha, {"record_id": record_id, "type": "malformed_cross_reference"})
-            exceptions.append({"exception_id": exception_id, "type": "malformed_cross_reference", "status": "unresolved", "related_ids": [record_id], "record_id": record_id, "line_ids": group["line_ids"], "displayed_form": text, "detail": "A see marker could not be parsed without changing the delivered text."})
+            exceptions.append({"exception_id": exception_id, "type": "malformed_cross_reference", "status": "needs_review", "related_ids": [record_id], "record_id": record_id, "line_ids": group["line_ids"], "displayed_form": text, "detail": "A see marker could not be parsed without changing the delivered text."})
         if cross_references and locator_assignments:
             record_type = "mixed"
         elif cross_references:
@@ -693,230 +688,96 @@ def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[
         },
     }
     inventory = build_inventory(candidate)
-    exception_ledger = {
-        "schema_version": "candidate-normalization-exceptions-v1",
+    issue_report = {
+        "schema_version": "candidate-normalization-issues-v1",
         "candidate_id": candidate_id,
         "candidate_sha256": candidate_sha,
         "page_map_sha256": page_map.get("page_map_sha256"),
-        "exceptions": exceptions,
+        "issues": exceptions,
         "counts": {
             "total": len(exceptions),
-            "unresolved": sum(item.get("status") == "unresolved" for item in exceptions),
             "by_type": {key: sum(item.get("type") == key for item in exceptions) for key in sorted({item.get("type") for item in exceptions})},
         },
     }
-    report = {
-        "schema_version": "candidate-normalization-report-v1",
-        "candidate_id": candidate_id,
-        "candidate_sha256": candidate_sha,
-        "source_sha256": page_map.get("source_sha256"),
-        "page_map_sha256": page_map.get("page_map_sha256"),
-        "adapter": layout.get("adapter"),
-        "counts": {
-            **candidate["normalization"],
-            "candidate_pdf_pages": len(layout.get("pages", [])),
-            "reading_order_regions": sum(len(page.get("regions", [])) for page in layout.get("pages", [])),
-            "extracted_lines": sum(len(region.get("lines", [])) for page in layout.get("pages", []) for region in page.get("regions", [])),
-            "normalization_exceptions": len(exceptions),
-        },
-        "status": "awaiting_full_normalization_qa",
-        "candidate_quality_judgments_performed": False,
-    }
-    return candidate, inventory, exception_ledger, report
+    return candidate, inventory, issue_report
 
 
-def expected_qa_inventory(
-    layout: dict[str, Any],
-    candidate: dict[str, Any],
-    exceptions: dict[str, Any],
-) -> dict[str, list[Any]]:
+def layout_accounting_errors(layout: dict[str, Any], candidate: dict[str, Any], issues: dict[str, Any]) -> list[str]:
+    """Compute the full layout and normalization denominator gate."""
     pages, regions, lines = flatten_layout(layout)
-    records = candidate.get("records", [])
-    return {
-        "candidate_pdf_pages": [page.get("candidate_pdf_page") for page in pages],
-        "region_ids": [region.get("region_id") for region in regions],
-        "line_ids": [line.get("line_id") for line in lines],
-        "excluded_line_ids": [line.get("excluded_line_id") for line in layout.get("excluded_lines", [])],
-        "main_heading_record_ids": [item.get("record_id") for item in records if len(item.get("heading_path", [])) == 1],
-        "subheading_record_ids": [item.get("record_id") for item in records if len(item.get("heading_path", [])) > 1],
-        "path_ids": [item.get("path_id") for item in records],
-        "display_ids": [display.get("display_id") for item in records for display in item.get("locator_displays", [])],
-        "locator_ids": [locator.get("locator_id") for item in records for locator in item.get("locator_assignments", [])],
-        "cross_reference_ids": [reference.get("reference_id") for item in records for reference in item.get("cross_references", [])],
-        "exception_ids": [item.get("exception_id") for item in exceptions.get("exceptions", [])],
+    errors: list[str] = []
+    id_groups = {
+        "candidate PDF page": [page.get("candidate_pdf_page") for page in pages],
+        "region": [region.get("region_id") for region in regions],
+        "line": [line.get("line_id") for line in lines],
+        "excluded line": [item.get("excluded_line_id") for item in layout.get("excluded_lines", [])],
     }
-
-
-def expected_page_reviews(layout: dict[str, Any], candidate: dict[str, Any], exceptions: dict[str, Any]) -> list[dict[str, Any]]:
-    pages, _, _ = flatten_layout(layout)
-    records = candidate.get("records", [])
-    exception_records = exceptions.get("exceptions", [])
-    result: list[dict[str, Any]] = []
+    for label, values in id_groups.items():
+        duplicates = _duplicate_values(values)
+        if duplicates:
+            errors.append(f"Duplicate {label} identities: {duplicates}")
     for page in pages:
-        page_number = page.get("candidate_pdf_page")
         page_regions = page.get("regions", [])
-        page_lines = [line for region in page_regions for line in region.get("lines", [])]
-        page_records = [
-            record for record in records
-            if page_number in record.get("private_evidence", {}).get("candidate_pdf_pages", [])
-        ]
-        page_record_ids = [record.get("record_id") for record in page_records]
-        page_line_ids = {line.get("line_id") for line in page_lines}
-        page_exception_ids = [
-            item.get("exception_id") for item in exception_records
-            if page_line_ids.intersection(item.get("line_ids", []))
-            or page_line_ids.intersection(item.get("related_ids", []))
-        ]
-        continuation_line_ids = [
-            line.get("line_id") for line in page_lines
-            if line.get("continuation_status") not in {None, "none", "standalone"}
-        ]
-        result.append({
-            "candidate_pdf_page": page_number,
-            "region_ids": [region.get("region_id") for region in page_regions],
-            "line_ids": [line.get("line_id") for line in page_lines],
-            "first_record_id": page_record_ids[0] if page_record_ids else None,
-            "last_record_id": page_record_ids[-1] if page_record_ids else None,
-            "first_line_id": page_lines[0].get("line_id") if page_lines else None,
-            "last_line_id": page_lines[-1].get("line_id") if page_lines else None,
-            "record_count": len(page_record_ids),
-            "line_count": len(page_lines),
-            "continuation_line_ids": continuation_line_ids,
-            "exception_ids": page_exception_ids,
-            "corrections": [],
-            "continuation_handling_reviewed": False,
-            "reproduces_candidate_not_editorial_improvement": False,
-        })
-    return result
-
-
-def build_qa_template(
-    layout: dict[str, Any],
-    candidate: dict[str, Any],
-    inventory_path: Path,
-    candidate_path: Path,
-    layout_path: Path,
-    exceptions: dict[str, Any],
-) -> dict[str, Any]:
-    expected = expected_qa_inventory(layout, candidate, exceptions)
-    return {
-        "schema_version": "candidate-normalization-qa-v1",
-        "candidate_id": candidate.get("candidate_id"),
-        "candidate_sha256": candidate.get("candidate_sha256"),
-        "source_sha256": layout.get("source_sha256"),
-        "page_map_sha256": candidate.get("page_map_sha256"),
-        "normalized_candidate_file_sha256": sha256_file(candidate_path),
-        "item_inventory_file_sha256": sha256_file(inventory_path),
-        "layout_extraction_file_sha256": sha256_file(layout_path),
-        "review_mode": "full",
-        "expected": expected,
-        "reviewed": {key: [] for key in expected},
-        "page_reviews": expected_page_reviews(layout, candidate, exceptions),
-        "corrections": [],
-        "exception_dispositions": [],
-        "completion": {
-            "all_denominators_complete": False,
-            "all_exceptions_dispositioned": False,
-            "candidate_reproduction_confirmed": False,
-            "editorial_quality_judgments_performed": False,
-            "complete": False,
-        },
+        actual_region_ids = [region.get("region_id") for region in page_regions]
+        actual_line_ids = [line.get("line_id") for region in page_regions for line in region.get("lines", [])]
+        if page.get("region_ids") != actual_region_ids:
+            errors.append(f"Candidate PDF page {page.get('candidate_pdf_page')} region_ids do not match its regions")
+        if page.get("line_ids") != actual_line_ids:
+            errors.append(f"Candidate PDF page {page.get('candidate_pdf_page')} line_ids do not match its reading-order lines")
+        for region in page_regions:
+            region_lines = region.get("lines", [])
+            if region.get("line_ids") != [line.get("line_id") for line in region_lines]:
+                errors.append(f"Region {region.get('region_id')} line_ids do not match its lines")
+            if region.get("line_count") != len(region_lines):
+                errors.append(f"Region {region.get('region_id')} line_count does not recompute")
+            for line in region_lines:
+                if line.get("candidate_pdf_page") != page.get("candidate_pdf_page") or line.get("region_id") != region.get("region_id"):
+                    errors.append(f"Line {line.get('line_id')} has inconsistent page or region ownership")
+    excluded = layout.get("excluded_lines", [])
+    expected_counts = {
+        "pages": len(pages),
+        "regions": len(regions),
+        "lines": len(lines),
+        "index_lines": sum(not line.get("excluded_from_index", False) for line in lines),
+        "excluded_lines": len(excluded),
+        "excluded_repeated_headers": sum(item.get("reason") == "repeated_page_header" for item in excluded),
+        "excluded_repeated_footers": sum(item.get("reason") == "repeated_page_footer" for item in excluded),
+        "excluded_page_number_footers": sum(item.get("reason") == "page_number_footer" for item in excluded),
+        "lines_with_extraction_warnings": sum(bool(line.get("extraction_warnings")) for line in lines),
+        "column_continuations": sum(line.get("continuation_status") == "continued_from_previous_column" for line in lines),
+        "page_continuations": sum(line.get("continuation_status") == "continued_from_previous_page" for line in lines),
     }
-
-
-def default_provenance(is_pdf: bool = True) -> dict[str, Any]:
-    return {
-        "candidate_bytes": {"status": "verified", "rationale": "The candidate bytes were hashed directly."},
-        "internal_pdf_completeness": {
-            "status": "not_independently_verified" if is_pdf else "not_applicable",
-            "rationale": "PDF page presence does not prove the delivered index is complete."
-            if is_pdf
-            else "The delivered candidate is not a PDF.",
-        },
-        "structural_continuity": {"status": "not_independently_verified", "rationale": "Alphabetical and structural continuity require an explicit preparation review."},
-        "source_edition_compatibility": {"status": "not_independently_verified", "rationale": "Edition compatibility requires provenance evidence beyond matching filenames."},
-        "locator_page_map_compatibility": {"status": "not_independently_verified", "rationale": "Locator compatibility requires complete normalization QA."},
-        "authoritative_copy_fidelity": {"status": "not_independently_verified", "rationale": "Internal completeness is not authoritative-copy fidelity."},
+    if layout.get("counts") != expected_counts:
+        errors.append("Layout extraction counts do not recompute exactly")
+    expected_lines = {
+        line.get("line_id") for line in lines
+        if line.get("inferred_boundary") != "header_footer" and line.get("excluded_from_index") is not True
     }
-
-
-def build_candidate_ref(
-    candidate_path: Path,
-    layout: dict[str, Any],
-    identities: dict[str, Any],
-    file_origin: str,
-    provenance: dict[str, Any],
-) -> dict[str, Any]:
-    if file_origin in {"reconstructed_pdf", "delivered_text", "transcription"} and provenance.get("authoritative_copy_fidelity", {}).get("claimed_original_publisher_pdf"):
-        require(False, "invalid_provenance", "A reconstructed PDF or text candidate cannot claim to be an original publisher PDF.")
-    candidate_sha = sha256_file(candidate_path)
-    require(candidate_sha == layout.get("candidate_sha256"), "candidate_hash_mismatch", "Candidate bytes do not match the layout extraction hash.")
-    require(provenance.get("candidate_bytes", {}).get("status") == "verified", "candidate_bytes_unverified", "Candidate preparation requires verified candidate bytes.")
-    return {
-        "schema_version": "candidate-ref-v1",
-        "candidate_id": layout.get("candidate_id"),
-        "candidate_sha256": candidate_sha,
-        "candidate_filename": candidate_path.name,
-        "file_origin": file_origin,
-        "source": {
-            "sha256": identities["source_sha256"],
-            "edition": identities["source_edition"],
-        },
-        "page_map_sha256": identities["page_map_sha256"],
-        "chunk_manifest_sha256": identities["chunk_manifest_sha256"],
-        "policy": {
-            "profile": identities["policy_profile"],
-            "sha256": identities["policy_sha256"],
-            "rubric_version": identities["rubric_version"],
-            "audit_mode": identities["audit_mode"],
-        },
-        "pdf": {
-            "page_count": layout.get("pdf", {}).get("page_count"),
-            "producer": layout.get("pdf", {}).get("producer"),
-            "has_embedded_text": layout.get("pdf", {}).get("has_embedded_text"),
-        },
-        "provenance": provenance,
-        "created_at": now(),
-    }
-
-
-def build_layout_profile(layout: dict[str, Any]) -> dict[str, Any]:
-    pages, regions, lines = flatten_layout(layout)
-    column_counts = [len([region for region in page.get("regions", []) if region.get("role") == "index_column"]) for page in pages]
-    return {
-        "schema_version": "candidate-layout-profile-v1",
-        "candidate_id": layout.get("candidate_id"),
-        "candidate_sha256": layout.get("candidate_sha256"),
-        "adapter": layout.get("adapter"),
-        "pdf": {
-            "page_count": layout.get("pdf", {}).get("page_count"),
-            "producer": layout.get("pdf", {}).get("producer"),
-            "has_embedded_text": layout.get("pdf", {}).get("has_embedded_text"),
-        },
-        "layout": {
-            "reading_order": "page_then_region_then_line",
-            "page_count": len(pages),
-            "region_count": len(regions),
-            "line_count": len(lines),
-            "index_columns_per_page": column_counts,
-            "header_footer_lines": sum(line.get("inferred_boundary") == "header_footer" for line in lines),
-            "continuation_lines": sum(line.get("continuation_status") not in {None, "none", "standalone"} for line in lines),
-        },
-        "limitations": list(layout.get("limitations", [])),
-    }
+    candidate_lines = [
+        line_id
+        for record in candidate.get("records", [])
+        for line_id in record.get("private_evidence", {}).get("layout_line_ids", [])
+    ]
+    missing_heading_lines = [
+        line_id
+        for issue in issues.get("issues", []) if issue.get("type") == "missing_heading"
+        for line_id in issue.get("related_ids", []) if line_id in expected_lines
+    ]
+    accounted_lines = candidate_lines + missing_heading_lines
+    if _duplicate_values(accounted_lines):
+        errors.append("Normalization accounts for one or more layout lines more than once")
+    if set(accounted_lines) != expected_lines:
+        errors.append("Normalization does not account for every retained layout line exactly once")
+    return errors
 
 
 def paths_for_normalization_output(root: Path, candidate_id: str) -> dict[str, Path]:
     normalized = normalize_candidate_id(candidate_id)
     return {
-        "candidate_ref": root / "candidates" / normalized / "candidate-ref.json",
-        "layout_profile": root / "candidates" / normalized / "layout-profile.json",
         "layout_extraction": root / "candidates" / normalized / "candidate-layout-extraction.v1.json",
-        "candidate_index": root / "candidates" / normalized / "candidate-index.draft.v2.json",
-        "item_inventory": root / "candidates" / normalized / "item-inventory.draft.v2.json",
-        "normalization_exceptions": root / "candidates" / normalized / "normalization-exceptions.v1.json",
-        "normalization_report": root / "validation" / f"candidate-normalization-report.{normalized}.v1.json",
-        "normalization_qa": root / "validation" / f"candidate-normalization-qa.{normalized}.v1.template.json",
+        "candidate_index": root / "candidates" / normalized / "candidate-index.v2.json",
+        "item_inventory": root / "candidates" / normalized / "item-inventory.v2.json",
+        "normalization_issues": root / "validation" / f"candidate-normalization-issues.{normalized}.v1.json",
     }
 
 
@@ -934,51 +795,28 @@ def command_normalize(args: argparse.Namespace) -> None:
     require(layout.get("source_sha256") in {None, identities["source_sha256"]}, "source_hash_mismatch", "Layout extraction source identity conflicts with the preparation state.")
     layout["source_sha256"] = identities["source_sha256"]
     page_map = identities["page_map"]
-    candidate, inventory, exceptions, report = normalize_layout(layout, page_map)
-    provenance = load_json(Path(args.provenance), "Candidate provenance") if args.provenance else default_provenance(layout.get("pdf_metadata", {}).get("is_pdf", True))
-    file_origin = args.file_origin
-    if file_origin == "auto":
-        file_origin = "delivered_pdf" if layout.get("pdf_metadata", {}).get("is_pdf", True) else "delivered_text"
-    candidate_ref = build_candidate_ref(candidate_path, layout, identities, file_origin, provenance)
-    layout_profile = build_layout_profile(layout)
+    require(sha256_file(candidate_path) == layout.get("candidate_sha256"), "candidate_hash_mismatch", "Candidate bytes do not match the layout extraction hash.")
+    candidate, inventory, issues = normalize_layout(layout, page_map)
     output_root = Path(args.output_dir).resolve()
     paths = paths_for_normalization_output(output_root, args.candidate_id)
     existing = [str(path) for path in paths.values() if path.exists()]
     require(not existing or args.force, "output_exists", "Refusing to overwrite existing preparation artifacts.", existing)
     for document, schema_name, label in (
-        (candidate_ref, "candidate-ref.schema.json", "Candidate reference"),
-        (layout_profile, "candidate-layout-profile.schema.json", "Candidate layout profile"),
         (layout, "candidate-layout-extraction.schema.json", "Candidate layout extraction"),
         (candidate, "candidate-index-v2.schema.json", "Normalized candidate"),
         (inventory, "item-inventory-v2.schema.json", "Item inventory"),
-        (exceptions, "candidate-normalization-exceptions.schema.json", "Normalization exceptions"),
     ):
         require_schema(document, schema_name, label)
-    save_json(paths["candidate_ref"], candidate_ref)
-    save_json(paths["layout_profile"], layout_profile)
     save_json(paths["layout_extraction"], layout)
     save_json(paths["candidate_index"], candidate)
     save_json(paths["item_inventory"], inventory)
-    save_json(paths["normalization_exceptions"], exceptions)
-    report["private_artifact_hashes"] = {
-        "layout_extraction": sha256_file(paths["layout_extraction"]),
-        "candidate_index": sha256_file(paths["candidate_index"]),
-        "item_inventory": sha256_file(paths["item_inventory"]),
-        "normalization_exceptions": sha256_file(paths["normalization_exceptions"]),
-    }
-    require_schema(report, "candidate-normalization-report.schema.json", "Normalization report")
-    save_json(paths["normalization_report"], report)
-    qa = build_qa_template(
-        layout,
-        candidate,
-        paths["item_inventory"],
-        paths["candidate_index"],
-        paths["layout_extraction"],
-        exceptions,
-    )
-    qa["source_sha256"] = identities["source_sha256"]
-    require_schema(qa, "candidate-normalization-qa.schema.json", "Normalization QA")
-    save_json(paths["normalization_qa"], qa)
+    written = list(CANONICAL_ARTIFACT_KEYS)
+    if issues["issues"]:
+        require_schema(issues, "candidate-normalization-issues.schema.json", "Normalization issues")
+        save_json(paths["normalization_issues"], issues)
+        written.append("normalization_issues")
+    elif paths["normalization_issues"].exists():
+        paths["normalization_issues"].unlink()
     emit({
         "command": "normalize-candidate-layout",
         "ok": True,
@@ -986,19 +824,20 @@ def command_normalize(args: argparse.Namespace) -> None:
         "candidate_sha256": candidate.get("candidate_sha256"),
         "canonical_state_mutated": False,
         "artifacts_written": [
-            {"artifact": key, "path": str(path), "sha256": sha256_file(path)}
-            for key, path in paths.items()
+            {"artifact": key, "path": str(paths[key]), "sha256": sha256_file(paths[key])}
+            for key in written
         ],
-        "next_actions": ["perform_full_normalization_qa", "validate-private"],
-        "warnings": ["The QA file is a template; registration requires every denominator to be reviewed."],
+        "next_actions": ["review_normalization_issues"] if issues["issues"] else ["validate-private"],
+        "warnings": [],
     })
 
 
-def preparation_paths(root: Path, candidate_id: str, qa_path: Path | None = None) -> dict[str, Path]:
+def preparation_paths(root: Path, candidate_id: str) -> dict[str, Path]:
     paths = paths_for_normalization_output(root, candidate_id)
-    if qa_path is not None:
-        paths["normalization_qa"] = qa_path.resolve()
-    return paths
+    return {
+        key: path for key, path in paths.items()
+        if key in CANONICAL_ARTIFACT_KEYS or path.is_file()
+    }
 
 
 def _duplicate_values(values: Iterable[Any]) -> list[Any]:
@@ -1035,22 +874,6 @@ def _check_prejudgment_separation(artifacts: dict[str, dict[str, Any]]) -> list[
     return errors
 
 
-def _validate_correction(
-    correction: dict[str, Any],
-    layout_texts: set[str],
-    candidate_texts: set[str],
-) -> list[str]:
-    errors: list[str] = []
-    correction_id = correction.get("correction_id")
-    before = correction.get("before")
-    after = correction.get("after")
-    if before not in layout_texts:
-        errors.append(f"Correction {correction_id} before text is not present in the delivered layout")
-    if after not in candidate_texts:
-        errors.append(f"Correction {correction_id} after text is not present in the normalized candidate")
-    return errors
-
-
 def validate_private_preparation(
     root: Path,
     candidate_id: str,
@@ -1059,32 +882,23 @@ def validate_private_preparation(
     page_map_path: Path,
     chunk_manifest_path: Path,
     policy_path: Path,
-    qa_path: Path | None = None,
     source_edition: str | None = None,
     identity_documents: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     identities = load_source_identities(state_path, page_map_path, chunk_manifest_path, policy_path, source_edition, identity_documents)
-    paths = preparation_paths(root.resolve(), candidate_id, qa_path)
+    paths = preparation_paths(root.resolve(), candidate_id)
     documents = {key: load_json(path, key.replace("_", " ").title()) for key, path in paths.items()}
-    candidate_ref = documents["candidate_ref"]
-    profile = documents["layout_profile"]
     layout = documents["layout_extraction"]
     candidate = documents["candidate_index"]
     inventory = documents["item_inventory"]
-    exceptions = documents["normalization_exceptions"]
-    report = documents["normalization_report"]
-    qa = documents["normalization_qa"]
+    issues = documents.get("normalization_issues")
     errors: list[str] = []
 
     schemas = {
-        "candidate_ref": "candidate-ref.schema.json",
-        "layout_profile": "candidate-layout-profile.schema.json",
         "layout_extraction": "candidate-layout-extraction.schema.json",
         "candidate_index": "candidate-index-v2.schema.json",
         "item_inventory": "item-inventory-v2.schema.json",
-        "normalization_exceptions": "candidate-normalization-exceptions.schema.json",
-        "normalization_report": "candidate-normalization-report.schema.json",
-        "normalization_qa": "candidate-normalization-qa.schema.json",
+        **({"normalization_issues": "candidate-normalization-issues.schema.json"} if issues is not None else {}),
     }
     for key, schema_name in schemas.items():
         errors.extend(f"{key}: {error}" for error in schema_errors(documents[key], schema_name))
@@ -1094,56 +908,36 @@ def validate_private_preparation(
         if document.get("candidate_id") not in {None, candidate_id, normalized_id}:
             errors.append(f"{key}.candidate_id differs from the selected candidate")
 
-    candidate_sha = require_sha256(candidate_ref.get("candidate_sha256"), "candidate_ref.candidate_sha256")
+    candidate_sha = require_sha256(layout.get("candidate_sha256"), "layout_extraction.candidate_sha256")
     actual_candidate_sha = sha256_file(candidate_file.resolve()) if candidate_file is not None else candidate_sha
     if candidate_file is not None and actual_candidate_sha != candidate_sha:
-        errors.append("Candidate bytes do not match candidate-ref.json")
-    for key in ("layout_extraction", "layout_profile", "candidate_index", "item_inventory", "normalization_exceptions", "normalization_report", "normalization_qa"):
+        errors.append("Candidate bytes do not match the layout extraction")
+    for key in ("layout_extraction", "candidate_index", "item_inventory"):
         if documents[key].get("candidate_sha256") != candidate_sha:
             errors.append(f"{key}.candidate_sha256 differs from the verified candidate bytes")
-    source_ref = candidate_ref.get("source", {})
-    if source_ref.get("sha256") != identities["source_sha256"]:
-        errors.append("Candidate source hash differs from the evaluation state")
-    if source_ref.get("edition") != identities["source_edition"]:
-        errors.append("Candidate source-edition identity differs from the frozen evaluation identity")
-    for key, expected in (
-        ("page_map_sha256", identities["page_map_sha256"]),
-        ("chunk_manifest_sha256", identities["chunk_manifest_sha256"]),
-    ):
-        if candidate_ref.get(key) != expected:
-            errors.append(f"Candidate reference {key} differs from the frozen input")
-    policy_ref = candidate_ref.get("policy", {})
-    for key, expected in (
-        ("profile", identities["policy_profile"]),
-        ("sha256", identities["policy_sha256"]),
-        ("rubric_version", identities["rubric_version"]),
-        ("audit_mode", identities["audit_mode"]),
-    ):
-        if policy_ref.get(key) != expected:
-            errors.append(f"Candidate policy {key} differs from the frozen input")
-    expected_pdf_reference = {
-        "page_count": layout.get("pdf", {}).get("page_count"),
-        "producer": layout.get("pdf", {}).get("producer"),
-        "has_embedded_text": layout.get("pdf", {}).get("has_embedded_text"),
-    }
-    if candidate_ref.get("pdf") != expected_pdf_reference:
-        errors.append("Candidate PDF aggregate metadata differs from the common layout projection")
     if layout.get("source_sha256") != identities["source_sha256"]:
         errors.append("Layout extraction source identity differs from the frozen state")
-    if report.get("source_sha256") != identities["source_sha256"]:
-        errors.append("Normalization report source identity differs from the frozen state")
-    if candidate_ref["file_origin"] in {"reconstructed_pdf", "delivered_text", "transcription"} and candidate_ref["provenance"]["authoritative_copy_fidelity"].get("claimed_original_publisher_pdf"):
-        errors.append("A reconstructed PDF or text candidate cannot claim to be an original publisher PDF")
 
     if candidate.get("page_map_sha256") != identities["page_map_sha256"]:
         errors.append("Normalized candidate does not identify the frozen page map")
-    regenerated_candidate, regenerated_inventory, regenerated_exceptions, _ = normalize_layout(
+    regenerated_candidate, regenerated_inventory, regenerated_issues = normalize_layout(
         layout, identities["page_map"]
     )
     if candidate != regenerated_candidate:
         errors.append("Normalized candidate is not the exact deterministic projection of the delivered layout and frozen page map")
-    if exceptions != regenerated_exceptions:
-        errors.append("Normalization exceptions are not the exact deterministic projection of the delivered layout and frozen page map")
+    expected_issue_items = regenerated_issues["issues"]
+    if bool(expected_issue_items) != (issues is not None):
+        errors.append("A non-empty normalization issues report must exist if and only if normalization found issues")
+    if issues is not None:
+        actual_issue_items = issues.get("issues", [])
+        projected = [{key: value for key, value in item.items() if key not in {"status", "disposition"}} for item in actual_issue_items]
+        expected_projected = [{key: value for key, value in item.items() if key not in {"status", "disposition"}} for item in expected_issue_items]
+        if projected != expected_projected:
+            errors.append("Normalization issues are not the exact deterministic projection of the delivered layout and frozen page map")
+        if any(item.get("status") == "needs_review" for item in actual_issue_items):
+            errors.append("Every normalization issue requires an explicit disposition before registration")
+        if any(item.get("status") != "needs_review" and not item.get("disposition") for item in actual_issue_items):
+            errors.append("Every reviewed normalization issue requires a disposition rationale")
     try:
         candidate_inventory = build_inventory(candidate)
     except SystemExit:
@@ -1160,7 +954,7 @@ def validate_private_preparation(
         "display_id": [display.get("display_id") for record in candidate.get("records", []) for display in record.get("locator_displays", [])],
         "locator_id": [locator.get("locator_id") for record in candidate.get("records", []) for locator in record.get("locator_assignments", [])],
         "reference_id": [reference.get("reference_id") for record in candidate.get("records", []) for reference in record.get("cross_references", [])],
-        "exception_id": [item.get("exception_id") for item in exceptions.get("exceptions", [])],
+        "exception_id": [item.get("exception_id") for item in (issues or {}).get("issues", [])],
     }
     for label, values in id_groups.items():
         duplicates = _duplicate_values(values)
@@ -1186,22 +980,22 @@ def validate_private_preparation(
     }
     if candidate.get("normalization") != {"engine": "candidate-preparation-cli", "engine_version": "1.0.0", **recomputed_counts}:
         errors.append("Normalized candidate aggregate counts or preparation attestations do not recompute exactly")
-    exception_items = exceptions.get("exceptions", [])
-    recomputed_exception_counts = {
-        "total": len(exception_items),
-        "unresolved": sum(item.get("status") == "unresolved" for item in exception_items),
-        "by_type": {
-            key: sum(item.get("type") == key for item in exception_items)
-            for key in sorted({item.get("type") for item in exception_items})
-        },
-    }
-    if exceptions.get("counts") != recomputed_exception_counts:
-        errors.append("Normalization exception counts do not recompute exactly")
+    issue_items = (issues or {}).get("issues", [])
+    if issues is not None:
+        recomputed_issue_counts = {
+            "total": len(issue_items),
+            "by_type": {
+                key: sum(item.get("type") == key for item in issue_items)
+                for key in sorted({item.get("type") for item in issue_items})
+            },
+        }
+        if issues.get("counts") != recomputed_issue_counts:
+            errors.append("Normalization issue counts do not recompute exactly")
 
     lookup, index_by_document_page, mapped_pages = page_map_lookup(identities["page_map"])
     exception_related = {
         related
-        for item in exceptions.get("exceptions", [])
+        for item in issue_items
         for related in item.get("related_ids", []) + item.get("line_ids", [])
         if isinstance(related, str)
     }
@@ -1217,7 +1011,7 @@ def validate_private_preparation(
                 elif assignment.get("source_page_label") != mapped.get("source_page_label") or assignment.get("normalized_locator_key") != mapped.get("normalized_locator_key"):
                     errors.append(f"Resolved locator {assignment.get('locator_id')} does not reproduce its page-map record")
             elif assignment.get("locator_id") not in exception_related:
-                errors.append(f"Unresolved locator {assignment.get('locator_id')} has no exception-ledger record")
+                errors.append(f"Unresolved locator {assignment.get('locator_id')} has no normalization issue")
         for display_id, display in displays.items():
             regenerated_assignments, regenerated_display, _ = locator_assignments_for_display(
                 str(display.get("displayed_locator", "")), str(display_id), str(candidate_sha), lookup, index_by_document_page, mapped_pages
@@ -1225,82 +1019,9 @@ def validate_private_preparation(
             if display != regenerated_display or assignments_by_display.get(display_id, []) != regenerated_assignments:
                 errors.append(f"Displayed locator {display_id} does not reproduce the frozen page-map expansion")
 
-    expected = expected_qa_inventory(layout, candidate, exceptions)
-    if qa.get("expected") != expected:
-        errors.append("QA expected inventory is not the exact current normalization inventory")
-    reviewed = qa["reviewed"]
-    for key, values in expected.items():
-        if set(reviewed[key]) != set(values):
-            errors.append(f"QA reviewed.{key} is not the exact expected set")
-
-    expected_pages = expected_page_reviews(layout, candidate, exceptions)
-    actual_pages = qa["page_reviews"]
-    if _duplicate_values([item["candidate_pdf_page"] for item in actual_pages]):
-        errors.append("QA page_reviews contains duplicate pages")
-    if {item["candidate_pdf_page"] for item in actual_pages} != {item["candidate_pdf_page"] for item in expected_pages}:
-        errors.append("QA page_reviews does not cover every candidate PDF page exactly once")
-    page_expected_by_id = {item["candidate_pdf_page"]: item for item in expected_pages}
-    for review in actual_pages:
-        if review["candidate_pdf_page"] not in page_expected_by_id:
-            continue
-        baseline = page_expected_by_id[review["candidate_pdf_page"]]
-        for field in ("region_ids", "line_ids", "first_record_id", "last_record_id", "first_line_id", "last_line_id", "record_count", "line_count", "continuation_line_ids", "exception_ids"):
-            if review.get(field) != baseline.get(field):
-                errors.append(f"QA page {review['candidate_pdf_page']} {field} differs from the exact extraction inventory")
-        if review.get("continuation_handling_reviewed") is not True:
-            errors.append(f"QA page {review['candidate_pdf_page']} has not reviewed continuation handling")
-        if review.get("reproduces_candidate_not_editorial_improvement") is not True:
-            errors.append(f"QA page {review['candidate_pdf_page']} lacks the fidelity-not-improvement attestation")
-
-    _, _, layout_lines = flatten_layout(layout)
-    layout_texts = {str(line.get("original_displayed_form")) for line in layout_lines}
-    candidate_texts = {str(record.get("original_displayed_form")) for record in candidate.get("records", [])}
-    top_corrections = qa["corrections"]
-    page_corrections = [item for page in actual_pages for item in page["corrections"]]
-    correction_ids = [item.get("correction_id") for item in top_corrections]
-    if _duplicate_values(correction_ids):
-        errors.append("QA corrections contains duplicate correction_id values")
-    if set(correction_ids) != {item.get("correction_id") for item in page_corrections}:
-        errors.append("Per-page corrections do not exactly match the top-level correction ledger")
-    for correction in top_corrections:
-        errors.extend(_validate_correction(correction, layout_texts, candidate_texts))
-
-    dispositions = qa["exception_dispositions"]
-    disposition_ids = [item["exception_id"] for item in dispositions]
-    if _duplicate_values(disposition_ids) or set(disposition_ids) != set(expected["exception_ids"]):
-        errors.append("QA exception dispositions are not the exact exception set")
-    expected_hashes = {
-        "normalized_candidate_file_sha256": sha256_file(paths["candidate_index"]),
-        "item_inventory_file_sha256": sha256_file(paths["item_inventory"]),
-        "layout_extraction_file_sha256": sha256_file(paths["layout_extraction"]),
-    }
-    for field, digest in expected_hashes.items():
-        if qa.get(field) != digest:
-            errors.append(f"QA {field} does not match the reviewed bytes")
-    completion = qa["completion"]
-    for field in ("all_denominators_complete", "all_exceptions_dispositioned", "candidate_reproduction_confirmed", "complete"):
-        if completion.get(field) is not True:
-            errors.append(f"QA completion.{field} must be true")
-    if completion.get("editorial_quality_judgments_performed") is not False:
-        errors.append("Candidate preparation QA must not perform editorial quality judgments")
+    errors.extend(layout_accounting_errors(layout, candidate, regenerated_issues))
     if candidate.get("normalization", {}).get("editorial_corrections_applied") is not False or candidate.get("normalization", {}).get("benchmark_content_used") is not False:
         errors.append("Normalization must preserve delivered content and remain benchmark-content blind")
-
-    report_hashes = report.get("private_artifact_hashes", {})
-    for key in ("layout_extraction", "candidate_index", "item_inventory", "normalization_exceptions"):
-        if report_hashes.get(key) != sha256_file(paths[key]):
-            errors.append(f"Normalization report hash for {key} does not match")
-    expected_report_counts = {
-        **candidate["normalization"],
-        "candidate_pdf_pages": len(layout.get("pages", [])),
-        "reading_order_regions": sum(len(page.get("regions", [])) for page in layout.get("pages", [])),
-        "extracted_lines": sum(len(region.get("lines", [])) for page in layout.get("pages", []) for region in page.get("regions", [])),
-        "normalization_exceptions": len(exception_items),
-    }
-    if report.get("counts") != expected_report_counts:
-        errors.append("Normalization report counts do not recompute exactly")
-    if profile != build_layout_profile(layout):
-        errors.append("Layout profile is not the exact aggregate projection of the extraction")
     errors.extend(_check_prejudgment_separation(documents))
     require(not errors, "private_preparation_invalid", "Candidate preparation failed the private full-QA gate.", errors)
     return {
@@ -1317,7 +1038,7 @@ def command_validate_private(args: argparse.Namespace) -> None:
     result = validate_private_preparation(
         Path(args.preparation_dir), args.candidate_id, Path(args.candidate_file), Path(args.state),
         Path(args.page_map), Path(args.chunk_manifest), Path(args.policy),
-        Path(args.qa) if args.qa else None, args.source_edition,
+        args.source_edition,
     )
     emit({
         "command": "validate-private-preparation",
@@ -1337,7 +1058,7 @@ def command_register(args: argparse.Namespace) -> None:
     result = validate_private_preparation(
         Path(args.preparation_dir), args.candidate_id, Path(args.candidate_file), state_path,
         Path(args.page_map), Path(args.chunk_manifest), Path(args.policy),
-        Path(args.qa) if args.qa else None, args.source_edition,
+        args.source_edition,
     )
     benchmark_path = Path(args.benchmark).resolve()
     benchmark = load_json(benchmark_path, "Final benchmark")
@@ -1353,14 +1074,10 @@ def command_register(args: argparse.Namespace) -> None:
         require(benchmark.get("candidate_blindness") == "preserved", "candidate_blindness", "The benchmark must remain candidate-blind.")
         root = state_path.parent
         artifact_types = {
-            "candidate_ref": "candidate_ref",
-            "layout_profile": "candidate_layout_profile",
             "layout_extraction": "candidate_layout_extraction",
             "candidate_index": "candidate_index",
             "item_inventory": "item_inventory",
-            "normalization_exceptions": "candidate_normalization_exceptions",
-            "normalization_report": "candidate_normalization_report",
-            "normalization_qa": "candidate_normalization_qa",
+            "normalization_issues": "candidate_normalization_issues",
         }
         stamp = now()
         new_records = []
@@ -1382,16 +1099,17 @@ def command_register(args: argparse.Namespace) -> None:
                 **({"schema_version": document["schema_version"]} if isinstance(document, dict) and isinstance(document.get("schema_version"), str) else {}),
             }
             new_records.append(record)
-        paths = {record["path"] for record in new_records}
-        state["artifacts"] = [record for record in state.get("artifacts", []) if record.get("path") not in paths]
+        state["artifacts"] = [record for record in state.get("artifacts", []) if record.get("stage") != "candidate_normalization"]
         state["artifacts"].extend(new_records)
         state["artifacts"].sort(key=lambda record: record["path"])
         registered_candidate_id = result["documents"]["candidate_index"]["candidate_id"]
+        normalized_record = next(record for record in new_records if record["artifact_type"] == "candidate_index")
         state["candidate"] = {
             "candidate_id": registered_candidate_id,
-            "sha256": result["candidate_sha256"],
+            "candidate_sha256": result["candidate_sha256"],
             "schema_version": "candidate-index-v2",
-            "normalized_path": next(record["path"] for record in new_records if record["artifact_type"] == "candidate_index"),
+            "normalized_path": normalized_record["path"],
+            "normalized_sha256": normalized_record["sha256"],
             "item_inventory_path": next(record["path"] for record in new_records if record["artifact_type"] == "item_inventory"),
             "benchmark_path": portable_relative_path(benchmark_path, root),
             "benchmark_sha256": benchmark.get("benchmark_sha256"),
@@ -1423,7 +1141,6 @@ def _add_private_inputs(parser: argparse.ArgumentParser, include_candidate_file:
     if include_candidate_file:
         parser.add_argument("--candidate-file", required=True)
     parser.add_argument("--preparation-dir", required=True)
-    parser.add_argument("--qa")
     _add_frozen_inputs(parser)
 
 
@@ -1437,8 +1154,6 @@ def build_parser() -> argparse.ArgumentParser:
     _add_frozen_inputs(normalize)
     normalize.add_argument("--layout", required=True)
     normalize.add_argument("--output-dir", required=True)
-    normalize.add_argument("--file-origin", choices=["auto", "delivered_pdf", "delivered_text", "reconstructed_pdf", "transcription"], default="auto")
-    normalize.add_argument("--provenance")
     normalize.add_argument("--force", action="store_true")
     normalize.set_defaults(func=command_normalize)
 

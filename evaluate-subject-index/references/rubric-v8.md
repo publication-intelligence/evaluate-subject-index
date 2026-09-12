@@ -8,25 +8,28 @@
 - calculation input: `subject-index-dimension-calculation-input-v2`
 - calculation profile: `subject-index-dimension-calculation-v5`
 - calculation artifact: `subject-index-dimension-calculations-v6`
-- result: `subject-index-evaluation-result-v11`
+- structure audit: `structure-audit-v6`
+- result: `subject-index-evaluation-result-v12`
 - item policy: `subject-index-item-grading-v4`
 - explanation contract: `locator-explanations-v2`
-- item artifact: `subject-index-item-assessments-v6`
-- projection metadata: `subject-index-v8-projection-metadata-v1`
-- web report: `subject-index-web-report-v9`
+- item artifact: `subject-index-item-assessments-v7`
+- projection metadata: `subject-index-v8-projection-metadata-v2`
+- web report: `subject-index-web-report-v10`
 - locator-fit preflight: `subject-index-v8-locator-fit-preflight-v1`
 - locator audit: `locator-audit-v2`
 
-Runtime commands accept the current identities only. A V8 calculation input must bind the self-hashed V8 policy whose hash matches audit provenance. Old state, calculation, result, item, and report artifacts are not rescored or migrated.
+Runtime commands accept the current identities only. A V8 calculation input must
+bind a self-hashed V8 policy with the versioned standard-policy profile ID. The
+profile ID and schema, not the current Markdown bytes, define the contract.
 
 ## What changed in V8
 
 V8 makes two distinct kinds of change:
 
-- **Arithmetic:** Page-reference Reliability replaces weighted locator-utility precision with binary keep precision. All six dimensions remain percentage-native at full precision: genuine caps are percentage ceilings, weighted contributions are not rounded, and only the summed overall percentage is rounded to the nearest hundredth.
+- **Arithmetic:** Page-reference Reliability replaces weighted locator-utility precision with binary keep precision. This directly changes that dimension's precision input. Its recall measure, F1 form, caps, gates, uncertainty handling, and weighting remain substantively unchanged. All six dimensions are now represented as full-precision percentages, caps are percentage ceilings, and only the final overall percentage is rounded.
 - **Judgment policy:** V8 clarifies how source evidence is classified, including comparative facts, attributed observations, contentless mentions, and complete-path stance. These are not formula changes. They may nevertheless change a locator's treatment class or keep decision in a new V8 audit, which can change any downstream input or result that uses that judgment. In particular, a treatment-class change may affect Editorial Selectivity even though its formula and treatment-credit mapping are unchanged.
 
-An unchanged formula therefore does not guarantee an unchanged result when its underlying V8 judgments differ. Frozen V7 evaluations remain unchanged and are not reinterpreted.
+An unchanged formula therefore does not guarantee an unchanged result when its underlying V8 judgments differ.
 
 ## Treatment and complete-path fit
 
@@ -39,7 +42,7 @@ Calibration cases:
 - “For example, Young (1794),” without informative content is weak presence.
 - Substantive treatment plus a major stance mismatch, such as established wording for a source that says only “may suggest,” remains nonexact and is not kept.
 
-Evaluate full scope, relationship, chronology, compound meaning, attribution, and stance independently of treatment depth.
+Evaluate full scope, relationship, chronology, compound meaning, attribution, and stance independently of treatment depth, and record `complete_path_fit` directly in every locator judgment.
 
 | Treatment diagnostic | Score |
 | --- | ---: |
@@ -88,9 +91,7 @@ The Page-reference Reliability base percentage is:
 F_1=\frac{2P_KR_T}{P_K+R_T},\qquad \text{base percentage}=100F_1
 \]
 
-Existing cap triggers, gates, uncertainty bounds, and weights apply unchanged. Caps are expressed as percentage ceilings (for example, the former 2/5 ceiling is 40%). A `supported + mixed + exact_fit` locator therefore reports diagnostic grade 70 and rating credit 1.
-
-For dimension percentage \(D_i\) and weight \(w_i\), the contribution is \(D_iw_i/100\). Retain the exact decimal through every dimension and contribution, sum the six contributions, and apply `ROUND_HALF_UP` to `0.01` only to that final sum. Half-point dimension rounding and per-contribution cent rounding are not part of V8.
+Existing caps, gates, uncertainty bounds, and weights apply unchanged after expressing cap ceilings on the 0–100 scale. Dimension percentages and weighted contributions are not rounded; only their final sum is rounded to the nearest hundredth. A `supported + mixed + exact_fit` locator therefore reports diagnostic grade 70 and rating credit 1.
 
 ## Structure quantities
 
@@ -101,6 +102,10 @@ For dimension percentage \(D_i\) and weight \(w_i\), the contribution is \(D_iw_
 | `atomic_assignment_count` | locator auditing, precision, recall, and routing |
 
 More than six displayed locators or a range longer than ten pages triggers review; it does not itself create a defect. Structure scoring and all non-reliability dimension formulas remain unchanged. Their results may still differ when a new V8 audit supplies different policy-governed judgments as inputs.
+
+The native structure ledger binds complete stable-ID denominators, a deterministic full-scope attestation, exception-only node and cross-reference judgments, displayed-to-atomic locator ownership, triggered architecture decisions, defects, strengths, and uncertainties. In full mode, omitted denominator records are attested passes. In pilot mode, only explicitly listed passes are passes; all other omitted identities remain `not_measured` and feed uncertainty bounds.
+
+Every adverse `heading_access_architecture` exception also records one or more source-linked causal findings. Overlapping causes remain separate; a primary cause is optional and requires a deterministic rule or explicit architecture adjudication. These fields are display provenance and do not enter scoring arithmetic.
 
 ## Provenance
 

@@ -5,7 +5,7 @@ description: Run a repeatable, source-grounded V8 evaluation of a finished subje
 
 # Evaluate Subject Index
 
-Evaluate one finished subject index against its source and a frozen policy. Use only the current V8 workflow; this skill does not migrate or reinterpret historical evaluations.
+Evaluate one finished subject index against its source and a frozen policy. Use the current V8 workflow and create current-schema artifacts.
 
 ## Method
 
@@ -14,7 +14,7 @@ Evaluate one finished subject index against its source and a frozen policy. Use 
 3. Synthesize, independently review, and freeze the candidate-blind benchmark.
 4. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments from the published layout contract.
 5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.
-6. Judge global structure only after the locator and missing-access ledgers are complete.
+6. Build the native exception-oriented structure ledger only after the locator and missing-access ledgers are complete. Bind its exact node, cross-reference, and locator-bearing-path denominators; omit attested passes; record exceptions, architecture decisions, defects, strengths, and uncertainties.
 7. Calculate the six V8 dimensions from validated ledgers. Do not ask a model to maintain arithmetic or workflow state.
 8. Produce structured JSON and a web-report projection.
 
@@ -26,12 +26,12 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 - `scripts/page_chunk_cli.py`: page mapping, source chunking, and registered-state locator-packet preparation.
 - `scripts/policy_cli.py`: instantiate the standard policy.
 - `scripts/parallel_discovery_cli.py`: validate and register source-discovery chunks.
-- `scripts/benchmark_review_cli.py`: benchmark screening, independent review, and freeze validation.
+- `scripts/benchmark_review_cli.py`: temporary benchmark screening and the typed, atomic review/freeze transition.
 - `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
 - `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
-- `scripts/dimension_score_v8_cli.py` and `scripts/item_grade_v8_cli.py`: current deterministic V8 calculation and projection.
-- `scripts/bundle_cli.py`: optional checkpoints, exports, artifact listing, and resume imports.
-- `scripts/worker_prompt_cli.py`: render locator-worker prompt packs from a structurally valid checkpoint.
+- `scripts/dimension_score_v8_cli.py`: typed structure registration, canonical-state input assembly, deterministic V8 scoring, and web-report projection; low-level preflight and calculation remain available for diagnostics.
+- `scripts/item_grade_v8_cli.py`: low-level current item-projection validation.
+- `scripts/bundle_cli.py`: optional checkpoints, artifact listing, and resume imports.
 
 ## State and artifacts
 
@@ -47,7 +47,7 @@ Create checkpoints at useful milestones and before a likely conversation or netw
 
 A checkpoint contains the canonical state plus accessible registered artifacts. Portable checkpoints omit restricted files. Import validates archive path safety, member inventory, and the current state shape, but does not require an old archive hash or member hashes to match. After import, reconnect unavailable restricted inputs explicitly and continue from `state_cli.py next`.
 
-Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before exporting or resuming.
+Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before checkpointing or resuming.
 
 ## Parallel chats
 
@@ -55,17 +55,17 @@ Parallel work is divided by deterministic chunk ownership. Workers return comple
 
 Branches, pull requests, and chat attachments may be used for transport or review, but GitHub receipts, blob proofs, merge evidence, recovery receipts, and matching checkpoint hashes are not prerequisites for canonical registration. Registration completes an audit stage only when every frozen chunk denominator is covered exactly once.
 
-Candidate preparation is mechanical and benchmark-blind. Candidate input must match [candidate-layout-extraction.schema.json](references/schemas/candidate-layout-extraction.schema.json); convert it before invoking the skill if necessary. Then run `normalize`, `validate-private`, and `register`. It does not require a publication workflow.
+Candidate preparation is mechanical and benchmark-blind. Candidate input must match [candidate-layout-extraction.schema.json](references/schemas/candidate-layout-extraction.schema.json); convert it before invoking the skill if necessary. Then run `normalize`, disposition the optional non-empty issues report if one was created, run computed `validate-private`, and `register`. Clean preparation permanently registers only the normalized candidate, fidelity layout extraction, and currently required item inventory. It does not require a publication workflow.
 
-After local registration, run `page_chunk_cli.py prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk plus the routing-exception ledger, then completes `locator_chunk_preparation`. Routing exceptions leave state unchanged.
+After local registration, run `page_chunk_cli.py prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk, then completes `locator_chunk_preparation`. Routing exceptions write an unregistered diagnostic and leave state unchanged.
 
 Read [candidate-preparation.md](references/candidate-preparation.md) and [parallel-candidate-audits.md](references/parallel-candidate-audits.md).
 
 ## Scoring
 
-Native V8 uses evaluation-policy V4, state V6, `structure-audit-v5`, `locator-audit-v2`, calculation input V2, dimension calculations V6, item assessments V6, result V11, and web report V9. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Dimension calculations and weighted contributions retain full-precision percentages; genuine caps are percentage ceilings; only the final overall percentage is rounded to the nearest hundredth. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
+Native V8 uses evaluation-policy V4, state V6, `structure-audit-v6`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V7, result V11, projection metadata V2, and web report V9. Every adverse heading-access judgment carries source-linked causal findings, which are reporting provenance and never arithmetic inputs. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
 
-This repository intentionally exposes no legacy migration commands or compatibility workflow. Runtime commands and schemas cover the current workflow only.
+Complete the final stages with `dimension_score_v8_cli.py register-structure`, `score`, and `build-report`. These commands select exact registered current artifacts from canonical state, validate their bytes and bindings, write current-schema outputs, and advance state atomically. Do not complete these stages with generic `state_cli.py set-stage`.
 
 ## Output contract
 

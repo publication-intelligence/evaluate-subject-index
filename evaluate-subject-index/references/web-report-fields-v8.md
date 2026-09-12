@@ -1,16 +1,17 @@
 # Web report fields — V8
 
-New reports use `subject-index-web-report-v9` and point to the current V8 calculation and item-assessment artifacts.
+New reports use `subject-index-web-report-v10` and point to the current V8 calculation and V7 item-assessment artifacts.
 
 The report exposes:
 
 - evaluation identity and status;
 - six full-precision dimension percentages and weighted contributions;
-- the overall percentage, rounded only after summing all contributions, and uncertainty where applicable;
+- final overall percentage and uncertainty where applicable;
 - gate outcomes;
 - item-level findings and evidence links;
 - keep precision, treatment recall, and reliability F1;
 - per-locator treatment, fit, diagnostic credit and grade, binary rating credit, and explanation; and
-- structure-review quantities and decisions.
+- native structure-audit denominators, architecture quantities, decisions, strengths, defects, and uncertainties.
+- source-linked heading-access causal findings, including overlapping causes and any explicitly justified primary cause.
 
 Explanation text is display metadata and cannot alter calculation values. Content hashes join report references to their source records; they are not security attestations or checkpoint-resume gates.

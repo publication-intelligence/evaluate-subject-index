@@ -20,7 +20,9 @@ Calibration:
 - “For example, Young (1794),” with no useful information about Young remains `incidental_example` or `attribution_only` weak presence.
 - Strong treatment does not cure a fit failure. A heading stating an established conclusion is nonexact when the source says only “may suggest.”
 
-Use only structured current-audit fields for calculation. Evidence prose explains judgments but does not directly generate scores. Malformed, incomplete, identity-inconsistent, or contradictory states fail validation.
+Each locator row states `complete_path_fit` directly as `exact_fit`, `material_partial_fit`, `material_mismatch`, `severe_mismatch`, `no_fit`, or `uninspectable`. Use only structured current-audit fields for calculation. Evidence prose explains judgments but does not directly generate scores. Malformed, incomplete, identity-inconsistent, or contradictory states fail validation.
+
+For every `heading_access_architecture` judgment with `minor_issues`, `major_issues`, or `fails`, record at least one structured causal finding. A finding identifies its causal kind, stable source IDs, all applicable reason codes, severity, evidence IDs, and a concise evidence-backed summary. Preserve overlapping findings. Record a primary finding only when a deterministic rule or explicit adjudication establishes one. Causal findings and their summaries are display provenance, never scoring inputs.
 
 ## Locator diagnostics and rating credit
 

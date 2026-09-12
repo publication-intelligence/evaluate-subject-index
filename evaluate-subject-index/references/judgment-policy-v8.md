@@ -18,7 +18,7 @@ Calibration:
 - “For example, Young (1794),” without further information remains weak presence and is not kept.
 - A source saying a fact “may suggest” does not exactly fit a heading that asserts the conclusion as established. Preserve the stance mismatch even when page treatment is substantive.
 
-Record treatment class, scope, error codes, severity, evidence IDs, and fit rationale consistently. Never weaken scope, relationship, chronology, attribution, compound-heading, or stance checks.
+Record treatment class, `complete_path_fit`, scope, error codes, severity, evidence IDs, and fit rationale consistently. `complete_path_fit` must be `exact_fit`, `material_partial_fit`, `material_mismatch`, `severe_mismatch`, `no_fit`, or `uninspectable`; do not derive it later from prose. Never weaken scope, relationship, chronology, attribution, compound-heading, or stance checks.
 
 ## Diagnostic grade and rating credit
 
@@ -29,6 +29,8 @@ The treatment and fit scores remain diagnostic. The diagnostic credit is their m
 Judge every expected benchmark treatment assigned to the chunk. Record found, missed, excluded, or uninspectable status. Full mode requires complete, non-overlapping denominator coverage.
 
 Numerical locator-string and range thresholds trigger review only. A defect requires structured evidence of conceptual distinctions, a useful alternative organization, and material retrieval harm.
+
+An adverse heading-access judgment must not stop at a generic summary or a shared evidence array. Record every applicable `heading_fit`, `benchmark_access`, `cross_reference`, and `confirmed_subdivision_architecture` causal finding with stable source and evidence IDs. Do not collapse overlapping signals or guess a primary cause.
 
 ## Independence
 

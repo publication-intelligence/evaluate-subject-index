@@ -14,4 +14,6 @@ where `T` is page-treatment diagnostic credit and `F` is complete-path-fit diagn
 
 Structure, cross-reference, missing-access, and source-subject rows project the corresponding current audit records. Multi-defect arrays use stable defect-ID ordering so repeated output is deterministic.
 
+Heading-node rows project the complete ordered `heading_access_causal_findings` array from the structure audit, plus a primary finding only when its deterministic or adjudicated basis is recorded. The item artifact also carries a canonical node-indexed projection so consumers do not reconstruct causes from shared evidence arrays.
+
 Aggregate dimension scores must be read from the calculation artifact, not reconstructed by averaging displayed item grades.

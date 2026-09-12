@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "item-assessments-v7.schema.json",
+  "title": "V8 item assessments with heading-access causal provenance",
+  "type": "object",
+  "required": ["schema_version", "grading_policy", "evaluation_id", "candidate_id", "candidate_sha256", "item_inventory_sha256", "item_inventory_artifact", "evidence_identity", "assessment_completeness", "audit_mode", "scope_complete", "grade_disclosure", "explanation_contract", "locator_grading_provenance", "structure_audit_binding", "color_legend", "locator_assessments", "path_assessments", "heading_node_assessments", "cross_reference_assessments", "source_subject_assessments", "heading_access_causal_provenance", "summary"],
+  "properties": {
+    "schema_version": {"const": "subject-index-item-assessments-v7"},
+    "grading_policy": {"$ref": "item-assessments-v6.schema.json#/properties/grading_policy"},
+    "evaluation_id": {"$ref": "item-assessments-v6.schema.json#/properties/evaluation_id"},
+    "candidate_id": {"$ref": "item-assessments-v6.schema.json#/properties/candidate_id"},
+    "candidate_sha256": {"$ref": "item-assessments-v6.schema.json#/properties/candidate_sha256"},
+    "item_inventory_sha256": {"$ref": "item-assessments-v6.schema.json#/properties/item_inventory_sha256"},
+    "item_inventory_artifact": {"$ref": "item-assessments-v6.schema.json#/properties/item_inventory_artifact"},
+    "evidence_identity": {"$ref": "item-assessments-v6.schema.json#/properties/evidence_identity"},
+    "assessment_completeness": {"$ref": "item-assessments-v6.schema.json#/properties/assessment_completeness"},
+    "audit_mode": {"$ref": "item-assessments-v6.schema.json#/properties/audit_mode"},
+    "scope_complete": {"$ref": "item-assessments-v6.schema.json#/properties/scope_complete"},
+    "grade_disclosure": {"$ref": "item-assessments-v6.schema.json#/properties/grade_disclosure"},
+    "explanation_contract": {
+      "type": "object",
+      "required": ["contract_version", "heading_access_causal_contract", "authored_evidence_is_primary", "prose_used_in_scoring", "causal_provenance_used_in_scoring"],
+      "properties": {
+        "contract_version": {"const": "locator-explanations-v2"},
+        "heading_access_causal_contract": {"const": "heading-access-causal-findings-v1"},
+        "authored_evidence_is_primary": {"const": true},
+        "prose_used_in_scoring": {"const": false},
+        "causal_provenance_used_in_scoring": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "locator_grading_provenance": {"$ref": "item-assessments-v6.schema.json#/properties/locator_grading_provenance"},
+    "structure_audit_binding": {
+      "type": "object",
+      "required": ["schema_version", "candidate_sha256", "node_id_set_sha256", "cross_reference_id_set_sha256", "locator_bearing_path_id_set_sha256"],
+      "properties": {
+        "schema_version": {"const": "structure-audit-v6"},
+        "candidate_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"},
+        "node_id_set_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"},
+        "cross_reference_id_set_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"},
+        "locator_bearing_path_id_set_sha256": {"$ref": "structure-audit-v5.schema.json#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "color_legend": {"$ref": "item-assessments-v6.schema.json#/properties/color_legend"},
+    "locator_assessments": {"$ref": "item-assessments-v6.schema.json#/properties/locator_assessments"},
+    "path_assessments": {"$ref": "item-assessments-v6.schema.json#/properties/path_assessments"},
+    "heading_node_assessments": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {"$ref": "item-assessments.schema.json#/$defs/assessedItem"},
+          {
+            "type": "object",
+            "required": ["node_id", "heading_path", "role", "component_results", "heading_access_status", "heading_access_causal_findings"],
+            "properties": {
+              "node_id": {"type": "string", "pattern": "^NODE-"},
+              "heading_access_status": {"enum": ["passes", "minor_issues", "major_issues", "fails", "uninspectable", "not_applicable", "not_measured"]},
+              "heading_access_causal_findings": {"type": "array", "items": {"$ref": "#/$defs/causalFinding"}},
+              "heading_access_primary_finding_id": {"type": "string", "pattern": "^HAF-"},
+              "heading_access_primary_basis": {"$ref": "#/$defs/primaryBasis"}
+            },
+            "dependentRequired": {
+              "heading_access_primary_finding_id": ["heading_access_primary_basis"],
+              "heading_access_primary_basis": ["heading_access_primary_finding_id"]
+            }
+          }
+        ]
+      }
+    },
+    "cross_reference_assessments": {"$ref": "item-assessments-v6.schema.json#/properties/cross_reference_assessments"},
+    "source_subject_assessments": {"$ref": "item-assessments-v6.schema.json#/properties/source_subject_assessments"},
+    "heading_access_causal_provenance": {"type": "array", "items": {"$ref": "#/$defs/nodeCausalProvenance"}},
+    "summary": {"$ref": "item-assessments-v6.schema.json#/properties/summary"}
+  },
+  "$defs": {
+    "causalFinding": {"$ref": "structure-audit-v6.schema.json#/$defs/causalFinding"},
+    "primaryBasis": {"$ref": "structure-audit-v6.schema.json#/$defs/primaryBasis"},
+    "nodeCausalProvenance": {
+      "type": "object",
+      "required": ["node_id", "status", "causal_findings"],
+      "properties": {
+        "node_id": {"type": "string", "pattern": "^NODE-"},
+        "status": {"enum": ["passes", "minor_issues", "major_issues", "fails", "uninspectable", "not_applicable", "not_measured"]},
+        "causal_findings": {"type": "array", "items": {"$ref": "#/$defs/causalFinding"}},
+        "primary_finding_id": {"type": "string", "pattern": "^HAF-"},
+        "primary_basis": {"$ref": "#/$defs/primaryBasis"}
+      },
+      "dependentRequired": {
+        "primary_finding_id": ["primary_basis"],
+        "primary_basis": ["primary_finding_id"]
+      },
+      "additionalProperties": false
+    },
+    "locatorExplanation": {"$ref": "item-assessments-v6.schema.json#/$defs/locatorExplanation"}
+  },
+  "additionalProperties": false
+}

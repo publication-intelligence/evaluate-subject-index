@@ -35,12 +35,29 @@ def state(
     scope: str = "indexable",
     codes: list[str] | None = None,
     severity: str = "none",
+    fit: str | None = None,
     locator_id: str = "LOC-TEST",
 ) -> dict:
+    if fit is None:
+        if judgment == "supported":
+            fit = "exact_fit"
+        elif judgment == "partially_supported":
+            fit = "material_partial_fit"
+        elif judgment == "uninspectable":
+            fit = "uninspectable"
+        elif treatment == "absent":
+            fit = "no_fit"
+        elif treatment in {"passing_mention", "attribution_only", "citation_only", "incidental_example"}:
+            fit = "exact_fit"
+        elif severity in {"major", "critical"}:
+            fit = "severe_mismatch"
+        else:
+            fit = "material_mismatch"
     return {
         "locator_id": locator_id,
         "judgment": judgment,
         "treatment_class": treatment,
+        "complete_path_fit": fit,
         "source_scope_status": scope,
         "error_codes": list(codes or []),
         "severity": severity,
@@ -151,7 +168,13 @@ class V8SensitivityTests(unittest.TestCase):
         self.assertEqual(25, assignment["diagnostic_grade"])
         self.assertEqual("0", assignment["rating_credit"])
 
-    def test_policy_hash_must_match_frozen_audit_provenance(self) -> None:
+    def test_complete_path_fit_is_a_required_native_field(self) -> None:
+        locator = state("supported", "substantive")
+        del locator["complete_path_fit"]
+        with self.assertRaisesRegex(ValueError, "complete_path_fit"):
+            assign_locator_utility(locator)
+
+    def test_policy_hash_copy_in_worker_provenance_is_not_a_gate(self) -> None:
         frozen_ledgers = {
             "identity": {"policy_sha256": "a" * 64},
         }
@@ -159,11 +182,11 @@ class V8SensitivityTests(unittest.TestCase):
             "policy": {"policy_sha256": "b" * 64},
             "config": {"audit_mode": "full"},
         }
-        with mock.patch.object(v8.v5, "preflight_loaded", return_value=(frozen_ledgers, [])), \
+        with mock.patch.object(v8.core, "preflight_loaded", return_value=(frozen_ledgers, [])), \
              mock.patch.object(v8, "locator_state_requirements", return_value=[]):
             ledgers, missing = v8.preflight_loaded(loaded)
-        self.assertIsNone(ledgers)
-        self.assertEqual(["policy_identity_mismatch"], [item["code"] for item in missing])
+        self.assertIs(ledgers, frozen_ledgers)
+        self.assertEqual([], missing)
 
 
 @unittest.skipUnless(HAS_SCORING_DEPENDENCIES, "scoring runtime dependencies are unavailable")
@@ -309,6 +332,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
                         "attribution_only",
                         codes=["CON"],
                         severity="major",
+                        fit="no_fit",
                         locator_id="LOC-0004",
                     ),
                 ],
@@ -400,7 +424,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         assignment = assign_locator_utility(
             state("supported", "mixed", locator_id="LOC-0001")
         ).as_dict()
-        evidence_identity = {"source_sha256": "a" * 64}
+        evidence_identity = {"source_sha256": "a" * 64, "candidate_sha256": "b" * 64}
         blank_grade = {
             "score": 100,
             "rating": 5,
@@ -411,6 +435,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         base = {
             "schema_version": "subject-index-item-assessments-v3",
             "evaluation_id": "EVAL-TEST",
+            "candidate_sha256": "b" * 64,
             "evidence_identity": evidence_identity,
             "locator_assessments": [{
                 "locator_id": "LOC-0001",
@@ -425,10 +450,23 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             "cross_reference_assessments": [],
             "source_subject_assessments": [],
         }
+        structure = {
+            "schema_version": "structure-audit-v6",
+            "candidate_sha256": "b" * 64,
+            "candidate_denominator": {
+                "node_id_set_sha256": "c" * 64,
+                "cross_reference_id_set_sha256": "d" * 64,
+                "locator_bearing_path_id_set_sha256": "e" * 64,
+            },
+            "full_scope_attestation": {},
+            "locator_architecture": {"triggered_reviews": []},
+            "uncertainties": [],
+        }
         calculation = {
             "schema_version": "subject-index-dimension-calculations-v6",
             "evaluation_id": "EVAL-TEST",
             "evidence_identity": evidence_identity,
+            "structure_audit": {key: copy.deepcopy(structure[key]) for key in ("schema_version", "candidate_denominator", "full_scope_attestation", "locator_architecture", "uncertainties")},
             "dimensions": [{
                 "dimension_id": "page_reference_reliability",
                 "reliability_provenance": {
@@ -440,13 +478,13 @@ class V8AdversarialMixtureTests(unittest.TestCase):
                 },
             }],
         }
-        review = {
-            "schema_version": "subject-index-structure-locator-review-v1",
-            "review_id": "STRUCTREV-AAAAAAAAAAAA",
-            "review_sha256": "b" * 64,
-            "path_reviews": [],
-        }
-        projected = item_v8.build_v8_assessments(base, calculation, review)
+        calculation["structure_audit"]["schema_version"] = "structure-audit-v5"
+        projected = item_v8.build_v8_assessments(
+            base,
+            calculation,
+            structure,
+            [{"schema_version": "locator-audit-v2", "judgments": [{"locator_id": "LOC-0001", "fit_rationale": "The full path is broader than the treatment."}]}],
+        )
         locator = projected["locator_assessments"][0]
         self.assertEqual(70, locator["grade"]["score"])
         self.assertEqual("1", locator["dimension_reliability_credit"])
@@ -480,26 +518,31 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         }
         loaded = {
             "config": {"evaluation_id": "EVAL-TEST", "audit_mode": "full"},
+            "structure": {
+                "schema_version": "structure-audit-v6",
+                "candidate_denominator": {},
+                "full_scope_attestation": {},
+                "locator_architecture": {},
+                "uncertainties": [],
+            },
             "input_artifacts": [
                 {"role": "policy", "path": "policy.json", "sha256": "b" * 64, "schema_version": "subject-index-evaluation-policy-v4"},
-                {"role": "structure_audit", "path": "structure.json", "sha256": "c" * 64, "schema_version": "structure-audit-v5"},
+                {"role": "structure_audit", "path": "structure.json", "sha256": "c" * 64, "schema_version": "structure-audit-v6"},
             ],
         }
         fit_report = {
             "invalid_or_contradictory_state": [],
-            "unresolved_complete_path_fit": [],
-            "compatibility_classifications": [],
+            "validated_complete_path_fit": [],
             "group_counts": {},
-            "unresolved_reason_counts": {},
         }
         with mock.patch.object(v8, "preflight_loaded", return_value=(ledgers, [])), \
              mock.patch.object(v8, "locator_fit_preflight", return_value=fit_report), \
              mock.patch.object(v8, "calculate_reliability", return_value=reliability), \
-             mock.patch.object(v8.v5, "calculate_coverage", return_value=sentinel(dimension_ids[0])), \
-             mock.patch.object(v8.v5, "calculate_selectivity", return_value=sentinel(dimension_ids[1])), \
-             mock.patch.object(v8.v5, "calculate_concept", return_value=sentinel(dimension_ids[2])), \
-             mock.patch.object(v8.v5, "calculate_findability", return_value=sentinel(dimension_ids[3])), \
-             mock.patch.object(v8.v5, "calculate_mechanics", return_value=sentinel(dimension_ids[4])):
+             mock.patch.object(v8.core, "calculate_coverage", return_value=sentinel(dimension_ids[0])), \
+             mock.patch.object(v8.core, "calculate_selectivity", return_value=sentinel(dimension_ids[1])), \
+             mock.patch.object(v8.core, "calculate_concept", return_value=sentinel(dimension_ids[2])), \
+             mock.patch.object(v8.core, "calculate_findability", return_value=sentinel(dimension_ids[3])), \
+             mock.patch.object(v8.core, "calculate_mechanics", return_value=sentinel(dimension_ids[4])):
             calculation = v8.calculate_loaded(loaded)
         observed = {
             item["dimension_id"]: item["unchanged_sentinel"]
@@ -541,17 +584,23 @@ class V8AdversarialMixtureTests(unittest.TestCase):
         loaded = {
             "config": {"evaluation_id": "EVAL-TEST", "audit_mode": "full"},
             "input_artifacts": [{"role": "policy", "path": "policy.json", "sha256": "b" * 64, "schema_version": "subject-index-evaluation-policy-v4"}],
+            "structure": {
+                "candidate_denominator": {},
+                "full_scope_attestation": {},
+                "locator_architecture": {},
+                "uncertainties": [],
+            },
         }
         fit_report = {"invalid_or_contradictory_state": [], "unresolved_complete_path_fit": [], "compatibility_classifications": [], "group_counts": {}, "unresolved_reason_counts": {}}
         patches = [
             mock.patch.object(v8, "preflight_loaded", return_value=(ledgers, [])),
             mock.patch.object(v8, "locator_fit_preflight", return_value=fit_report),
             mock.patch.object(v8, "calculate_reliability", return_value=dimensions[3]),
-            mock.patch.object(v8.v5, "calculate_coverage", return_value=dimensions[0]),
-            mock.patch.object(v8.v5, "calculate_selectivity", return_value=dimensions[1]),
-            mock.patch.object(v8.v5, "calculate_concept", return_value=dimensions[2]),
-            mock.patch.object(v8.v5, "calculate_findability", return_value=dimensions[4]),
-            mock.patch.object(v8.v5, "calculate_mechanics", return_value=dimensions[5]),
+            mock.patch.object(v8.core, "calculate_coverage", return_value=dimensions[0]),
+            mock.patch.object(v8.core, "calculate_selectivity", return_value=dimensions[1]),
+            mock.patch.object(v8.core, "calculate_concept", return_value=dimensions[2]),
+            mock.patch.object(v8.core, "calculate_findability", return_value=dimensions[4]),
+            mock.patch.object(v8.core, "calculate_mechanics", return_value=dimensions[5]),
         ]
         with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
             calculation = v8.calculate_loaded(loaded)

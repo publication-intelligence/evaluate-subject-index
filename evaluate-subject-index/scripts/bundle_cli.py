@@ -52,9 +52,8 @@ def add_bytes(archive: zipfile.ZipFile, name: str, data: bytes) -> None:
     archive.writestr(zip_info(name), data)
 
 
-def default_output(root: Path, evaluation_id: str, command: str, profile: str) -> Path:
-    label = "checkpoint" if command == "checkpoint" else "bundle"
-    return root / "exports" / f"{evaluation_id}-{label}-{profile}.zip"
+def default_output(root: Path, evaluation_id: str, profile: str) -> Path:
+    return root / "exports" / f"{evaluation_id}-checkpoint-{profile}.zip"
 
 
 def load_run(state_path: Path) -> tuple[dict[str, Any], Path]:
@@ -96,7 +95,7 @@ def command_package(args: argparse.Namespace) -> None:
     metadata_errors = schema_errors(metadata, "bundle-metadata.schema.json")
     if metadata_errors:
         fail("invalid_bundle_metadata", "Generated bundle metadata is invalid.", metadata_errors)
-    output = Path(args.output).resolve() if args.output else default_output(root, state["evaluation_id"], args.command, args.profile)
+    output = Path(args.output).resolve() if args.output else default_output(root, state["evaluation_id"], args.profile)
     if output.exists() and not args.force:
         fail("output_exists", f"Refusing to overwrite existing bundle: {output}")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -190,7 +189,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_package_arguments(subparsers.add_parser("checkpoint"))
-    add_package_arguments(subparsers.add_parser("export-bundle"))
     listing = subparsers.add_parser("list-artifacts")
     listing.add_argument("--state", required=True)
     listing.set_defaults(func=command_list)
