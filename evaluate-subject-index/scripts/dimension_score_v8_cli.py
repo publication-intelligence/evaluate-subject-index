@@ -1108,10 +1108,12 @@ def _registered_documents(
     schema_version: str,
     schema_name: str,
     many: bool = False,
+    sha256: str | None = None,
 ) -> list[tuple[dict[str, Any], dict[str, Any], Path]]:
     records = [
         item for item in state.get("artifacts", [])
         if item.get("stage") == stage and item.get("schema_version") == schema_version
+        and (sha256 is None or item.get("sha256") == sha256)
     ]
     core.require(bool(records), "registered_artifact_missing", f"No registered {schema_version} artifact exists for {stage}.")
     core.require(many or len(records) == 1, "duplicate_registered_artifact", f"Expected exactly one registered {schema_version} artifact for {stage}.", [item["path"] for item in records])
@@ -1776,7 +1778,7 @@ def command_build_report_state(args: argparse.Namespace) -> None:
         with evaluation_mutation_lock(state_path):
             state, warnings = _transition_state(state_path, "web_report")
             result, result_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-evaluation-result-v12", schema_name="evaluation-result-v12.schema.json")[0]
-            calculation, calculation_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-dimension-calculations-v6", schema_name="dimension-calculations-v6.schema.json")[0]
+            calculation, calculation_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-dimension-calculations-v6", schema_name="dimension-calculations-v6.schema.json", sha256=result["dimension_calculations"]["sha256"])[0]
             items, items_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-item-assessments-v7", schema_name="item-assessments-v7.schema.json")[0]
             metadata, metadata_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-v8-projection-metadata-v2", schema_name="v8-projection-metadata-v2.schema.json")[0]
             structure, structure_record, _ = _registered_documents(state, state_path, stage="structure_audit", schema_version="structure-audit-v6", schema_name="structure-audit-v6.schema.json")[0]

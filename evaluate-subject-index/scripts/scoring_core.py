@@ -277,7 +277,7 @@ def validate_schema_document(document: dict[str, Any], schema_name: str, label: 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(json_output_value(value), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def json_output_value(value: Any) -> Any:
