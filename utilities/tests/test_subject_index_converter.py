@@ -299,6 +299,63 @@ class GeometryAdapterTests(unittest.TestCase):
             self.assertEqual(locators, [item["displayed_locator"] for item in records[displayed]["locator_displays"]])
         self.assertEqual([], issues["issues"])
 
+    def test_indexerlabs_locatorless_parents_stay_hierarchy_beside_unpunctuated_wraps(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - locatorless parents"},
+            "pages": [
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [36, 70, 100, 78], "text": "Locatorless umbrella"},
+                    {"bbox": [46, 80, 170, 88], "text": "legitimate ten point subentry, 22"},
+                    {"bbox": [48, 90, 170, 98], "text": "normal subentry, 23"},
+                    {"bbox": [36, 100, 170, 108], "text": "Association for Liberty and"},
+                    {"bbox": [46, 110, 130, 118], "text": "Property, 24"},
+                    {"bbox": [36, 490, 100, 498], "text": "Locatorless column umbrella"},
+                    {"bbox": [197.7, 70, 320, 78], "text": "legitimate column subentry, 25"},
+                    {"bbox": [199.7, 80, 320, 88], "text": "normal right subentry, 26"},
+                    {"bbox": [187.7, 490, 250, 498], "text": "Locatorless page umbrella"},
+                ]},
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [46, 70, 170, 78], "text": "legitimate page subentry, 27"},
+                    {"bbox": [48, 80, 170, 88], "text": "normal page subentry, 28"},
+                    {"bbox": [36, 90, 170, 98], "text": "Final left, 29"},
+                    {"bbox": [36, 490, 170, 498], "text": "Association across columns and"},
+                    {"bbox": [197.7, 70, 320, 78], "text": "Property, 30"},
+                    {"bbox": [187.7, 80, 320, 88], "text": "Final right, 30"},
+                    {"bbox": [187.7, 490, 320, 498], "text": "Association across pages and"},
+                ]},
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [46, 70, 170, 78], "text": "Property, 31"},
+                    {"bbox": [36, 80, 170, 88], "text": "Final page left, 32"},
+                    {"bbox": [187.7, 70, 320, 78], "text": "Final page right, 33"},
+                ]},
+            ],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "locatorless-parents", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        for text in (
+            "legitimate ten point subentry, 22",
+            "legitimate column subentry, 25",
+            "legitimate page subentry, 27",
+        ):
+            self.assertEqual(1, by_text[text]["indentation_level"])
+            self.assertEqual("standalone", by_text[text]["continuation_status"])
+            self.assertEqual("subentry", by_text[text]["inferred_boundary"])
+        self.assertEqual("continues_previous", by_text["Property, 24"]["continuation_status"])
+        self.assertEqual("continued_from_previous_column", by_text["Property, 30"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["Property, 31"]["continuation_status"])
+
+        normalized = [group["displayed_line_text"] for group in merge_continuation_lines(layout_lines(layout))]
+        self.assertIn("Locatorless umbrella", normalized)
+        self.assertIn("legitimate ten point subentry, 22", normalized)
+        self.assertIn("Locatorless column umbrella", normalized)
+        self.assertIn("legitimate column subentry, 25", normalized)
+        self.assertIn("Locatorless page umbrella", normalized)
+        self.assertIn("legitimate page subentry, 27", normalized)
+        self.assertIn("Association for Liberty and Property, 24", normalized)
+        self.assertIn("Association across columns and Property, 30", normalized)
+        self.assertIn("Association across pages and Property, 31", normalized)
+
     def test_generic_pdf_keeps_conservative_cross_region_fallback(self) -> None:
         layout = extract_candidate_layout(
             Path("unused.pdf"),

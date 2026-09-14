@@ -792,7 +792,6 @@ def _build_document(
     global_order = 0
     column_bases: dict[int, float] = {}
     column_rights: dict[int, float] = {}
-    column_starts: dict[int, set[float]] = defaultdict(set)
 
     if selected == "indexerlabs-two-column":
         for page in raw["pages"]:
@@ -801,19 +800,6 @@ def _build_document(
                 column = 1 if not two_columns or line["bbox"][0] < threshold else 2
                 column_bases[column] = min(column_bases.get(column, line["bbox"][0]), line["bbox"][0])
                 column_rights[column] = max(column_rights.get(column, line["bbox"][2]), line["bbox"][2])
-                column_starts[column].add(line["bbox"][0])
-
-    hanging_convention = {
-        column: (
-            any(abs(start - base_x - 12.0) <= 1.0 for start in column_starts[column])
-            and any(
-                any(abs(start - base_x - level * 12.0) <= 1.0 for start in column_starts[column])
-                and any(abs(start - base_x - (level * 12.0 + 10.0)) <= 1.0 for start in column_starts[column])
-                for level in range(4)
-            )
-        )
-        for column, base_x in column_bases.items()
-    }
 
     for page in raw["pages"]:
         two_columns, threshold, column_confidence = _column_split(page, selected)
@@ -846,14 +832,8 @@ def _build_document(
                     hanging_level is not None
                     and _hint_continuation(line.get("continuation_status_hint")) is None
                     and all_lines
-                    and (
-                        _preceding_line_is_incomplete(
-                            all_lines[-1], displayed, column_rights[column] - column_bases[column]
-                        )
-                        or (
-                            hanging_convention.get(column, False)
-                            and not _ends_with_locator(all_lines[-1]["displayed_line_text"])
-                        )
+                    and _preceding_line_is_incomplete(
+                        all_lines[-1], displayed, column_rights[column] - column_bases[column]
                     )
                 ):
                     line["indentation_level"] = hanging_level
