@@ -720,17 +720,28 @@ def _indent_levels(lines: list[dict[str, Any]]) -> None:
         line["indentation_level"] = min(range(len(clusters)), key=lambda index: abs(clusters[index] - line["bbox"][0]))
 
 
-def _mark_indexerlabs_hanging_indents(lines: list[dict[str, Any]], base_x: float) -> None:
-    """Distinguish IndexerLabs wrap indents from its 12-point hierarchy steps."""
+def _indexerlabs_hanging_level(line: dict[str, Any], base_x: float) -> int | None:
+    offset = line["bbox"][0] - base_x
+    level = round((offset - 10.0) / 12.0)
+    return level if level >= 0 and abs(offset - (10.0 + level * 12.0)) <= 1.0 else None
 
-    for line in lines:
-        offset = line["bbox"][0] - base_x
-        level = round((offset - 10.0) / 12.0)
-        if level >= 0 and abs(offset - (10.0 + level * 12.0)) <= 1.0:
-            line["indentation_level"] = level
-            if _hint_continuation(line.get("continuation_status_hint")) is None:
-                line["continuation_status_hint"] = "continues_previous"
-                line["inferred_boundary_hint"] = "continuation"
+
+def _preceding_line_is_incomplete(previous: dict[str, Any], current_text: str, column_width: float) -> bool:
+    text = previous["displayed_line_text"].rstrip()
+    if text.endswith((",", ";", ":", "-", "–", "—")):
+        return True
+    if re.search(
+        r"(?:^|[\s,;])(?:\d+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:\d+|[ivxlcdm]+))?[.)]?\s*$",
+        text,
+        re.I,
+    ):
+        return False
+    current = current_text.lstrip()
+    if current[:1] in {"(", "[", "'", "‘", "’"}:
+        return True
+    if re.search(r"(?i)\b(?:and|de|du|from|in|of|see|to|under|vs\.)\s*$", text):
+        return True
+    return previous["bbox"][2] - previous["bbox"][0] >= column_width * 0.55
 
 
 def _hint_continuation(value: Any) -> str | None:
@@ -776,6 +787,7 @@ def _build_document(
     page_summaries: list[dict[str, Any]] = []
     global_order = 0
     column_bases: dict[int, float] = {}
+    column_rights: dict[int, float] = {}
     column_starts: dict[int, set[float]] = defaultdict(set)
 
     if selected == "indexerlabs-two-column":
@@ -784,13 +796,20 @@ def _build_document(
             for line in page["lines"]:
                 column = 1 if not two_columns or line["bbox"][0] < threshold else 2
                 column_bases[column] = min(column_bases.get(column, line["bbox"][0]), line["bbox"][0])
+                column_rights[column] = max(column_rights.get(column, line["bbox"][2]), line["bbox"][2])
                 column_starts[column].add(line["bbox"][0])
 
-    hanging_convention = any(
-        any(abs(start - base_x - 10.0) <= 1.0 for start in column_starts[column])
-        and any(abs(start - base_x - 12.0) <= 1.0 for start in column_starts[column])
+    hanging_convention = {
+        column: (
+            any(abs(start - base_x - 12.0) <= 1.0 for start in column_starts[column])
+            and any(
+                any(abs(start - base_x - level * 12.0) <= 1.0 for start in column_starts[column])
+                and any(abs(start - base_x - (level * 12.0 + 10.0)) <= 1.0 for start in column_starts[column])
+                for level in range(4)
+            )
+        )
         for column, base_x in column_bases.items()
-    )
+    }
 
     for page in raw["pages"]:
         two_columns, threshold, column_confidence = _column_split(page, selected)
@@ -803,8 +822,6 @@ def _build_document(
         for region_order, column in enumerate(sorted(grouped), 1):
             source_lines = sorted(grouped[column], key=lambda item: (item["bbox"][1], item["bbox"][0], item["source_order"]))
             _indent_levels(source_lines)
-            if hanging_convention:
-                _mark_indexerlabs_hanging_indents(source_lines, column_bases[column])
             region_id = _stable_id("region", candidate_id, page["candidate_pdf_page"], region_order, column)
             page_region_ids.append(region_id)
             region_line_ids: list[str] = []
@@ -816,6 +833,22 @@ def _build_document(
                 warnings = list(line.get("extraction_warnings", []))
                 if repaired and "repaired_visual_character_spacing" not in warnings:
                     warnings.append("repaired_visual_character_spacing")
+                hanging_level = (
+                    _indexerlabs_hanging_level(line, column_bases[column])
+                    if hanging_convention.get(column, False)
+                    else None
+                )
+                if (
+                    hanging_level is not None
+                    and _hint_continuation(line.get("continuation_status_hint")) is None
+                    and all_lines
+                    and _preceding_line_is_incomplete(
+                        all_lines[-1], displayed, column_rights[column] - column_bases[column]
+                    )
+                ):
+                    line["indentation_level"] = hanging_level
+                    line["continuation_status_hint"] = "continues_previous"
+                    line["inferred_boundary_hint"] = "continuation"
                 identity_key = json.dumps([line["bbox"], original], ensure_ascii=False, separators=(",", ":"))
                 identity_counts[identity_key] += 1
                 line_id = _stable_id(
@@ -891,8 +924,18 @@ def _build_document(
         outgoing = f"continues_next_{boundary}"
         generic_inference = (
             selected != "indexerlabs-two-column"
-            and current["indentation_level"] > 0
             and _looks_like_continuation(current["displayed_line_text"])
+            and (
+                current["indentation_level"] > 0
+                or _preceding_line_is_incomplete(
+                    previous,
+                    current["displayed_line_text"],
+                    max(
+                        previous_region["bbox"][2] - previous_region["bbox"][0],
+                        current_region["bbox"][2] - current_region["bbox"][0],
+                    ),
+                )
+            )
         )
         if current["continuation_status"] in {incoming, "continues_previous"}:
             current["continuation_status"] = incoming

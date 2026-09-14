@@ -53,7 +53,7 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                     {"bbox": [62, 680, 240, 692], "text": "continued discussion,"},
                     {"bbox": [342, 100, 520, 112], "text": "and later examples, 15"},
                     {"bbox": [332, 120, 500, 132], "text": "O’Connor, 20"},
-                    {"bbox": [320, 140, 540, 152], "text": "M a r í a ’ s, 21–23"},
+                    {"bbox": [320, 140, 540, 152], "text": "M a r í a ’ s, 21–23,"},
                     {"bbox": [295, 780, 305, 791], "text": "1"},
                 ],
             },
@@ -114,7 +114,7 @@ class GeometryAdapterTests(unittest.TestCase):
                 "continued discussion,",
                 "and later examples, 15",
                 "O’Connor, 20",
-                "María’s, 21–23",
+                "María’s, 21–23,",
             ],
             [line["displayed_line_text"] for line in page_one],
         )
@@ -128,8 +128,8 @@ class GeometryAdapterTests(unittest.TestCase):
         self.assertEqual("continued_from_previous_page", by_text["continued on next page, 24"]["continuation_status"])
         self.assertEqual("continuation", by_text["continued on next page, 24"]["inferred_boundary"])
 
-        repaired = by_text["María’s, 21–23"]
-        self.assertEqual("M a r í a ’ s, 21–23", repaired["original_displayed_form"])
+        repaired = by_text["María’s, 21–23,"]
+        self.assertEqual("M a r í a ’ s, 21–23,", repaired["original_displayed_form"])
         self.assertIn("repaired_visual_character_spacing", repaired["extraction_warnings"])
         self.assertEqual(6, layout["counts"]["excluded_lines"])
         self.assertEqual(4, layout["counts"]["excluded_repeated_headers"])
@@ -174,6 +174,7 @@ class GeometryAdapterTests(unittest.TestCase):
                     "lines": [
                         {"bbox": [36, 100, 150, 108], "text": "Alpha, 87,"},
                         {"bbox": [46, 110, 70, 118], "text": "88"},
+                        {"bbox": [48, 120, 170, 128], "text": "normal subentry, 89"},
                         {"bbox": [36, 490, 150, 498], "text": "Range owner, 270–271"},
                         {"bbox": [199.7, 70, 340, 78], "text": "establishment and role as war cabinet, 228"},
                     ],
@@ -215,7 +216,7 @@ class GeometryAdapterTests(unittest.TestCase):
         self.assertEqual("continued_from_previous_column", by_text["101"]["continuation_status"])
         self.assertEqual("standalone", by_text["new page heading, 103"]["continuation_status"])
         self.assertEqual("continued_from_previous_page", by_text["111"]["continuation_status"])
-        self.assertEqual(11, layout["counts"]["index_lines"])
+        self.assertEqual(12, layout["counts"]["index_lines"])
         normalized_lines = [group["displayed_line_text"] for group in merge_continuation_lines(layout_lines(layout))]
         self.assertIn("Alpha, 87, 88", normalized_lines)
         self.assertIn("Bravo, 100, 101", normalized_lines)
@@ -232,16 +233,19 @@ class GeometryAdapterTests(unittest.TestCase):
                 "lines": [
                     {"bbox": [36, 70, 170, 78], "text": "Main entry, 10"},
                     {"bbox": [46, 80, 170, 88], "text": "legitimate subentry, 11"},
+                    {"bbox": [48, 90, 170, 98], "text": "normal subentry, 12"},
                     {"bbox": [187.7, 70, 320, 78], "text": "Second main, 12"},
+                    {"bbox": [197.7, 80, 320, 88], "text": "other legitimate subentry, 13"},
                 ],
             }],
         }
 
         layout = extract_candidate_layout(Path("unused.pdf"), "ten-point-subentry", geometry=geometry)
-        subentry = next(line for line in layout_lines(layout, False) if line["displayed_line_text"].startswith("legitimate"))
-        self.assertEqual(1, subentry["indentation_level"])
-        self.assertEqual("standalone", subentry["continuation_status"])
-        self.assertEqual("subentry", subentry["inferred_boundary"])
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        for text in ("legitimate subentry, 11", "other legitimate subentry, 13"):
+            self.assertEqual(1, by_text[text]["indentation_level"])
+            self.assertEqual("standalone", by_text[text]["continuation_status"])
+            self.assertEqual("subentry", by_text[text]["inferred_boundary"])
 
     def test_generic_pdf_keeps_conservative_cross_region_fallback(self) -> None:
         layout = extract_candidate_layout(
@@ -253,6 +257,34 @@ class GeometryAdapterTests(unittest.TestCase):
         by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
         self.assertEqual("continued_from_previous_column", by_text["and later examples, 15"]["continuation_status"])
         self.assertEqual("continued_from_previous_page", by_text["continued on next page, 24"]["continuation_status"])
+
+    def test_generic_pdf_routes_base_aligned_continuations_but_not_completed_headings(self) -> None:
+        geometry = {
+            "metadata": {"producer": "Neutral producer"},
+            "pages": [
+                {"width": 600, "height": 800, "lines": [
+                    {"bbox": [50, 700, 250, 712], "text": "Wrapped entry, 10,"},
+                    {"bbox": [320, 100, 500, 112], "text": "continued entry, 11"},
+                    {"bbox": [320, 700, 500, 712], "text": "Across page, 12,"},
+                ]},
+                {"width": 600, "height": 800, "lines": [
+                    {"bbox": [50, 100, 80, 112], "text": "13"},
+                    {"bbox": [320, 700, 500, 712], "text": "Complete entry, 14"},
+                ]},
+                {"width": 600, "height": 800, "lines": [
+                    {"bbox": [50, 100, 250, 112], "text": "new lowercase heading, 15"},
+                    {"bbox": [320, 100, 500, 112], "text": "Zulu, 16"},
+                ]},
+            ],
+        }
+
+        layout = extract_candidate_layout(
+            Path("unused.pdf"), "generic-base-aligned", adapter_id="generic-pdf-layout", geometry=geometry
+        )
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        self.assertEqual("continued_from_previous_column", by_text["continued entry, 11"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["13"]["continuation_status"])
+        self.assertEqual("standalone", by_text["new lowercase heading, 15"]["continuation_status"])
 
     def test_auto_uses_geometry_and_never_index_vocabulary(self) -> None:
         geometry = synthetic_two_page_geometry(producer="Unrelated PDF engine")
