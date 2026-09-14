@@ -43,7 +43,6 @@ _CONTINUATION_VALUES = {
     "continues_next_page",
 }
 _BOUNDARY_VALUES = {"main_entry", "subentry", "continuation", "header_footer", "unknown"}
-_PAGE_TOKEN = re.compile(r"^[\s\-\u2010-\u2015]*(?:\d+|[ivxlcdm]+)[\s\-\u2010-\u2015]*$", re.I)
 
 
 def list_adapter_ids() -> tuple[str, ...]:
@@ -566,8 +565,7 @@ def _normalize_geometry(geometry: dict[str, Any], candidate_path: Path) -> dict[
 def _signature(text: str) -> str:
     normalized = unicodedata.normalize("NFKC", text).casefold().strip()
     normalized = re.sub(r"\s+", " ", normalized)
-    if sum(character.isalpha() for character in normalized) >= 4:
-        normalized = re.sub(r"\d+", "#", normalized)
+    normalized = re.sub(r"\d+", "#", normalized)
     return normalized
 
 
@@ -591,9 +589,7 @@ def _exclude_headers_and_footers(pages: list[dict[str, Any]], candidate_id: str)
             band = "top" if line["bbox"][1] <= height * 0.12 else "bottom" if line["bbox"][3] >= height * 0.88 else "body"
             text = line["original_displayed_form"]
             reason: str | None = None
-            if band == "bottom" and _PAGE_TOKEN.fullmatch(text.strip()):
-                reason = "page_number_footer"
-            elif band != "body" and signatures[(band, _signature(text))] >= 2 and signatures[(band, _signature(text))] / page_count >= 0.5:
+            if band != "body" and signatures[(band, _signature(text))] >= 2 and signatures[(band, _signature(text))] / page_count >= 0.5:
                 reason = "repeated_page_header" if band == "top" else "repeated_page_footer"
             if reason is None:
                 retained.append(line)

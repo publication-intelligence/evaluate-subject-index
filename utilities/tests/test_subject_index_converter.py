@@ -47,6 +47,7 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                 "height": 800,
                 "lines": [
                     {"bbox": [220, 20, 380, 35], "text": "Synthetic Index"},
+                    {"bbox": [554, 20, 564, 32], "text": "1"},
                     {"bbox": [50, 100, 250, 112], "text": "Café society, 11–13"},
                     {"bbox": [68, 120, 285, 132], "text": "L'école, 14; see also Élan vital"},
                     {"bbox": [68, 680, 240, 692], "text": "continued discussion,"},
@@ -62,6 +63,7 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                 "height": 800,
                 "lines": [
                     {"bbox": [220, 20, 380, 35], "text": "Synthetic Index"},
+                    {"bbox": [36, 20, 46, 32], "text": "2"},
                     {"bbox": [68, 100, 285, 112], "text": "continued on next page, 24"},
                     {"bbox": [50, 120, 230, 132], "text": "Zulu, 25"},
                     {"bbox": [320, 100, 500, 112], "text": "Beta, 26"},
@@ -129,13 +131,38 @@ class GeometryAdapterTests(unittest.TestCase):
         repaired = by_text["María’s, 21–23"]
         self.assertEqual("M a r í a ’ s, 21–23", repaired["original_displayed_form"])
         self.assertIn("repaired_visual_character_spacing", repaired["extraction_warnings"])
-        self.assertEqual(4, layout["counts"]["excluded_lines"])
-        self.assertEqual(2, layout["counts"]["excluded_repeated_headers"])
-        self.assertEqual(2, layout["counts"]["excluded_page_number_footers"])
+        self.assertEqual(6, layout["counts"]["excluded_lines"])
+        self.assertEqual(4, layout["counts"]["excluded_repeated_headers"])
+        self.assertEqual(2, layout["counts"]["excluded_repeated_footers"])
+        self.assertEqual(0, layout["counts"]["excluded_page_number_footers"])
+        top_page_numbers = [
+            (item["candidate_pdf_page"], item["bbox"][0], item["reason"])
+            for item in layout["excluded_lines"]
+            if item["original_displayed_form"] in {"1", "2"} and item["bbox"][1] < 100
+        ]
+        self.assertEqual([(1, 554.0, "repeated_page_header"), (2, 36.0, "repeated_page_header")], top_page_numbers)
         headers = [line for line in layout_lines(layout) if line.get("inferred_boundary") == "header_footer"]
-        self.assertEqual(4, len(headers))
+        self.assertEqual(6, len(headers))
         self.assertTrue(all(line["excluded_from_index"] for line in headers))
         self.assertNotIn("Synthetic Index", [line["displayed_line_text"] for line in layout_lines(layout, False)])
+
+    def test_isolated_numeric_index_continuations_are_not_footer_furniture(self) -> None:
+        geometry = {
+            "pages": [{
+                "width": 600,
+                "height": 800,
+                "lines": [
+                    {"bbox": [50, 100, 250, 112], "text": "Entry with wrapped locator,"},
+                    {"bbox": [58, 710, 70, 720], "text": "403"},
+                ],
+            }],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "numeric-continuations", geometry=geometry)
+
+        retained = [line["displayed_line_text"] for line in layout_lines(layout, include_excluded=False)]
+        self.assertIn("403", retained)
+        self.assertEqual(0, layout["counts"]["excluded_lines"])
 
     def test_auto_uses_geometry_and_never_index_vocabulary(self) -> None:
         geometry = synthetic_two_page_geometry(producer="Unrelated PDF engine")
@@ -242,6 +269,7 @@ class PdfRuntimeTests(unittest.TestCase):
             for page_number in (1, 2):
                 page = document.new_page(width=612, height=792)
                 page.insert_text((225, 28), "Synthetic Index", fontsize=9)
+                page.insert_text((36 if page_number % 2 else 570, 28), str(page_number), fontsize=8)
                 page.insert_text((50, 100), "Alpha, 10-12" if page_number == 1 else "continued, 16", fontsize=10)
                 page.insert_text((68 if page_number == 1 else 50, 120), "Beta, 13" if page_number == 1 else "Café d'Arc, 17", fontsize=10)
                 page.insert_text((338 if page_number == 1 else 320, 100), "and more, 14" if page_number == 1 else "Delta, 18", fontsize=10)
@@ -257,7 +285,9 @@ class PdfRuntimeTests(unittest.TestCase):
             self.assertRegex(layout["pdf_metadata"]["sha256"], re.compile(r"^[a-f0-9]{64}$"))
             self.assertEqual(path.stat().st_size, layout["pdf_metadata"]["byte_length"])
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), layout["candidate_sha256"])
-            self.assertEqual(4, layout["counts"]["excluded_lines"])
+            self.assertEqual(6, layout["counts"]["excluded_lines"])
+            self.assertEqual(4, layout["counts"]["excluded_repeated_headers"])
+            self.assertEqual(2, layout["counts"]["excluded_repeated_footers"])
             texts = [line["displayed_line_text"] for line in layout_lines(layout, include_excluded=False)]
             self.assertIn("Café d'Arc, 17", texts)
             page_one = [line for line in layout_lines(layout, include_excluded=False) if line["candidate_pdf_page"] == 1]
