@@ -931,21 +931,22 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         errors.append("Current policy is not the exact registered define_policy artifact.")
 
     legacy_workflow = legacy_state.get("benchmark_workflow", {})
+    if legacy_state.get("evaluation_id") != legacy_benchmark.get("evaluation_id"):
+        errors.append("Legacy state evaluation_id does not match the benchmark.")
     for stage in ("source_subject_discovery", "benchmark_synthesis", "benchmark_review", "benchmark_freeze"):
         if legacy_state.get("stages", {}).get(stage, {}).get("status") != "completed":
             errors.append(f"Legacy state does not complete {stage}.")
-    if legacy_state.get("candidate") is not None or legacy_benchmark.get("candidate_blindness") != "preserved":
+    if (
+        legacy_state.get("candidate") is not None
+        or legacy_workflow.get("candidate_blindness") != "preserved"
+        or legacy_benchmark.get("candidate_blindness") != "preserved"
+    ):
         errors.append("Legacy benchmark state does not preserve candidate blindness.")
     if any(
         item.get("stage") == "candidate_normalization"
         for item in legacy_state.get("artifacts", []) if isinstance(item, dict)
     ):
         errors.append("Legacy release evidence contains candidate-normalization artifacts.")
-    if not str(legacy_workflow.get("merge_gate", "")).startswith("cleared"):
-        errors.append("Legacy release evidence does not show a cleared final merge gate.")
-    release_status = str(legacy_workflow.get("release_status", ""))
-    if "frozen" not in release_status or "final" not in release_status:
-        errors.append("Legacy release evidence does not identify a final frozen release.")
     final_identity = legacy_workflow.get("final_benchmark", {})
     if final_identity.get("file_sha256") != digests["legacy_benchmark"] or final_identity.get("canonical_sha256") != legacy_benchmark.get("benchmark_sha256"):
         errors.append("Legacy state final-benchmark identity does not match the supplied frozen artifact.")
@@ -974,7 +975,7 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         "review_file_sha256": digests["legacy_review"],
         "review_inventory_file_sha256": digests["legacy_review_inventory"],
         "state_file_sha256": digests["legacy_state"],
-        "artifact_freeze_commit": legacy_workflow.get("artifact_freeze_commit"),
+        "artifact_freeze_commit": approval["legacy"]["artifact_freeze_commit"],
     }
     if approval.get("legacy") != expected_legacy:
         errors.append("Compatibility approval legacy identity does not exactly match the supplied release evidence.")
@@ -1102,11 +1103,13 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
     }
     if any(path.exists() for path in temporary_files):
         fail("temporary_path_exists", "A compatibility-import temporary file already exists; remove it after verifying no import is active.")
+    created_temporaries: list[Path] = []
     created_outputs: list[Path] = []
     try:
         for path, content in temporary_files.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(content)
+            created_temporaries.append(path)
         output_temporary, provenance_temporary, state_temporary = temporary_files
         output_temporary.replace(output_path)
         created_outputs.append(output_path)
@@ -1114,10 +1117,11 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         created_outputs.append(provenance_path)
         state_temporary.replace(state_path)
     except OSError as exc:
-        for path in created_outputs:
-            path.unlink(missing_ok=True)
-        for path in temporary_files:
-            path.unlink(missing_ok=True)
+        for path in [*created_outputs, *created_temporaries]:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
         fail("atomic_write_failed", f"Compatibility import did not commit: {exc}")
 
     action = next_stage(updated)

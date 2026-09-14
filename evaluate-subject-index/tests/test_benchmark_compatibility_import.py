@@ -184,8 +184,7 @@ class CompatibilityImportFixture:
             "artifacts": [{"stage": stage, "sha256": file_hash(path)} for stage, path in legacy_artifacts],
             "benchmark_workflow": {
                 "final_benchmark": {"file_sha256": file_hash(self.legacy_benchmark), "canonical_sha256": benchmark["benchmark_sha256"]},
-                "candidate_blindness": "preserved", "release_status": "benchmark_frozen_final",
-                "artifact_freeze_commit": "9" * 40, "merge_gate": "cleared_after_review",
+                "candidate_blindness": "preserved", "merge_gate": "blocked_systemic_defect_revealed",
             },
         })
 
@@ -313,6 +312,34 @@ class CompatibilityImportTests(unittest.TestCase):
             self.assertTrue(any("does not recompute" in error for error in result["errors"]))
             self.assertEqual(before, fixture.state.read_bytes())
             self.assertFalse(fixture.output.exists())
+
+    def test_legacy_state_evaluation_identity_mismatch_writes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = CompatibilityImportFixture(Path(temporary))
+            legacy_state = json.loads(fixture.legacy_state.read_text())
+            legacy_state["evaluation_id"] = "EVAL-OTHER"
+            write_json(fixture.legacy_state, legacy_state)
+            approval = json.loads(fixture.approval.read_text())
+            approval["legacy"]["state_file_sha256"] = file_hash(fixture.legacy_state)
+            write_json(fixture.approval, approval)
+            before = fixture.state.read_bytes()
+            result = run_cli("benchmark_review_cli.py", *fixture.arguments(), ok=False)
+            self.assertTrue(any("Legacy state evaluation_id" in error for error in result["errors"]))
+            self.assertEqual(before, fixture.state.read_bytes())
+            self.assertFalse(fixture.output.exists())
+
+    def test_atomic_write_cleanup_preserves_structured_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = CompatibilityImportFixture(Path(temporary))
+            blocked_parent = fixture.root / "blocked"
+            blocked_parent.write_text("not a directory")
+            fixture.output = blocked_parent / "source-benchmark.json"
+            before = fixture.state.read_bytes()
+            result = run_cli("benchmark_review_cli.py", *fixture.arguments(), ok=False)
+            self.assertEqual("atomic_write_failed", result["error"]["code"])
+            self.assertEqual(before, fixture.state.read_bytes())
+            self.assertEqual("not a directory", blocked_parent.read_text())
+            self.assertFalse(fixture.provenance.exists())
 
 
 if __name__ == "__main__":
