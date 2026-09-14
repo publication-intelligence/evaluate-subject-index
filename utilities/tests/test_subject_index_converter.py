@@ -247,6 +247,58 @@ class GeometryAdapterTests(unittest.TestCase):
             self.assertEqual("standalone", by_text[text]["continuation_status"])
             self.assertEqual("subentry", by_text[text]["inferred_boundary"])
 
+    def test_flat_indexerlabs_numeric_wraps_normalize_across_lines_columns_and_pages(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - flat index"},
+            "pages": [
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [36, 70, 150, 78], "text": "Owner, 20,"},
+                    {"bbox": [46, 80, 70, 88], "text": "21"},
+                    {"bbox": [36, 490, 170, 498], "text": "Column owner, 30,"},
+                    {"bbox": [197.7, 70, 220, 78], "text": "31"},
+                    {"bbox": [187.7, 490, 320, 498], "text": "Page owner, 40,"},
+                ]},
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [46, 70, 70, 78], "text": "41"},
+                    {"bbox": [36, 80, 170, 88], "text": "Final left, 42"},
+                    {"bbox": [187.7, 70, 320, 78], "text": "Final right, 43"},
+                ]},
+            ],
+        }
+        layout = extract_candidate_layout(Path("unused.pdf"), "flat-indexerlabs", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        self.assertEqual("continues_previous", by_text["21"]["continuation_status"])
+        self.assertEqual("continued_from_previous_column", by_text["31"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["41"]["continuation_status"])
+
+        pages = [{
+            "document_page": number,
+            "source_page_label": str(number),
+            "normalized_locator_key": str(number),
+            "label_style": "arabic",
+            "mapping_id": "body",
+            "in_evaluation_scope": True,
+            "accepts_index_locators": True,
+        } for number in range(1, 51)]
+        page_map = {
+            "schema_version": "page-map-v1",
+            "source_sha256": "0" * 64,
+            "document_page_count": len(pages),
+            "document_page_basis": "one_based_inclusive",
+            "pages": pages,
+            "validation": {"all_document_pages_covered": True, "unique_indexable_locator_keys": True},
+            "page_map_sha256": "1" * 64,
+        }
+        candidate, _, issues = normalize_layout(layout, page_map)
+        records = {record["original_displayed_form"]: record for record in candidate["records"]}
+        for displayed, locators in (
+            ("Owner, 20,\n21", ["20", "21"]),
+            ("Column owner, 30,\n31", ["30", "31"]),
+            ("Page owner, 40,\n41", ["40", "41"]),
+        ):
+            self.assertEqual(locators, [item["displayed_locator"] for item in records[displayed]["locator_displays"]])
+        self.assertEqual([], issues["issues"])
+
     def test_generic_pdf_keeps_conservative_cross_region_fallback(self) -> None:
         layout = extract_candidate_layout(
             Path("unused.pdf"),

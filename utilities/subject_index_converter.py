@@ -726,15 +726,19 @@ def _indexerlabs_hanging_level(line: dict[str, Any], base_x: float) -> int | Non
     return level if level >= 0 and abs(offset - (10.0 + level * 12.0)) <= 1.0 else None
 
 
+def _ends_with_locator(text: str) -> bool:
+    return bool(re.search(
+        r"(?:^|[\s,;])(?:\d+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:\d+|[ivxlcdm]+))?[.)]?\s*$",
+        text,
+        re.I,
+    ))
+
+
 def _preceding_line_is_incomplete(previous: dict[str, Any], current_text: str, column_width: float) -> bool:
     text = previous["displayed_line_text"].rstrip()
     if text.endswith((",", ";", ":", "-", "–", "—")):
         return True
-    if re.search(
-        r"(?:^|[\s,;])(?:\d+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:\d+|[ivxlcdm]+))?[.)]?\s*$",
-        text,
-        re.I,
-    ):
+    if _ends_with_locator(text):
         return False
     current = current_text.lstrip()
     if current[:1] in {"(", "[", "'", "‘", "’"}:
@@ -835,15 +839,21 @@ def _build_document(
                     warnings.append("repaired_visual_character_spacing")
                 hanging_level = (
                     _indexerlabs_hanging_level(line, column_bases[column])
-                    if hanging_convention.get(column, False)
+                    if selected == "indexerlabs-two-column"
                     else None
                 )
                 if (
                     hanging_level is not None
                     and _hint_continuation(line.get("continuation_status_hint")) is None
                     and all_lines
-                    and _preceding_line_is_incomplete(
-                        all_lines[-1], displayed, column_rights[column] - column_bases[column]
+                    and (
+                        _preceding_line_is_incomplete(
+                            all_lines[-1], displayed, column_rights[column] - column_bases[column]
+                        )
+                        or (
+                            hanging_convention.get(column, False)
+                            and not _ends_with_locator(all_lines[-1]["displayed_line_text"])
+                        )
                     )
                 ):
                     line["indentation_level"] = hanging_level
