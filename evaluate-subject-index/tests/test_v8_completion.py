@@ -322,6 +322,27 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertTrue(localized_cap["triggered"])
         self.assertEqual(["DEFECT-001"], localized_cap["affected_evidence_ids"])
 
+    def test_standalone_preflight_accepts_native_v6_and_preserves_validation(self) -> None:
+        registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
+        self.assertEqual(0, registered.returncode, registered.stdout + registered.stderr)
+        scored = self.run_cli("score", "--state", str(self.state_path))
+        self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
+
+        config_path = self.root / "scoring/dimension-calculation-input.v2.json"
+        preflight = self.run_cli("preflight", "--input", str(config_path))
+        self.assertEqual(0, preflight.returncode, preflight.stdout + preflight.stderr)
+        self.assertTrue(json.loads(preflight.stdout)["sufficient"])
+
+        locator_path = self.root / "candidate/locator-audit.CHUNK-001.v2.json"
+        locator = json.loads(locator_path.read_text())
+        del locator["judgments"][0]["complete_path_fit"]
+        self.write("candidate/locator-audit.CHUNK-001.v2.json", locator)
+        invalid = self.run_cli("preflight", "--input", str(config_path))
+        self.assertEqual(0, invalid.returncode, invalid.stdout + invalid.stderr)
+        result = json.loads(invalid.stdout)
+        self.assertFalse(result["sufficient"])
+        self.assertEqual("inconsistent_or_incomplete_locator_utility_state", result["missing_requirements"][0]["code"])
+
     def test_registered_audits_reach_valid_result_report_and_complete_state(self) -> None:
         original_state = self.state_path.read_bytes()
         missing = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.root / "missing-structure.json"))
