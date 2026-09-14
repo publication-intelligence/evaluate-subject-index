@@ -22,6 +22,7 @@ from typing import Any, Iterable, Mapping, Sequence
 import item_grade_v8_cli as item_grades
 import item_projection_core as item_projection
 import scoring_core as core
+import web_projection
 from heading_access_provenance import (
     HeadingAccessProvenanceError,
     validate_heading_access_provenance,
@@ -1782,21 +1783,63 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             items, items_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-item-assessments-v7", schema_name="item-assessments-v7.schema.json")[0]
             metadata, metadata_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-v8-projection-metadata-v2", schema_name="v8-projection-metadata-v2.schema.json")[0]
             structure, structure_record, _ = _registered_documents(state, state_path, stage="structure_audit", schema_version="structure-audit-v6", schema_name="structure-audit-v6.schema.json")[0]
+            candidate, candidate_record, _ = _registered_documents(state, state_path, stage="candidate_normalization", schema_version="candidate-index-v2", schema_name="candidate-index-v2.schema.json")[0]
+            inventory, inventory_record, _ = _registered_documents(state, state_path, stage="candidate_normalization", schema_version="subject-index-item-inventory-v2", schema_name="item-inventory-v2.schema.json")[0]
+            benchmark, benchmark_record, _ = _registered_documents(state, state_path, stage="benchmark_freeze", schema_version="source-subject-benchmark-v2", schema_name="source-benchmark.schema.json")[0]
+            manifest, manifest_record, _ = _registered_documents(state, state_path, stage="chunk_definition", schema_version="chunk-manifest-v1", schema_name="chunk-manifest.schema.json")[0]
+            missing_entries = _registered_documents(state, state_path, stage="missing_access_audit", schema_version="missing-access-audit-v1", schema_name="missing-access-audit.schema.json", many=True)
             core.require(calculation["calculation_sha256"] == core.canonical_hash(calculation, "calculation_sha256"), "calculation_self_hash_mismatch", "Registered calculation self-hash does not reconstruct.")
             core.require(metadata["projection_metadata_sha256"] == core.canonical_hash(metadata, "projection_metadata_sha256"), "projection_metadata_self_hash_mismatch", "Registered projection metadata self-hash does not reconstruct.")
             core.require(result["evaluation_id"] == calculation["evaluation_id"] == items["evaluation_id"] == state["evaluation_id"], "evaluation_identity_mismatch", "Registered scoring artifacts use different evaluation identities.")
             core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
             output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / "web-report.v10.json"))
-            core.require(not output.exists(), "output_exists", "Refusing to overwrite web report.", str(output))
+            bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / "v8-canonical-projection"))
+            core.require(not output.exists() and not bundle_output.exists(), "output_exists", "Refusing to overwrite web report or canonical web projection bundle.", [str(output), str(bundle_output)])
             report = _web_report(result=result, calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure=structure, structure_record=structure_record, metadata=metadata)
             payload = _json_bytes(report)
             stamp = now()
             record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version="subject-index-web-report-v10", stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
-            updated = _add_records_and_complete(state, state_path, "web_report", [record], "Built and registered the validated current V8 web-report projection atomically.")
-            _atomic_write(output, payload)
-            save_state(state_path, updated)
-        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "report_id": report["report_id"], "artifacts_registered": [record["path"]], "artifacts_written": [str(output), str(state_path)], "next_actions": [], "warnings": warnings})
-    except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, ValueError) as exc:
+            overlay_entries = [item for item in state["artifacts"] if item.get("artifact_type") == "correction_overlay" and item.get("schema_version") == web_projection.OVERLAY_SCHEMA_VERSION]
+            core.require(len(overlay_entries) <= 1, "duplicate_registered_artifact", "At most one confirmed correction overlay may apply.")
+            overlay = overlay_record = None
+            if overlay_entries:
+                overlay_record = deepcopy(overlay_entries[0])
+                overlay_path = resolve_artifact_path(state_path, overlay_record["path"])
+                core.require(core.sha256_file(overlay_path) == overlay_record["sha256"], "registered_artifact_hash_mismatch", "Registered correction overlay bytes changed.")
+                overlay = core.load_json(overlay_path, web_projection.OVERLAY_SCHEMA_VERSION)
+                core.validate_schema_document(overlay, "correction-overlay-v1.schema.json", "Registered correction overlay")
+                core.require(overlay["evaluation_id"] == state["evaluation_id"] and overlay["overlay_sha256"] == core.canonical_hash(overlay, "overlay_sha256"), "correction_overlay_binding_mismatch", "Correction overlay identity or self-hash is invalid.")
+            projection, collections = web_projection.build_bundle(
+                result=result, result_record=result_record, report=report, report_record=record,
+                calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record,
+                candidate=candidate, candidate_record=candidate_record, inventory=inventory, inventory_record=inventory_record,
+                benchmark=benchmark, benchmark_record=benchmark_record, structure=structure, structure_record=structure_record,
+                manifest=manifest, manifest_record=manifest_record, missing_documents=[item[0] for item in missing_entries],
+                missing_records=[item[1] for item in missing_entries], overlay=overlay, overlay_record=overlay_record,
+            )
+            web_projection.validate_bundle(projection, collections)
+            generated = [(bundle_output / "projection.v1.json", web_projection.json_bytes(projection), "web_projection", web_projection.PROJECTION_SCHEMA_VERSION)]
+            generated.extend((bundle_output / web_projection.COLLECTION_PATHS[key], web_projection.json_bytes(value), "correction_overlay" if key == "correction_overlay" else f"web_{key}", value["schema_version"]) for key, value in collections.items())
+            bundle_records = [_artifact_record(state_path.parent, path, data, stage="web_report", artifact_type=artifact_type, schema_version=schema_version, stamp=stamp, visibility="public", input_sha256=(record["sha256"], result_record["sha256"])) for path, data, artifact_type, schema_version in generated]
+            records = [record, *bundle_records]
+            updated = _add_records_and_complete(state, state_path, "web_report", records, "Built and registered web-report.v10 and the complete canonical public web projection bundle atomically.")
+            written: list[Path] = []
+            try:
+                for path, data in [(output, payload), *[(row[0], row[1]) for row in generated]]:
+                    _atomic_write(path, data)
+                    written.append(path)
+                save_state(state_path, updated)
+            except Exception:
+                for path in reversed(written):
+                    path.unlink(missing_ok=True)
+                for directory in (bundle_output / "data", bundle_output):
+                    try:
+                        directory.rmdir()
+                    except OSError:
+                        pass
+                raise
+        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "report_id": report["report_id"], "projection_id": projection["projection_id"], "artifacts_registered": [item["path"] for item in records], "artifacts_written": [str(output), *[str(row[0]) for row in generated], str(state_path)], "next_actions": [], "warnings": warnings})
+    except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, (core.CalculationError, StructureAuditError, HeadingAccessProvenanceError)):
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
         else:
@@ -1823,9 +1866,10 @@ def build_parser() -> argparse.ArgumentParser:
     score.add_argument("--state", required=True)
     score.add_argument("--output-dir", default="scoring", help="Output directory inside the evaluation directory (default: scoring).")
     score.set_defaults(func=command_score_state)
-    report = subparsers.add_parser("build-report", help="Build, validate, and atomically register the current V8 web report from canonical state.")
+    report = subparsers.add_parser("build-report", help="Build, validate, and atomically register web-report.v10 and its canonical public web projection bundle.")
     report.add_argument("--state", required=True)
     report.add_argument("--output", help="Output path inside the evaluation directory (default: beside the registered result).")
+    report.add_argument("--bundle-output", help="Bundle directory inside the evaluation directory (default: v8-canonical-projection beside the result).")
     report.set_defaults(func=command_build_report_state)
     return parser
 

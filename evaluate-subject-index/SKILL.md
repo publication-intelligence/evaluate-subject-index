@@ -16,7 +16,7 @@ Evaluate one finished subject index against its source and a frozen policy. Use 
 5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.
 6. Build the native exception-oriented structure ledger only after the locator and missing-access ledgers are complete. Bind its exact node, cross-reference, and locator-bearing-path denominators; omit attested passes; record exceptions, architecture decisions, defects, strengths, and uncertainties.
 7. Calculate the six V8 dimensions from validated ledgers. Do not ask a model to maintain arithmetic or workflow state.
-8. Produce structured JSON and a web-report projection.
+8. Produce structured JSON, `web-report.v10.json`, and its canonical public web projection bundle.
 
 Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-v8.md](references/judgment-policy-v8.md), and [rubric-v8.md](references/rubric-v8.md) for substantive decisions. Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
 
@@ -63,9 +63,11 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 
 ## Scoring
 
-Native V8 uses evaluation-policy V4, state V6, `structure-audit-v6`, `locator-audit-v2`, calculation input V2, dimension calculations V5, item assessments V7, result V11, projection metadata V2, and web report V9. Every adverse heading-access judgment carries source-linked causal findings, which are reporting provenance and never arithmetic inputs. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
+Native V8 uses evaluation-policy V4, state V6, `structure-audit-v6`, `locator-audit-v2`, calculation input V2, dimension calculations V6, item assessments V7, result V12, projection metadata V2, and web report V10. Every adverse heading-access judgment carries source-linked causal findings, which are reporting provenance and never arithmetic inputs. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
 
 Complete the final stages with `dimension_score_v8_cli.py register-structure`, `score`, and `build-report`. These commands select exact registered current artifacts from canonical state, validate their bytes and bindings, write current-schema outputs, and advance state atomically. Do not complete these stages with generic `state_cli.py set-stage`.
+
+`build-report` is the standard final reporting action. From finalized registered artifacts only, it writes and registers `web-report.v10.json`, `v8-canonical-projection/projection.v1.json`, and the `data/index-records.v1.json`, `data/source-subjects.v1.json`, and `data/density.v1.json` collections. It includes `data/correction-overlay.v1.json` only when one confirmed, self-hashed correction overlay is already registered and bound to the evaluation. With no applicable overlay, omit the file and use the established `correction_outcomes` non-applicability shape. Read [json-contracts-v8.md](references/json-contracts-v8.md) before consuming or adapting the bundle.
 
 ## Output contract
 
