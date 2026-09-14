@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark-compatibility-import-provenance.schema.json",
+  "title": "Provenance for a reviewed legacy benchmark compatibility import",
+  "type": "object",
+  "required": ["schema_version", "migration_id", "imported_at", "operation", "compatibility_approval", "legacy", "current", "normalization", "preserved_stable_ids"],
+  "properties": {
+    "schema_version": {"const": "source-benchmark-compatibility-import-provenance-v1"},
+    "migration_id": {"type": "string", "minLength": 1},
+    "imported_at": {"type": "string", "minLength": 1},
+    "operation": {"const": "reviewed_legacy_benchmark_compatibility_import"},
+    "compatibility_approval": {
+      "type": "object",
+      "required": ["approval_id", "file_sha256"],
+      "properties": {
+        "approval_id": {"type": "string", "minLength": 1},
+        "file_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "legacy": {"type": "object"},
+    "current": {"type": "object"},
+    "normalization": {
+      "type": "object",
+      "required": ["operations", "relationships_normalized", "semantic_content_preserved"],
+      "properties": {
+        "operations": {"const": ["relationships[*].type->relationship_type"]},
+        "relationships_normalized": {"type": "integer", "minimum": 0},
+        "semantic_content_preserved": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "preserved_stable_ids": {
+      "type": "object",
+      "required": ["subjects", "relationships", "reader_tasks", "evidence"],
+      "additionalProperties": {
+        "type": "object",
+        "required": ["count", "sha256"],
+        "properties": {
+          "count": {"type": "integer", "minimum": 0},
+          "sha256": {"$ref": "#/$defs/sha256"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {"sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+  "additionalProperties": false
+}

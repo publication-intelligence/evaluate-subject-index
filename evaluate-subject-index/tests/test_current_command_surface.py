@@ -103,6 +103,14 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertNotIn("worker-receipt", text)
         self.assertNotIn("integrate", text)
 
+    def test_benchmark_review_has_narrow_legacy_import(self) -> None:
+        text = help_text("benchmark_review_cli.py")
+        self.assertIn("import-reviewed-legacy", text)
+        import_help = help_text("benchmark_review_cli.py", "import-reviewed-legacy")
+        self.assertIn("--compatibility-approval", import_help)
+        self.assertIn("--legacy-review-inventory", import_help)
+        self.assertIn("--provenance-output", import_help)
+
     def test_scoring_surface_is_current_only(self) -> None:
         text = help_text("dimension_score_v8_cli.py")
         self.assertIn("preflight", text)

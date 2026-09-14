@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark-compatibility-approval.schema.json",
+  "title": "Candidate-blind approval for importing a fully reviewed legacy benchmark",
+  "type": "object",
+  "required": ["schema_version", "approval_id", "approved_at", "reviewer_attestation", "legacy", "current", "allowed_changes"],
+  "properties": {
+    "schema_version": {"const": "source-benchmark-compatibility-approval-v1"},
+    "approval_id": {"type": "string", "minLength": 1},
+    "approved_at": {"type": "string", "minLength": 1},
+    "reviewer_attestation": {
+      "type": "object",
+      "required": ["reviewer_id", "candidate_unseen", "legacy_full_review_verified", "normalization_semantics_preserving", "policy_rebinding_compatible", "no_new_editorial_review_claimed"],
+      "properties": {
+        "reviewer_id": {"type": "string", "minLength": 1},
+        "candidate_unseen": {"const": true},
+        "legacy_full_review_verified": {"const": true},
+        "normalization_semantics_preserving": {"const": true},
+        "policy_rebinding_compatible": {"const": true},
+        "no_new_editorial_review_claimed": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "legacy": {"$ref": "#/$defs/legacyIdentity"},
+    "current": {"$ref": "#/$defs/currentIdentity"},
+    "allowed_changes": {
+      "const": [
+        "relationships[*].type->relationship_type",
+        "benchmark_id",
+        "version",
+        "evaluation_id",
+        "policy_sha256",
+        "freeze",
+        "compatibility_import",
+        "benchmark_sha256"
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "legacyIdentity": {
+      "type": "object",
+      "required": ["evaluation_id", "source_sha256", "benchmark_id", "version", "benchmark_file_sha256", "benchmark_sha256", "policy_file_sha256", "policy_sha256", "page_map_file_sha256", "page_map_sha256", "chunk_manifest_file_sha256", "chunk_manifest_sha256", "review_file_sha256", "review_inventory_file_sha256", "state_file_sha256", "artifact_freeze_commit"],
+      "properties": {
+        "evaluation_id": {"type": "string", "minLength": 1},
+        "source_sha256": {"$ref": "#/$defs/sha256"},
+        "benchmark_id": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "benchmark_file_sha256": {"$ref": "#/$defs/sha256"},
+        "benchmark_sha256": {"$ref": "#/$defs/sha256"},
+        "policy_file_sha256": {"$ref": "#/$defs/sha256"},
+        "policy_sha256": {"$ref": "#/$defs/sha256"},
+        "page_map_file_sha256": {"$ref": "#/$defs/sha256"},
+        "page_map_sha256": {"$ref": "#/$defs/sha256"},
+        "chunk_manifest_file_sha256": {"$ref": "#/$defs/sha256"},
+        "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "review_file_sha256": {"$ref": "#/$defs/sha256"},
+        "review_inventory_file_sha256": {"$ref": "#/$defs/sha256"},
+        "state_file_sha256": {"$ref": "#/$defs/sha256"},
+        "artifact_freeze_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
+      },
+      "additionalProperties": false
+    },
+    "currentIdentity": {
+      "type": "object",
+      "required": ["evaluation_id", "source_sha256", "benchmark_id", "version", "policy_file_sha256", "policy_sha256", "page_map_file_sha256", "page_map_sha256", "chunk_manifest_file_sha256", "chunk_manifest_sha256", "frozen_at", "benchmark_sha256"],
+      "properties": {
+        "evaluation_id": {"type": "string", "minLength": 1},
+        "source_sha256": {"$ref": "#/$defs/sha256"},
+        "benchmark_id": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "policy_file_sha256": {"$ref": "#/$defs/sha256"},
+        "policy_sha256": {"$ref": "#/$defs/sha256"},
+        "page_map_file_sha256": {"$ref": "#/$defs/sha256"},
+        "page_map_sha256": {"$ref": "#/$defs/sha256"},
+        "chunk_manifest_file_sha256": {"$ref": "#/$defs/sha256"},
+        "chunk_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "frozen_at": {"type": "string", "minLength": 1},
+        "benchmark_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

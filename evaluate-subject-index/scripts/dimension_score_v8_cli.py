@@ -1010,7 +1010,7 @@ def command_preflight(args: argparse.Namespace) -> None:
                 result["artifact_written"] = str(output_path)
             core.emit(result)
         loaded = load_v8_inputs(config_path)
-        ledgers, base_missing = core.preflight_loaded(loaded)
+        ledgers, base_missing = preflight_loaded(loaded)
         fit_report = (
             locator_fit_preflight(ledgers, loaded["config"]["audit_mode"])
             if ledgers is not None

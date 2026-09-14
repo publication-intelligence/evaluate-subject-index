@@ -127,7 +127,7 @@ def layout(lines: list[tuple[str, int]]) -> dict:
 
 class HeadingPayloadTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.lookup = {str(number): {} for number in range(1, 172)}
+        self.lookup = {str(number): {} for number in range(1, 501)}
 
     def test_whitespace_boundary_uses_frozen_locator_lookup(self) -> None:
         cases = {
@@ -137,6 +137,11 @@ class HeadingPayloadTests(unittest.TestCase):
             "Louis XVI 100": ("Louis XVI", "100"),
             "Constitution of 1791 33": ("Constitution of 1791", "33"),
             "Appendix 9999": ("Appendix 9999", ""),
+            "Petition of 8,000, 184": ("Petition of 8,000", "184"),
+            "June 20, 1792, Journée of, 185–186, 195": (
+                "June 20, 1792, Journée of",
+                "185–186, 195",
+            ),
         }
         for text, expected in cases.items():
             with self.subTest(text=text):

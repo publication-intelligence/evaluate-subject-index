@@ -9,10 +9,10 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | chunk_definition | approved chunk manifest |
 | define_policy | run-specific standard V8 policy |
 | source_chunk_preparation | chunk PDFs and sidecars |
-| source_subject_discovery | all source-subject chunks |
-| benchmark_synthesis | benchmark draft |
-| benchmark_review | independently validated review ledger, registered by typed freeze |
-| benchmark_freeze | approved frozen benchmark, registered atomically with review |
+| source_subject_discovery | all source-subject chunks, or exact reviewed-legacy release evidence |
+| benchmark_synthesis | benchmark draft, or exact imported legacy frozen benchmark |
+| benchmark_review | independently validated review ledger, or separate V8 compatibility approval |
+| benchmark_freeze | approved frozen benchmark, or V8-bound compatibility import with provenance |
 | candidate_normalization | normalized candidate, fidelity layout, inventory, and optional issues |
 | locator_chunk_preparation | all locator packets |
 | locator_audit | all locator-audit V2 chunks |
@@ -43,6 +43,12 @@ Source discovery happens before candidate exposure. Synthesis creates a draft; i
 - Benchmark to index asks whether every required subject and reader task has useful access.
 
 The global structure pass then judges whether individually defensible records form a coherent navigation system.
+
+### Reviewed-legacy compatibility import
+
+Do not repeat source discovery or fabricate a new full review merely to move an already frozen, fully reviewed benchmark onto the current policy identity. `benchmark_review_cli.py import-reviewed-legacy` is the sole exception path. It requires the exact legacy state, page map, chunk manifest, policy, frozen benchmark, full-review inventory and ledger, plus a separately authored candidate-blind compatibility approval. The legacy and current page map and chunk manifest must be byte-identical and canonically identical.
+
+The command generates the current benchmark rather than accepting a caller-authored final. It permits only `relationships[*].type` to `relationship_type` plus the approval's benchmark, evaluation, policy, freeze, compatibility-import, and self-hash metadata. It registers explicit imported-evidence artifact types and completes source discovery, synthesis, review, and freeze in one state replacement; every stage note states that the substantive stage was not rerun. Any validation failure writes no output and leaves state unchanged.
 
 The final transitions use one current command surface:
 

@@ -27,7 +27,7 @@ SCHEMA_VERSION = "candidate-layout-extraction-v1"
 ADAPTER_VERSIONS = {
     "auto": "1.0.0",
     "generic-pdf-layout": "1.0.0",
-    "indexerlabs-two-column": "1.0.0",
+    "indexerlabs-two-column": "1.0.1",
     "indexia-html": "1.0.0",
     "markdown-list": "1.0.0",
     "plain-text": "1.0.0",
@@ -720,6 +720,34 @@ def _indent_levels(lines: list[dict[str, Any]]) -> None:
         line["indentation_level"] = min(range(len(clusters)), key=lambda index: abs(clusters[index] - line["bbox"][0]))
 
 
+def _indexerlabs_hanging_level(line: dict[str, Any], base_x: float) -> int | None:
+    offset = line["bbox"][0] - base_x
+    level = round((offset - 10.0) / 12.0)
+    return level if level >= 0 and abs(offset - (10.0 + level * 12.0)) <= 1.0 else None
+
+
+def _ends_with_locator(text: str) -> bool:
+    return bool(re.search(
+        r"(?:^|[\s,;])(?:\d+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:\d+|[ivxlcdm]+))?[.)]?\s*$",
+        text,
+        re.I,
+    ))
+
+
+def _preceding_line_is_incomplete(previous: dict[str, Any], current_text: str, column_width: float) -> bool:
+    text = previous["displayed_line_text"].rstrip()
+    if text.endswith((",", ";", ":", "-", "–", "—")):
+        return True
+    if _ends_with_locator(text):
+        return False
+    current = current_text.lstrip()
+    if current[:1] in {"(", "[", "'", "‘", "’"}:
+        return True
+    if re.search(r"(?i)\b(?:and|de|du|from|in|of|see|to|under|vs\.)\s*$", text):
+        return True
+    return previous["bbox"][2] - previous["bbox"][0] >= column_width * 0.55
+
+
 def _hint_continuation(value: Any) -> str | None:
     if isinstance(value, dict):
         incoming = value.get("incoming", "none")
@@ -762,6 +790,16 @@ def _build_document(
     all_lines: list[dict[str, Any]] = []
     page_summaries: list[dict[str, Any]] = []
     global_order = 0
+    column_bases: dict[int, float] = {}
+    column_rights: dict[int, float] = {}
+
+    if selected == "indexerlabs-two-column":
+        for page in raw["pages"]:
+            two_columns, threshold, _ = _column_split(page, selected)
+            for line in page["lines"]:
+                column = 1 if not two_columns or line["bbox"][0] < threshold else 2
+                column_bases[column] = min(column_bases.get(column, line["bbox"][0]), line["bbox"][0])
+                column_rights[column] = max(column_rights.get(column, line["bbox"][2]), line["bbox"][2])
 
     for page in raw["pages"]:
         two_columns, threshold, column_confidence = _column_split(page, selected)
@@ -785,6 +823,22 @@ def _build_document(
                 warnings = list(line.get("extraction_warnings", []))
                 if repaired and "repaired_visual_character_spacing" not in warnings:
                     warnings.append("repaired_visual_character_spacing")
+                hanging_level = (
+                    _indexerlabs_hanging_level(line, column_bases[column])
+                    if selected == "indexerlabs-two-column"
+                    else None
+                )
+                if (
+                    hanging_level is not None
+                    and _hint_continuation(line.get("continuation_status_hint")) is None
+                    and all_lines
+                    and _preceding_line_is_incomplete(
+                        all_lines[-1], displayed, column_rights[column] - column_bases[column]
+                    )
+                ):
+                    line["indentation_level"] = hanging_level
+                    line["continuation_status_hint"] = "continues_previous"
+                    line["inferred_boundary_hint"] = "continuation"
                 identity_key = json.dumps([line["bbox"], original], ensure_ascii=False, separators=(",", ":"))
                 identity_counts[identity_key] += 1
                 line_id = _stable_id(
@@ -858,15 +912,30 @@ def _build_document(
         boundary = "column" if previous["candidate_pdf_page"] == current["candidate_pdf_page"] else "page"
         incoming = f"continued_from_previous_{boundary}"
         outgoing = f"continues_next_{boundary}"
-        inferred = current["indentation_level"] > 0 or _looks_like_continuation(current["displayed_line_text"])
+        generic_inference = (
+            selected != "indexerlabs-two-column"
+            and _looks_like_continuation(current["displayed_line_text"])
+            and (
+                current["indentation_level"] > 0
+                or _preceding_line_is_incomplete(
+                    previous,
+                    current["displayed_line_text"],
+                    max(
+                        previous_region["bbox"][2] - previous_region["bbox"][0],
+                        current_region["bbox"][2] - current_region["bbox"][0],
+                    ),
+                )
+            )
+        )
         if current["continuation_status"] in {incoming, "continues_previous"}:
+            current["continuation_status"] = incoming
             if previous["continuation_status"] == "standalone":
                 previous["continuation_status"] = outgoing
             current["inferred_boundary"] = "continuation"
         elif previous["continuation_status"] == outgoing and current["continuation_status"] == "standalone":
             current["continuation_status"] = incoming
             current["inferred_boundary"] = "continuation"
-        elif current["continuation_status"] == "standalone" and inferred:
+        elif current["continuation_status"] == "standalone" and generic_inference:
             current["continuation_status"] = incoming
             if previous["continuation_status"] == "standalone":
                 previous["continuation_status"] = outgoing

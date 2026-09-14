@@ -24,7 +24,7 @@ from subject_index_converter import (  # noqa: E402
     list_adapter_ids,
     validate_layout_contract,
 )
-from candidate_preparation_cli import normalize_layout  # noqa: E402
+from candidate_preparation_cli import merge_continuation_lines, normalize_layout  # noqa: E402
 
 
 def layout_regions(layout: dict) -> list[dict]:
@@ -49,11 +49,11 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                     {"bbox": [220, 20, 380, 35], "text": "Synthetic Index"},
                     {"bbox": [554, 20, 564, 32], "text": "1"},
                     {"bbox": [50, 100, 250, 112], "text": "Café society, 11–13"},
-                    {"bbox": [68, 120, 285, 132], "text": "L'école, 14; see also Élan vital"},
-                    {"bbox": [68, 680, 240, 692], "text": "continued discussion,"},
-                    {"bbox": [338, 100, 520, 112], "text": "and later examples, 15"},
-                    {"bbox": [320, 120, 500, 132], "text": "O’Connor, 20"},
-                    {"bbox": [320, 140, 540, 152], "text": "M a r í a ’ s, 21–23"},
+                    {"bbox": [62, 120, 285, 132], "text": "L'école, 14; see also Élan vital"},
+                    {"bbox": [62, 680, 240, 692], "text": "continued discussion,"},
+                    {"bbox": [342, 100, 520, 112], "text": "and later examples, 15"},
+                    {"bbox": [332, 120, 500, 132], "text": "O’Connor, 20"},
+                    {"bbox": [320, 140, 540, 152], "text": "M a r í a ’ s, 21–23,"},
                     {"bbox": [295, 780, 305, 791], "text": "1"},
                 ],
             },
@@ -64,7 +64,7 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                 "lines": [
                     {"bbox": [220, 20, 380, 35], "text": "Synthetic Index"},
                     {"bbox": [36, 20, 46, 32], "text": "2"},
-                    {"bbox": [68, 100, 285, 112], "text": "continued on next page, 24"},
+                    {"bbox": [60, 100, 285, 112], "text": "continued on next page, 24"},
                     {"bbox": [50, 120, 230, 132], "text": "Zulu, 25"},
                     {"bbox": [320, 100, 500, 112], "text": "Beta, 26"},
                     {"bbox": [320, 120, 500, 132], "text": "Gamma, 27"},
@@ -114,7 +114,7 @@ class GeometryAdapterTests(unittest.TestCase):
                 "continued discussion,",
                 "and later examples, 15",
                 "O’Connor, 20",
-                "María’s, 21–23",
+                "María’s, 21–23,",
             ],
             [line["displayed_line_text"] for line in page_one],
         )
@@ -128,8 +128,8 @@ class GeometryAdapterTests(unittest.TestCase):
         self.assertEqual("continued_from_previous_page", by_text["continued on next page, 24"]["continuation_status"])
         self.assertEqual("continuation", by_text["continued on next page, 24"]["inferred_boundary"])
 
-        repaired = by_text["María’s, 21–23"]
-        self.assertEqual("M a r í a ’ s, 21–23", repaired["original_displayed_form"])
+        repaired = by_text["María’s, 21–23,"]
+        self.assertEqual("M a r í a ’ s, 21–23,", repaired["original_displayed_form"])
         self.assertIn("repaired_visual_character_spacing", repaired["extraction_warnings"])
         self.assertEqual(6, layout["counts"]["excluded_lines"])
         self.assertEqual(4, layout["counts"]["excluded_repeated_headers"])
@@ -163,6 +163,237 @@ class GeometryAdapterTests(unittest.TestCase):
         retained = [line["displayed_line_text"] for line in layout_lines(layout, include_excluded=False)]
         self.assertIn("403", retained)
         self.assertEqual(0, layout["counts"]["excluded_lines"])
+
+    def test_indexerlabs_hanging_indents_control_same_and_cross_region_continuations(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - IndexerLabs regression"},
+            "pages": [
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [36, 100, 150, 108], "text": "Alpha, 87,"},
+                        {"bbox": [46, 110, 70, 118], "text": "88"},
+                        {"bbox": [48, 120, 170, 128], "text": "normal subentry, 89"},
+                        {"bbox": [36, 490, 150, 498], "text": "Range owner, 270–271"},
+                        {"bbox": [199.7, 70, 340, 78], "text": "establishment and role as war cabinet, 228"},
+                    ],
+                },
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [36, 70, 150, 78], "text": "Bravo, 100,"},
+                        {"bbox": [197.7, 70, 220, 78], "text": "101"},
+                        {"bbox": [187.7, 490, 320, 498], "text": "Complete, 102"},
+                    ],
+                },
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [36, 70, 150, 78], "text": "new page heading, 103"},
+                        {"bbox": [187.7, 490, 320, 498], "text": "Cross-page, 110,"},
+                    ],
+                },
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [46, 70, 70, 78], "text": "111"},
+                        {"bbox": [187.7, 70, 320, 78], "text": "Zulu, 112"},
+                    ],
+                },
+            ],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "indexerlabs-wraps", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, include_excluded=False)}
+
+        self.assertEqual("continues_previous", by_text["88"]["continuation_status"])
+        self.assertEqual(0, by_text["88"]["indentation_level"])
+        self.assertEqual("standalone", by_text["establishment and role as war cabinet, 228"]["continuation_status"])
+        self.assertEqual("continued_from_previous_column", by_text["101"]["continuation_status"])
+        self.assertEqual("standalone", by_text["new page heading, 103"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["111"]["continuation_status"])
+        self.assertEqual(12, layout["counts"]["index_lines"])
+        normalized_lines = [group["displayed_line_text"] for group in merge_continuation_lines(layout_lines(layout))]
+        self.assertIn("Alpha, 87, 88", normalized_lines)
+        self.assertIn("Bravo, 100, 101", normalized_lines)
+        self.assertIn("Cross-page, 110, 111", normalized_lines)
+        self.assertIn("Range owner, 270–271", normalized_lines)
+        self.assertIn("establishment and role as war cabinet, 228", normalized_lines)
+
+    def test_indexerlabs_ten_point_subentries_remain_hierarchy_without_hanging_evidence(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - adversarial"},
+            "pages": [{
+                "width": 361,
+                "height": 538,
+                "lines": [
+                    {"bbox": [36, 70, 170, 78], "text": "Main entry, 10"},
+                    {"bbox": [46, 80, 170, 88], "text": "legitimate subentry, 11"},
+                    {"bbox": [48, 90, 170, 98], "text": "normal subentry, 12"},
+                    {"bbox": [187.7, 70, 320, 78], "text": "Second main, 12"},
+                    {"bbox": [197.7, 80, 320, 88], "text": "other legitimate subentry, 13"},
+                ],
+            }],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "ten-point-subentry", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        for text in ("legitimate subentry, 11", "other legitimate subentry, 13"):
+            self.assertEqual(1, by_text[text]["indentation_level"])
+            self.assertEqual("standalone", by_text[text]["continuation_status"])
+            self.assertEqual("subentry", by_text[text]["inferred_boundary"])
+
+    def test_flat_indexerlabs_numeric_wraps_normalize_across_lines_columns_and_pages(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - flat index"},
+            "pages": [
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [36, 70, 150, 78], "text": "Owner, 20,"},
+                    {"bbox": [46, 80, 70, 88], "text": "21"},
+                    {"bbox": [36, 490, 170, 498], "text": "Column owner, 30,"},
+                    {"bbox": [197.7, 70, 220, 78], "text": "31"},
+                    {"bbox": [187.7, 490, 320, 498], "text": "Page owner, 40,"},
+                ]},
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [46, 70, 70, 78], "text": "41"},
+                    {"bbox": [36, 80, 170, 88], "text": "Final left, 42"},
+                    {"bbox": [187.7, 70, 320, 78], "text": "Final right, 43"},
+                ]},
+            ],
+        }
+        layout = extract_candidate_layout(Path("unused.pdf"), "flat-indexerlabs", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        self.assertEqual("continues_previous", by_text["21"]["continuation_status"])
+        self.assertEqual("continued_from_previous_column", by_text["31"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["41"]["continuation_status"])
+
+        pages = [{
+            "document_page": number,
+            "source_page_label": str(number),
+            "normalized_locator_key": str(number),
+            "label_style": "arabic",
+            "mapping_id": "body",
+            "in_evaluation_scope": True,
+            "accepts_index_locators": True,
+        } for number in range(1, 51)]
+        page_map = {
+            "schema_version": "page-map-v1",
+            "source_sha256": "0" * 64,
+            "document_page_count": len(pages),
+            "document_page_basis": "one_based_inclusive",
+            "pages": pages,
+            "validation": {"all_document_pages_covered": True, "unique_indexable_locator_keys": True},
+            "page_map_sha256": "1" * 64,
+        }
+        candidate, _, issues = normalize_layout(layout, page_map)
+        records = {record["original_displayed_form"]: record for record in candidate["records"]}
+        for displayed, locators in (
+            ("Owner, 20,\n21", ["20", "21"]),
+            ("Column owner, 30,\n31", ["30", "31"]),
+            ("Page owner, 40,\n41", ["40", "41"]),
+        ):
+            self.assertEqual(locators, [item["displayed_locator"] for item in records[displayed]["locator_displays"]])
+        self.assertEqual([], issues["issues"])
+
+    def test_indexerlabs_locatorless_parents_stay_hierarchy_beside_unpunctuated_wraps(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - locatorless parents"},
+            "pages": [
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [36, 70, 100, 78], "text": "Locatorless umbrella"},
+                    {"bbox": [46, 80, 170, 88], "text": "legitimate ten point subentry, 22"},
+                    {"bbox": [48, 90, 170, 98], "text": "normal subentry, 23"},
+                    {"bbox": [36, 100, 170, 108], "text": "Association for Liberty and"},
+                    {"bbox": [46, 110, 130, 118], "text": "Property, 24"},
+                    {"bbox": [36, 490, 100, 498], "text": "Locatorless column umbrella"},
+                    {"bbox": [197.7, 70, 320, 78], "text": "legitimate column subentry, 25"},
+                    {"bbox": [199.7, 80, 320, 88], "text": "normal right subentry, 26"},
+                    {"bbox": [187.7, 490, 250, 498], "text": "Locatorless page umbrella"},
+                ]},
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [46, 70, 170, 78], "text": "legitimate page subentry, 27"},
+                    {"bbox": [48, 80, 170, 88], "text": "normal page subentry, 28"},
+                    {"bbox": [36, 90, 170, 98], "text": "Final left, 29"},
+                    {"bbox": [36, 490, 170, 498], "text": "Association across columns and"},
+                    {"bbox": [197.7, 70, 320, 78], "text": "Property, 30"},
+                    {"bbox": [187.7, 80, 320, 88], "text": "Final right, 30"},
+                    {"bbox": [187.7, 490, 320, 498], "text": "Association across pages and"},
+                ]},
+                {"width": 361, "height": 538, "lines": [
+                    {"bbox": [46, 70, 170, 78], "text": "Property, 31"},
+                    {"bbox": [36, 80, 170, 88], "text": "Final page left, 32"},
+                    {"bbox": [187.7, 70, 320, 78], "text": "Final page right, 33"},
+                ]},
+            ],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "locatorless-parents", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        for text in (
+            "legitimate ten point subentry, 22",
+            "legitimate column subentry, 25",
+            "legitimate page subentry, 27",
+        ):
+            self.assertEqual(1, by_text[text]["indentation_level"])
+            self.assertEqual("standalone", by_text[text]["continuation_status"])
+            self.assertEqual("subentry", by_text[text]["inferred_boundary"])
+        self.assertEqual("continues_previous", by_text["Property, 24"]["continuation_status"])
+        self.assertEqual("continued_from_previous_column", by_text["Property, 30"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["Property, 31"]["continuation_status"])
+
+        normalized = [group["displayed_line_text"] for group in merge_continuation_lines(layout_lines(layout))]
+        self.assertIn("Locatorless umbrella", normalized)
+        self.assertIn("legitimate ten point subentry, 22", normalized)
+        self.assertIn("Locatorless column umbrella", normalized)
+        self.assertIn("legitimate column subentry, 25", normalized)
+        self.assertIn("Locatorless page umbrella", normalized)
+        self.assertIn("legitimate page subentry, 27", normalized)
+        self.assertIn("Association for Liberty and Property, 24", normalized)
+        self.assertIn("Association across columns and Property, 30", normalized)
+        self.assertIn("Association across pages and Property, 31", normalized)
+
+    def test_generic_pdf_keeps_conservative_cross_region_fallback(self) -> None:
+        layout = extract_candidate_layout(
+            Path("unused.pdf"),
+            "generic-continuations",
+            adapter_id="generic-pdf-layout",
+            geometry=synthetic_two_page_geometry(producer="Neutral producer"),
+        )
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        self.assertEqual("continued_from_previous_column", by_text["and later examples, 15"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["continued on next page, 24"]["continuation_status"])
+
+    def test_generic_pdf_routes_base_aligned_continuations_but_not_completed_headings(self) -> None:
+        geometry = {
+            "metadata": {"producer": "Neutral producer"},
+            "pages": [
+                {"width": 600, "height": 800, "lines": [
+                    {"bbox": [50, 700, 250, 712], "text": "Wrapped entry, 10,"},
+                    {"bbox": [320, 100, 500, 112], "text": "continued entry, 11"},
+                    {"bbox": [320, 700, 500, 712], "text": "Across page, 12,"},
+                ]},
+                {"width": 600, "height": 800, "lines": [
+                    {"bbox": [50, 100, 80, 112], "text": "13"},
+                    {"bbox": [320, 700, 500, 712], "text": "Complete entry, 14"},
+                ]},
+                {"width": 600, "height": 800, "lines": [
+                    {"bbox": [50, 100, 250, 112], "text": "new lowercase heading, 15"},
+                    {"bbox": [320, 100, 500, 112], "text": "Zulu, 16"},
+                ]},
+            ],
+        }
+
+        layout = extract_candidate_layout(
+            Path("unused.pdf"), "generic-base-aligned", adapter_id="generic-pdf-layout", geometry=geometry
+        )
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        self.assertEqual("continued_from_previous_column", by_text["continued entry, 11"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["13"]["continuation_status"])
+        self.assertEqual("standalone", by_text["new lowercase heading, 15"]["continuation_status"])
 
     def test_auto_uses_geometry_and_never_index_vocabulary(self) -> None:
         geometry = synthetic_two_page_geometry(producer="Unrelated PDF engine")

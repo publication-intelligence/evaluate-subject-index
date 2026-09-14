@@ -363,38 +363,52 @@ def looks_like_locator_payload(
     stripped = value.strip()
     if re.match(r"(?i)^see(?:\s+also)?\b", stripped):
         return True
-    first = re.split(r"[,;]", stripped, maxsplit=1)[0].strip()
-    if normalize_locator_key(first) in lookup:
-        return True
-    for separator in re.finditer(r"(?:–|—|‑|‒|−|--|-)", first):
-        start = first[:separator.start()].strip()
-        end = first[separator.end():].strip()
-        if (
-            start
-            and end
-            and normalize_locator_key(start) in lookup
-            and normalize_locator_key(end) in lookup
-        ):
+    locator_text, references, malformed_reference = split_references(stripped)
+    if malformed_reference:
+        return False
+    tokens = [item.strip() for item in re.split(r"[,;]", locator_text) if item.strip()]
+    if not tokens:
+        return bool(references)
+
+    def is_locator(token: str) -> bool:
+        if normalize_locator_key(token) in lookup:
             return True
+        for separator in re.finditer(r"(?:–|—|‑|‒|−|--|-)", token):
+            start = token[:separator.start()].strip()
+            end = token[separator.end():].strip()
+            if (
+                start
+                and end
+                and normalize_locator_key(start) in lookup
+                and normalize_locator_key(end) in lookup
+            ):
+                return True
+        return not require_mapped and bool(
+            re.fullmatch(
+                r"(?:[0-9]+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:[0-9]+|[ivxlcdm]+))?",
+                token,
+                re.I,
+            )
+        )
+
     # Arbitrary alphabetic text is a heading continuation, not a locator.  Any
     # prefixed/alphabetic locator must be present in the frozen page map and is
     # accepted by the exact lookup above.  The fallback is limited to numeric
     # and Roman forms so prose such as ``continued mechanisms`` cannot create a
     # false heading boundary.
-    return not require_mapped and bool(
-        re.fullmatch(
-            r"(?:[0-9]+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:[0-9]+|[ivxlcdm]+))?",
-            first,
-            re.I,
-        )
-    )
+    return all(is_locator(token) for token in tokens)
 
 
 def split_heading_and_payload(text: str, lookup: dict[str, dict[str, Any]]) -> tuple[str, str]:
+    fallback: tuple[str, str] | None = None
     for match in re.finditer(r"[,;:]|\s+", text):
         tail = text[match.end():].strip()
-        if looks_like_locator_payload(tail, lookup, require_mapped=match.group().isspace()):
+        if looks_like_locator_payload(tail, lookup, require_mapped=True):
             return text[: match.start()].strip(), tail
+        if fallback is None and not match.group().isspace() and looks_like_locator_payload(tail, lookup):
+            fallback = (text[: match.start()].strip(), tail)
+    if fallback is not None:
+        return fallback
     ref = re.search(r"(?i)\bsee(?:\s+also)?\b", text)
     if ref:
         return text[: ref.start()].strip(" ,;:."), text[ref.start():].strip()
