@@ -26,7 +26,7 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 - `scripts/page_chunk_cli.py`: page mapping, source chunking, and registered-state locator-packet preparation.
 - `scripts/policy_cli.py`: instantiate the standard policy.
 - `scripts/parallel_discovery_cli.py`: validate and register source-discovery chunks.
-- `scripts/benchmark_review_cli.py`: temporary benchmark screening and the typed, atomic review/freeze transition.
+- `scripts/benchmark_review_cli.py`: temporary benchmark screening, typed review/freeze, and the narrow reviewed-legacy compatibility import.
 - `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
 - `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
 - `scripts/dimension_score_v8_cli.py`: typed structure registration, canonical-state input assembly, deterministic V8 scoring, and web-report projection; low-level preflight and calculation remain available for diagnostics.
@@ -48,6 +48,8 @@ Create checkpoints at useful milestones and before a likely conversation or netw
 A checkpoint contains the canonical state plus accessible registered artifacts. Portable checkpoints omit restricted files. Import validates archive path safety, member inventory, and the current state shape, but does not require an old archive hash or member hashes to match. After import, reconnect unavailable restricted inputs explicitly and continue from `state_cli.py next`.
 
 Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before checkpointing or resuming.
+
+An already frozen, independently reviewed candidate-blind benchmark may bypass repeated discovery and full editorial review only through `benchmark_review_cli.py import-reviewed-legacy`. Read [benchmark-review.md](references/benchmark-review.md) first. The command requires exact legacy release evidence plus a separate current-schema compatibility approval, permits only its enumerated mechanical normalization and policy/release rebinding, and records explicitly that the four imported stages were not rerun. Never author the compatibility approval on the reviewer's behalf.
 
 ## Parallel chats
 

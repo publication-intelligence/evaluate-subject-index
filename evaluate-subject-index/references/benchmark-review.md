@@ -10,6 +10,16 @@ The source benchmark has three distinct states: synthesized draft, independently
 
 Candidate evaluation and canonical registration cannot begin until all three stages are complete. An isolated worker may mechanically prepare a candidate after the frozen source-level identities exist, but no candidate material may enter this review context or influence benchmark review. Read [candidate-preparation.md](candidate-preparation.md).
 
+## Importing an already reviewed legacy release
+
+Use `import-reviewed-legacy` only when an exact legacy benchmark was already frozen after a complete independent candidate-blind review and the current run has the same source, page map, and chunk manifest. This is compatibility approval, not a new discovery, synthesis, editorial review, or ordinary freeze. The current state must end at completed source-chunk preparation with no candidate registered or exposed.
+
+The compatibility reviewer must remain candidate-blind, inspect the exact old and new identities, verify the legacy full-review and release chain, and attest that the one allowed key rename is lossless and that rebinding to the current V8 policy is semantically compatible. Record that decision in `source-benchmark-compatibility-approval-v1`; do not reshape it into `source-benchmark-review-v1` or claim that all content was reviewed again.
+
+The typed import recomputes all self-hashes, exact coverage, release bindings, file identities, stable subject/relationship/task/evidence ID sets, and the planned output benchmark identity. The only mechanical schema normalization is `relationships[*].type` to `relationship_type`. All semantic fields remain byte-for-byte JSON values, while benchmark/evaluation/policy/freeze/import/self-hash metadata is rebound exactly as enumerated by the approval. The generated provenance is `source-benchmark-compatibility-import-provenance-v1`.
+
+Keep all imported evidence inside the target evaluation directory so canonical state can register portable relative paths. Any failure writes neither output and does not change state.
+
 ## Full and pilot review
 
 Full evaluation is the default. A full review must cover every subject, relationship, and reader task by stable ID; revisit every cross-chapter subject; disposition every unresolved relationship; and independently inspect every fallback-generated reader task. It must also perform a fresh source-first omission pass, confirm candidate blindness, and resolve all blocking structural defects. The review ledger must enumerate the exact IDs reviewed, not merely report counts.

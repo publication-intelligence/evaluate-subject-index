@@ -9,6 +9,8 @@ The active workflow uses these primary identities:
 | Missing-access audit | current schema declared by the V8 scoring input |
 | Structure audit | `structure-audit-v6` |
 | Evaluation policy | `subject-index-evaluation-policy-v4` |
+| Reviewed-legacy compatibility approval | `source-benchmark-compatibility-approval-v1` |
+| Reviewed-legacy import provenance | `source-benchmark-compatibility-import-provenance-v1` |
 | Candidate locator packet | `candidate-locator-chunk-v1` |
 | Candidate normalization issues | `candidate-normalization-issues-v1` (only when non-empty) |
 | Locator routing failure diagnostic | `candidate-locator-routing-exceptions-v1` |
@@ -34,6 +36,7 @@ The active workflow uses these primary identities:
   verified bytes define the selected scoring artifacts.
 - Benchmark review uses one draft artifact SHA-256, exact stable-ID coverage, and an exact normalized `approved_changes` ledger. Its deterministic screen is recomputed as a temporary queue and is not registered.
 - `benchmark_review_cli.py freeze` is the normal completion path for `benchmark_review` and `benchmark_freeze`; it registers the review and final benchmark in one atomic state replacement.
+- `benchmark_review_cli.py import-reviewed-legacy` is the narrow exception for exact candidate-blind releases with completed full review. Its distinct compatibility approval does not claim a new full editorial review.
 - `dimension_score_v8_cli.py register-structure`, `score`, and `build-report` are the normal completion paths for the final three stages. They select exact registered inputs, reject missing, duplicate, changed, or cross-boundary artifacts, and replace state only after all current-schema outputs validate.
 - Worker provenance is informational. Repeated source, policy, page-map, manifest,
   candidate-file, inventory-file, and audit-set hashes are not scoring gates.

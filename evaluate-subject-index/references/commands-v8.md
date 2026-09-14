@@ -24,6 +24,28 @@ python scripts/benchmark_review_cli.py freeze --state evaluation-state.json --dr
 
 The inventory is a temporary deterministic queue. Freeze recomputes it, validates exact review coverage and approved changes, registers only the review ledger and final benchmark, and completes both stages atomically.
 
+To import an exact fully reviewed legacy release under the registered V8 policy without rerunning discovery or editorial review, first copy every legacy evidence input and the independent compatibility approval inside the target evaluation directory, then run:
+
+```bash
+python scripts/benchmark_review_cli.py import-reviewed-legacy \
+  --state evaluation-state.json \
+  --page-map source/page-map.json \
+  --chunk-manifest source/chunk-manifest.json \
+  --policy source/evaluation-policy.v4.json \
+  --legacy-state import/legacy/evaluation-state.json \
+  --legacy-page-map import/legacy/page-map.json \
+  --legacy-chunk-manifest import/legacy/chunk-manifest.json \
+  --legacy-policy import/legacy/evaluation-policy.json \
+  --legacy-benchmark import/legacy/source-benchmark.json \
+  --legacy-review-inventory import/legacy/source-benchmark-review-inventory.json \
+  --legacy-review import/legacy/source-benchmark-review.json \
+  --compatibility-approval validation/benchmark-compatibility-approval.v1.json \
+  --output source/source-benchmark.v8-import.json \
+  --provenance-output validation/benchmark-compatibility-import-provenance.v1.json
+```
+
+The approval must validate against `benchmark-compatibility-approval.schema.json` and bind every old and new file/canonical identity, the legacy artifact-freeze commit, the planned current benchmark identity, and the reviewer's candidate-blind compatibility attestations. It is not a replacement full-review ledger. The command refuses candidate-exposed state, partial legacy review, nonidentical mapping/chunk inputs, ambiguous key normalization, existing outputs, and every identity or hash mismatch.
+
 ## Checkpoint and resume
 
 ```bash
