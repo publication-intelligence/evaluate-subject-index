@@ -754,6 +754,14 @@ def _hint_continuation(value: Any) -> str | None:
     return None
 
 
+def _looks_like_continuation(text: str) -> bool:
+    stripped = text.lstrip()
+    if not stripped:
+        return False
+    first = stripped[0]
+    return first.islower() or first.isdigit() or first in {",", ";", ":", "-", "\u2013", "\u2014", ")", "]"}
+
+
 def _build_document(
     raw: dict[str, Any],
     candidate_id: str,
@@ -768,6 +776,7 @@ def _build_document(
     page_summaries: list[dict[str, Any]] = []
     global_order = 0
     column_bases: dict[int, float] = {}
+    column_starts: dict[int, set[float]] = defaultdict(set)
 
     if selected == "indexerlabs-two-column":
         for page in raw["pages"]:
@@ -775,6 +784,13 @@ def _build_document(
             for line in page["lines"]:
                 column = 1 if not two_columns or line["bbox"][0] < threshold else 2
                 column_bases[column] = min(column_bases.get(column, line["bbox"][0]), line["bbox"][0])
+                column_starts[column].add(line["bbox"][0])
+
+    hanging_convention = any(
+        any(abs(start - base_x - 10.0) <= 1.0 for start in column_starts[column])
+        and any(abs(start - base_x - 12.0) <= 1.0 for start in column_starts[column])
+        for column, base_x in column_bases.items()
+    )
 
     for page in raw["pages"]:
         two_columns, threshold, column_confidence = _column_split(page, selected)
@@ -787,7 +803,7 @@ def _build_document(
         for region_order, column in enumerate(sorted(grouped), 1):
             source_lines = sorted(grouped[column], key=lambda item: (item["bbox"][1], item["bbox"][0], item["source_order"]))
             _indent_levels(source_lines)
-            if selected == "indexerlabs-two-column":
+            if hanging_convention:
                 _mark_indexerlabs_hanging_indents(source_lines, column_bases[column])
             region_id = _stable_id("region", candidate_id, page["candidate_pdf_page"], region_order, column)
             page_region_ids.append(region_id)
@@ -873,6 +889,11 @@ def _build_document(
         boundary = "column" if previous["candidate_pdf_page"] == current["candidate_pdf_page"] else "page"
         incoming = f"continued_from_previous_{boundary}"
         outgoing = f"continues_next_{boundary}"
+        generic_inference = (
+            selected != "indexerlabs-two-column"
+            and current["indentation_level"] > 0
+            and _looks_like_continuation(current["displayed_line_text"])
+        )
         if current["continuation_status"] in {incoming, "continues_previous"}:
             current["continuation_status"] = incoming
             if previous["continuation_status"] == "standalone":
@@ -881,6 +902,12 @@ def _build_document(
         elif previous["continuation_status"] == outgoing and current["continuation_status"] == "standalone":
             current["continuation_status"] = incoming
             current["inferred_boundary"] = "continuation"
+        elif current["continuation_status"] == "standalone" and generic_inference:
+            current["continuation_status"] = incoming
+            if previous["continuation_status"] == "standalone":
+                previous["continuation_status"] = outgoing
+            current["inferred_boundary"] = "continuation"
+            current["confidence"] = min(current["confidence"], 0.84)
 
     # Nest regions and lines under each page. Header/footer lines remain in the
     # extraction evidence, but are explicitly excluded from index normalization.

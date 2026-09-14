@@ -49,10 +49,10 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                     {"bbox": [220, 20, 380, 35], "text": "Synthetic Index"},
                     {"bbox": [554, 20, 564, 32], "text": "1"},
                     {"bbox": [50, 100, 250, 112], "text": "Café society, 11–13"},
-                    {"bbox": [68, 120, 285, 132], "text": "L'école, 14; see also Élan vital"},
-                    {"bbox": [68, 680, 240, 692], "text": "continued discussion,"},
+                    {"bbox": [62, 120, 285, 132], "text": "L'école, 14; see also Élan vital"},
+                    {"bbox": [62, 680, 240, 692], "text": "continued discussion,"},
                     {"bbox": [342, 100, 520, 112], "text": "and later examples, 15"},
-                    {"bbox": [320, 120, 500, 132], "text": "O’Connor, 20"},
+                    {"bbox": [332, 120, 500, 132], "text": "O’Connor, 20"},
                     {"bbox": [320, 140, 540, 152], "text": "M a r í a ’ s, 21–23"},
                     {"bbox": [295, 780, 305, 791], "text": "1"},
                 ],
@@ -222,6 +222,37 @@ class GeometryAdapterTests(unittest.TestCase):
         self.assertIn("Cross-page, 110, 111", normalized_lines)
         self.assertIn("Range owner, 270–271", normalized_lines)
         self.assertIn("establishment and role as war cabinet, 228", normalized_lines)
+
+    def test_indexerlabs_ten_point_subentries_remain_hierarchy_without_hanging_evidence(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - adversarial"},
+            "pages": [{
+                "width": 361,
+                "height": 538,
+                "lines": [
+                    {"bbox": [36, 70, 170, 78], "text": "Main entry, 10"},
+                    {"bbox": [46, 80, 170, 88], "text": "legitimate subentry, 11"},
+                    {"bbox": [187.7, 70, 320, 78], "text": "Second main, 12"},
+                ],
+            }],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "ten-point-subentry", geometry=geometry)
+        subentry = next(line for line in layout_lines(layout, False) if line["displayed_line_text"].startswith("legitimate"))
+        self.assertEqual(1, subentry["indentation_level"])
+        self.assertEqual("standalone", subentry["continuation_status"])
+        self.assertEqual("subentry", subentry["inferred_boundary"])
+
+    def test_generic_pdf_keeps_conservative_cross_region_fallback(self) -> None:
+        layout = extract_candidate_layout(
+            Path("unused.pdf"),
+            "generic-continuations",
+            adapter_id="generic-pdf-layout",
+            geometry=synthetic_two_page_geometry(producer="Neutral producer"),
+        )
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, False)}
+        self.assertEqual("continued_from_previous_column", by_text["and later examples, 15"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["continued on next page, 24"]["continuation_status"])
 
     def test_auto_uses_geometry_and_never_index_vocabulary(self) -> None:
         geometry = synthetic_two_page_geometry(producer="Unrelated PDF engine")
