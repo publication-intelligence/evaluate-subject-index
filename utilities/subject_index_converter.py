@@ -27,7 +27,7 @@ SCHEMA_VERSION = "candidate-layout-extraction-v1"
 ADAPTER_VERSIONS = {
     "auto": "1.0.0",
     "generic-pdf-layout": "1.0.0",
-    "indexerlabs-two-column": "1.0.0",
+    "indexerlabs-two-column": "1.0.1",
     "indexia-html": "1.0.0",
     "markdown-list": "1.0.0",
     "plain-text": "1.0.0",
@@ -720,6 +720,19 @@ def _indent_levels(lines: list[dict[str, Any]]) -> None:
         line["indentation_level"] = min(range(len(clusters)), key=lambda index: abs(clusters[index] - line["bbox"][0]))
 
 
+def _mark_indexerlabs_hanging_indents(lines: list[dict[str, Any]], base_x: float) -> None:
+    """Distinguish IndexerLabs wrap indents from its 12-point hierarchy steps."""
+
+    for line in lines:
+        offset = line["bbox"][0] - base_x
+        level = round((offset - 10.0) / 12.0)
+        if level >= 0 and abs(offset - (10.0 + level * 12.0)) <= 1.0:
+            line["indentation_level"] = level
+            if _hint_continuation(line.get("continuation_status_hint")) is None:
+                line["continuation_status_hint"] = "continues_previous"
+                line["inferred_boundary_hint"] = "continuation"
+
+
 def _hint_continuation(value: Any) -> str | None:
     if isinstance(value, dict):
         incoming = value.get("incoming", "none")
@@ -741,14 +754,6 @@ def _hint_continuation(value: Any) -> str | None:
     return None
 
 
-def _looks_like_continuation(text: str) -> bool:
-    stripped = text.lstrip()
-    if not stripped:
-        return False
-    first = stripped[0]
-    return first.islower() or first.isdigit() or first in {",", ";", ":", "-", "\u2013", "\u2014", ")", "]"}
-
-
 def _build_document(
     raw: dict[str, Any],
     candidate_id: str,
@@ -762,6 +767,14 @@ def _build_document(
     all_lines: list[dict[str, Any]] = []
     page_summaries: list[dict[str, Any]] = []
     global_order = 0
+    column_bases: dict[int, float] = {}
+
+    if selected == "indexerlabs-two-column":
+        for page in raw["pages"]:
+            two_columns, threshold, _ = _column_split(page, selected)
+            for line in page["lines"]:
+                column = 1 if not two_columns or line["bbox"][0] < threshold else 2
+                column_bases[column] = min(column_bases.get(column, line["bbox"][0]), line["bbox"][0])
 
     for page in raw["pages"]:
         two_columns, threshold, column_confidence = _column_split(page, selected)
@@ -774,6 +787,8 @@ def _build_document(
         for region_order, column in enumerate(sorted(grouped), 1):
             source_lines = sorted(grouped[column], key=lambda item: (item["bbox"][1], item["bbox"][0], item["source_order"]))
             _indent_levels(source_lines)
+            if selected == "indexerlabs-two-column":
+                _mark_indexerlabs_hanging_indents(source_lines, column_bases[column])
             region_id = _stable_id("region", candidate_id, page["candidate_pdf_page"], region_order, column)
             page_region_ids.append(region_id)
             region_line_ids: list[str] = []
@@ -858,20 +873,14 @@ def _build_document(
         boundary = "column" if previous["candidate_pdf_page"] == current["candidate_pdf_page"] else "page"
         incoming = f"continued_from_previous_{boundary}"
         outgoing = f"continues_next_{boundary}"
-        inferred = current["indentation_level"] > 0 or _looks_like_continuation(current["displayed_line_text"])
         if current["continuation_status"] in {incoming, "continues_previous"}:
+            current["continuation_status"] = incoming
             if previous["continuation_status"] == "standalone":
                 previous["continuation_status"] = outgoing
             current["inferred_boundary"] = "continuation"
         elif previous["continuation_status"] == outgoing and current["continuation_status"] == "standalone":
             current["continuation_status"] = incoming
             current["inferred_boundary"] = "continuation"
-        elif current["continuation_status"] == "standalone" and inferred:
-            current["continuation_status"] = incoming
-            if previous["continuation_status"] == "standalone":
-                previous["continuation_status"] = outgoing
-            current["inferred_boundary"] = "continuation"
-            current["confidence"] = min(current["confidence"], 0.84)
 
     # Nest regions and lines under each page. Header/footer lines remain in the
     # extraction evidence, but are explicitly excluded from index normalization.

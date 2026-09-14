@@ -24,7 +24,7 @@ from subject_index_converter import (  # noqa: E402
     list_adapter_ids,
     validate_layout_contract,
 )
-from candidate_preparation_cli import normalize_layout  # noqa: E402
+from candidate_preparation_cli import merge_continuation_lines, normalize_layout  # noqa: E402
 
 
 def layout_regions(layout: dict) -> list[dict]:
@@ -51,7 +51,7 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                     {"bbox": [50, 100, 250, 112], "text": "Café society, 11–13"},
                     {"bbox": [68, 120, 285, 132], "text": "L'école, 14; see also Élan vital"},
                     {"bbox": [68, 680, 240, 692], "text": "continued discussion,"},
-                    {"bbox": [338, 100, 520, 112], "text": "and later examples, 15"},
+                    {"bbox": [342, 100, 520, 112], "text": "and later examples, 15"},
                     {"bbox": [320, 120, 500, 132], "text": "O’Connor, 20"},
                     {"bbox": [320, 140, 540, 152], "text": "M a r í a ’ s, 21–23"},
                     {"bbox": [295, 780, 305, 791], "text": "1"},
@@ -64,7 +64,7 @@ def synthetic_two_page_geometry(producer: str = "ReportLab PDF Library - synthet
                 "lines": [
                     {"bbox": [220, 20, 380, 35], "text": "Synthetic Index"},
                     {"bbox": [36, 20, 46, 32], "text": "2"},
-                    {"bbox": [68, 100, 285, 112], "text": "continued on next page, 24"},
+                    {"bbox": [60, 100, 285, 112], "text": "continued on next page, 24"},
                     {"bbox": [50, 120, 230, 132], "text": "Zulu, 25"},
                     {"bbox": [320, 100, 500, 112], "text": "Beta, 26"},
                     {"bbox": [320, 120, 500, 132], "text": "Gamma, 27"},
@@ -163,6 +163,65 @@ class GeometryAdapterTests(unittest.TestCase):
         retained = [line["displayed_line_text"] for line in layout_lines(layout, include_excluded=False)]
         self.assertIn("403", retained)
         self.assertEqual(0, layout["counts"]["excluded_lines"])
+
+    def test_indexerlabs_hanging_indents_control_same_and_cross_region_continuations(self) -> None:
+        geometry = {
+            "metadata": {"producer": "ReportLab PDF Library - IndexerLabs regression"},
+            "pages": [
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [36, 100, 150, 108], "text": "Alpha, 87,"},
+                        {"bbox": [46, 110, 70, 118], "text": "88"},
+                        {"bbox": [36, 490, 150, 498], "text": "Range owner, 270–271"},
+                        {"bbox": [199.7, 70, 340, 78], "text": "establishment and role as war cabinet, 228"},
+                    ],
+                },
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [36, 70, 150, 78], "text": "Bravo, 100,"},
+                        {"bbox": [197.7, 70, 220, 78], "text": "101"},
+                        {"bbox": [187.7, 490, 320, 498], "text": "Complete, 102"},
+                    ],
+                },
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [36, 70, 150, 78], "text": "new page heading, 103"},
+                        {"bbox": [187.7, 490, 320, 498], "text": "Cross-page, 110,"},
+                    ],
+                },
+                {
+                    "width": 361,
+                    "height": 538,
+                    "lines": [
+                        {"bbox": [46, 70, 70, 78], "text": "111"},
+                        {"bbox": [187.7, 70, 320, 78], "text": "Zulu, 112"},
+                    ],
+                },
+            ],
+        }
+
+        layout = extract_candidate_layout(Path("unused.pdf"), "indexerlabs-wraps", geometry=geometry)
+        by_text = {line["displayed_line_text"]: line for line in layout_lines(layout, include_excluded=False)}
+
+        self.assertEqual("continues_previous", by_text["88"]["continuation_status"])
+        self.assertEqual(0, by_text["88"]["indentation_level"])
+        self.assertEqual("standalone", by_text["establishment and role as war cabinet, 228"]["continuation_status"])
+        self.assertEqual("continued_from_previous_column", by_text["101"]["continuation_status"])
+        self.assertEqual("standalone", by_text["new page heading, 103"]["continuation_status"])
+        self.assertEqual("continued_from_previous_page", by_text["111"]["continuation_status"])
+        self.assertEqual(11, layout["counts"]["index_lines"])
+        normalized_lines = [group["displayed_line_text"] for group in merge_continuation_lines(layout_lines(layout))]
+        self.assertIn("Alpha, 87, 88", normalized_lines)
+        self.assertIn("Bravo, 100, 101", normalized_lines)
+        self.assertIn("Cross-page, 110, 111", normalized_lines)
+        self.assertIn("Range owner, 270–271", normalized_lines)
+        self.assertIn("establishment and role as war cabinet, 228", normalized_lines)
 
     def test_auto_uses_geometry_and_never_index_vocabulary(self) -> None:
         geometry = synthetic_two_page_geometry(producer="Unrelated PDF engine")
