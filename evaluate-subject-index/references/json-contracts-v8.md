@@ -20,6 +20,9 @@ The active workflow uses these primary identities:
 | Evaluation result | `subject-index-evaluation-result-v12` |
 | Projection metadata | `subject-index-v8-projection-metadata-v2` |
 | Web report | `subject-index-web-report-v10` |
+| Canonical web projection | `ohfr-v8-canonical-web-projection-v1` |
+| Web collections | `ohfr-v8-web-collection-v1` |
+| Optional correction overlay | `ohfr-v8-representation-correction-overlay-v1` |
 | Checkpoint bundle | `subject-index-bundle-v2` |
 
 `subject-index-heading-access-causal-projection-input-v1` is a score-free, exact-hash-bound input used only to project a frozen `structure-audit-v5` into a new V6 reporting artifact. It does not migrate or recalculate scores.
@@ -37,7 +40,9 @@ The active workflow uses these primary identities:
 - Benchmark review uses one draft artifact SHA-256, exact stable-ID coverage, and an exact normalized `approved_changes` ledger. Its deterministic screen is recomputed as a temporary queue and is not registered.
 - `benchmark_review_cli.py freeze` is the normal completion path for `benchmark_review` and `benchmark_freeze`; it registers the review and final benchmark in one atomic state replacement.
 - `benchmark_review_cli.py import-reviewed-legacy` is the narrow exception for exact candidate-blind releases with completed full review. Its distinct compatibility approval does not claim a new full editorial review.
-- `dimension_score_v8_cli.py register-structure`, `score`, and `build-report` are the normal completion paths for the final three stages. They select exact registered inputs, reject missing, duplicate, changed, or cross-boundary artifacts, and replace state only after all current-schema outputs validate.
+- `dimension_score_v8_cli.py register-structure`, `score`, and `build-report` are the normal completion paths for the final three stages. They select exact registered inputs, reject missing, duplicate, changed, or cross-boundary artifacts, and replace state only after all current-schema outputs validate. `build-report` registers the report, projection, and every collection in the same state inventory and rolls back new output files if the commit fails.
+- The projection preserves the established `correction_outcomes` contract and adjustment-status vocabulary. A confirmed registered overlay adds the fourth collection binding and `data/correction-overlay.v1.json`; otherwise exactly three collection bindings are emitted and the overlay file is absent.
+- Public collections may retain evidence IDs and finalized judgments but never source excerpts, quotes, PDFs, absolute paths, private layout evidence, storage-provider identifiers, secrets, or restricted inputs.
 - Worker provenance is informational. Repeated source, policy, page-map, manifest,
   candidate-file, inventory-file, and audit-set hashes are not scoring gates.
 - Locator- and missing-access-audit set hashes are computed deterministically from

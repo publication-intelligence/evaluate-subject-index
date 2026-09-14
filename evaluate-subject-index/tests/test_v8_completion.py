@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,7 @@ sys.path.insert(0, str(SCRIPTS))
 import policy_cli  # noqa: E402
 import scoring_core as core  # noqa: E402
 import state_cli  # noqa: E402
+import web_projection  # noqa: E402
 from structure_audit import id_set_hash  # noqa: E402
 
 
@@ -226,7 +228,15 @@ class CurrentV8CompletionTests(unittest.TestCase):
             "page_mapping": self.write("page-map.json", {"synthetic": True}),
             "chunk_definition": self.write("chunk-manifest.json", manifest),
             "define_policy": self.write("evaluation-policy.json", policy),
-            "benchmark_freeze": self.write("source-benchmark.json", {"benchmark_sha256": BENCHMARK_SHA}),
+            "benchmark_freeze": self.write("source-benchmark.json", {
+                "schema_version": "source-subject-benchmark-v2", "benchmark_id": "BENCHMARK-SYNTHETIC", "version": 1,
+                "evaluation_id": EVALUATION_ID, "source_sha256": SOURCE_SHA, "policy_sha256": policy["policy_sha256"],
+                "page_map_sha256": PAGE_MAP_SHA, "candidate_blindness": "preserved", "chunk_manifest_sha256": manifest["chunk_manifest_sha256"],
+                "subjects": [{"subject_id": "SUBJ-001", "label": "Synthetic subject", "priority": "essential", "meaning": "Synthetic meaning.", "stance": "Synthetic stance.", "acceptable_access": ["Synthetic subject"], "chapter_provenance": ["CHUNK-001"], "evidence": [{"evidence_id": "EVID-TREAT-001", "document_page": 1, "source_page_label": "1", "locator_class": "principal"}]}],
+                "relationships": [], "reader_tasks": [{"task_id": "TASK-001", "question": "Find the synthetic subject.", "subject_ids": ["SUBJ-001"]}],
+                "freeze": {"frozen_at": "2026-01-01T00:00:00Z", "synthesis_pass_complete": True, "page_coverage_complete": True},
+                "benchmark_sha256": BENCHMARK_SHA,
+            }),
             "candidate_index": self.write("candidate/candidate-index.json", candidate),
             "item_inventory": self.write("candidate/item-inventory.json", inventory),
             "locator_audit": self.write("candidate/locator-audit.CHUNK-001.v2.json", locator),
@@ -423,6 +433,28 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual("1", items["locator_assessments"][0]["dimension_reliability_credit"])
         self.assertEqual(1, len(items["source_subject_assessments"]))
         self.assertEqual(1, len(json.loads((self.root / "candidate/missing-access-audit.CHUNK-001.v1.json").read_text())["reader_task_results"]))
+        projection_root = self.root / "scoring/v8-canonical-projection"
+        expected = {
+            "scoring/web-report.v10.json", "scoring/v8-canonical-projection/projection.v1.json",
+            "scoring/v8-canonical-projection/data/index-records.v1.json",
+            "scoring/v8-canonical-projection/data/source-subjects.v1.json",
+            "scoring/v8-canonical-projection/data/density.v1.json",
+        }
+        self.assertEqual(expected, {item["path"] for item in state["artifacts"] if item["stage"] == "web_report"})
+        self.assertFalse((projection_root / "data/correction-overlay.v1.json").exists())
+        projection = json.loads((projection_root / "projection.v1.json").read_text())
+        self.assertEqual({"index_records", "source_subjects", "density"}, {row["collection_id"] for row in projection["collections"]})
+        self.assertEqual({"applicable": False, "overlay_included": False, "reason": "No confirmed registered correction overlay applies.", "affected_headings": 0, "character_replacements": 0}, projection["correction_outcomes"])
+        first_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
+        state["artifacts"] = [item for item in state["artifacts"] if item["stage"] != "web_report"]
+        state["stages"]["web_report"] = {"status": "not_started", "updated_at": None, "notes": []}
+        self.state_path.write_text(json.dumps(state, indent=2) + "\n")
+        (self.root / "scoring/web-report.v10.json").unlink()
+        shutil.rmtree(projection_root)
+        rebuilt = self.run_cli("build-report", "--state", str(self.state_path))
+        self.assertEqual(0, rebuilt.returncode, rebuilt.stdout + rebuilt.stderr)
+        second_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
+        self.assertEqual(first_bytes, second_bytes)
 
     def test_build_report_selects_result_bound_calculation_from_history(self) -> None:
         registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
@@ -450,6 +482,69 @@ class CurrentV8CompletionTests(unittest.TestCase):
         report = json.loads((self.root / "scoring/web-report.v10.json").read_text())
         result = json.loads((self.root / "scoring/evaluation-result.v12.json").read_text())
         self.assertEqual(result["dimension_calculations"]["sha256"], report["calculation_explainer"]["sha256"])
+
+    def test_unsafe_projection_is_rejected_without_writes(self) -> None:
+        self.assertEqual(0, self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path)).returncode)
+        self.assertEqual(0, self.run_cli("score", "--state", str(self.state_path)).returncode)
+        benchmark_path = self.root / "source-benchmark.json"
+        benchmark = json.loads(benchmark_path.read_text())
+        benchmark["subjects"][0]["meaning"] = "Unsafe /home/private/source.pdf"
+        benchmark_path.write_text(json.dumps(benchmark, indent=2) + "\n")
+        state = json.loads(self.state_path.read_text())
+        record = next(row for row in state["artifacts"] if row["stage"] == "benchmark_freeze")
+        record["sha256"] = file_hash(benchmark_path)
+        record["artifact_id"] = state_cli.artifact_id(record["path"], record["sha256"])
+        self.state_path.write_text(json.dumps(state, indent=2) + "\n")
+        before = self.state_path.read_bytes()
+        failed = self.run_cli("build-report", "--state", str(self.state_path))
+        self.assertNotEqual(0, failed.returncode)
+        self.assertIn("unsafe_public_projection", failed.stdout)
+        self.assertEqual(before, self.state_path.read_bytes())
+        self.assertFalse((self.root / "scoring/web-report.v10.json").exists())
+        self.assertFalse((self.root / "scoring/v8-canonical-projection").exists())
+
+    def test_confirmed_overlay_is_conditionally_bound(self) -> None:
+        self.assertEqual(0, self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path)).returncode)
+        self.assertEqual(0, self.run_cli("score", "--state", str(self.state_path)).returncode)
+        overlay = {
+            "schema_version": web_projection.OVERLAY_SCHEMA_VERSION, "evaluation_id": EVALUATION_ID,
+            "overlay_role": "display_only_counterfactual_bound_to_canonical_v8", "causal_classification": "confirmed_representation_only",
+            "affected_heading_count": 1, "affected_node_ids": ["NODE-001"], "character_replacement_count": 1,
+            "headings": [{"node_id": "NODE-001"}], "character_replacements": [{"node_id": "NODE-001"}],
+            "adjusted_item_changes": {"heading_nodes": [], "locators": [], "paths": [], "cross_references": [], "source_subjects": []},
+            "correction_outcomes": {"affected_headings": 1, "character_replacements": 1, "corrected_cross_reference_id": "XREF-001", "remaining_unresolved_cross_reference_id": "XREF-002", "observed_minor_defect_count": 1, "adjusted_minor_defect_count": 0, "cross_reference_gate_unchanged": True, "readiness_unchanged": True},
+            "provenance": {"basis": "confirmed ledger"},
+        }
+        overlay["overlay_sha256"] = core.canonical_hash(overlay, "overlay_sha256")
+        overlay_path = self.write("corrections/correction-overlay.v1.json", overlay)
+        state = json.loads(self.state_path.read_text())
+        state["artifacts"].append(self.record(overlay_path, "scoring", "correction_overlay", web_projection.OVERLAY_SCHEMA_VERSION))
+        state["artifacts"].sort(key=lambda row: row["path"])
+        self.state_path.write_text(json.dumps(state, indent=2) + "\n")
+        built = self.run_cli("build-report", "--state", str(self.state_path))
+        self.assertEqual(0, built.returncode, built.stdout + built.stderr)
+        projection_root = self.root / "scoring/v8-canonical-projection"
+        self.assertTrue((projection_root / "data/correction-overlay.v1.json").is_file())
+        projection = json.loads((projection_root / "projection.v1.json").read_text())
+        self.assertEqual("confirmed_representation_adjustment_applied", projection["score_views"]["projection_adjustment_status"])
+        self.assertEqual(overlay["correction_outcomes"], projection["correction_outcomes"])
+
+
+class WebProjectionJoinTests(unittest.TestCase):
+    def test_reader_task_many_to_many_membership_is_preserved(self) -> None:
+        grade = {"score": 100, "rating": 5, "band": "excellent", "color_token": "grade_excellent", "status": "passes"}
+        subjects = [{"subject_id": f"SUBJ-00{i}", "label": f"Subject {i}", "priority": "major", "meaning": "Meaning.", "stance": "Stance.", "acceptable_access": [f"Subject {i}"], "evidence": [{"evidence_id": f"EVID-00{i}", "document_page": i, "source_page_label": str(i), "locator_class": "principal"}]} for i in (1, 2)]
+        benchmark = {"subjects": subjects, "reader_tasks": [{"task_id": "TASK-001", "question": "Find both.", "subject_ids": ["SUBJ-001", "SUBJ-002"]}]}
+        items = {"source_subject_assessments": [{"subject_id": row["subject_id"], "grade": grade} for row in subjects]}
+        missing = [{
+            "subject_judgments": [{"subject_id": row["subject_id"], "coverage": "complete"} for row in subjects],
+            "reader_task_results": [{"task_id": "TASK-001", "subject_ids": ["SUBJ-001", "SUBJ-002"], "result": "succeeds"}],
+            "treatment_judgments": [{"treatment_id": f"TREAT-00{i}", "subject_id": f"SUBJ-00{i}", "document_page": i, "locator_class": "principal", "status": "found", "evidence_ids": [f"EVID-00{i}"]} for i in (1, 2)],
+        }]
+        projected = web_projection.build_source_subjects(benchmark, items, missing)
+        memberships = [task["subject_ids"] for row in projected["items"] for task in row["reader_tasks"]]
+        self.assertEqual([["SUBJ-001", "SUBJ-002"], ["SUBJ-001", "SUBJ-002"]], memberships)
+        self.assertEqual(1, projected["counts"]["reader_tasks"])
 
 
 STAGES_INDEX = {stage: index for index, stage in enumerate(state_cli.STAGES)}

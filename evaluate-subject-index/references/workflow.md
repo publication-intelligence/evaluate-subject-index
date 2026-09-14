@@ -19,7 +19,7 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | missing_access_audit | all missing-access chunks |
 | structure_audit | global structure-audit V6 with causal provenance |
 | scoring | V8 calculation, item assessments V7, result V11 |
-| web_report | web report V9 |
+| web_report | web report V10 plus canonical public web projection V1 collections |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.
 
@@ -58,7 +58,7 @@ python scripts/dimension_score_v8_cli.py score --state evaluation-state.json
 python scripts/dimension_score_v8_cli.py build-report --state evaluation-state.json
 ```
 
-These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. Generic stage completion is disabled for these three stages.
+These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. The final command writes and registers `web-report.v10.json` and the complete `v8-canonical-projection/` bundle in one transaction. Generic stage completion is disabled for these three stages.
 
 ## Chunk ownership
 
