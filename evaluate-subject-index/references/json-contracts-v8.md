@@ -46,6 +46,10 @@ The active workflow uses these primary identities:
 - Locator-packet preparation registers exactly one packet per frozen manifest chunk. An unresolved or ownerless assignment writes an unregistered failure diagnostic and prevents packet writes and the state transition.
 - The candidate's frozen benchmark path and canonical benchmark identity in state are the locator-preparation binding. There is no candidate-benchmark repository-lock contract.
 - Explanation fields are metadata, not calculation inputs.
+- The public web report preserves the structure audit's raw density measurements and
+  projects `density_fit_percentage` plus `chapter_fit_by_chunk` from the canonical
+  `editorial_selectivity` `density_fit` component. Chunk IDs are the join key; array
+  position is never a binding.
 - Heading-access causal findings are source-linked reporting metadata, not calculation inputs. Generic-only adverse heading-access judgments and unresolved source or evidence IDs fail validation.
 - Checkpoint import validates safe ZIP structure, inventory membership, and current state shape; it does not require a previously published checksum.
 

@@ -398,6 +398,18 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual("subject-index-evaluation-result-v12", result["schema_version"])
         self.assertEqual("subject-index-web-report-v10", report["schema_version"])
         self.assertIsNotNone(result["overall_percentage"])
+        calculations = json.loads((self.root / "scoring/dimension-calculations.v6.json").read_text())
+        selectivity = next(item for item in calculations["dimensions"] if item["dimension_id"] == "editorial_selectivity")
+        density_component = next(item for item in selectivity["components"] if item["component_id"] == "density_fit")
+        expected_chapter_fits = {
+            item["chunk_id"]: {
+                key: item[key]
+                for key in ("path_fit_percentage", "occurrence_fit_percentage", "unit_fit_percentage")
+            }
+            for item in density_component["details"]["chapter_measurements"]
+        }
+        self.assertEqual(density_component["percentage"], report["density"]["density_fit_percentage"])
+        self.assertEqual(expected_chapter_fits, report["density"]["chapter_fit_by_chunk"])
         self.assertEqual("mixed", items["locator_assessments"][0]["locator_utility"]["treatment_category"])
         self.assertEqual("1", items["locator_assessments"][0]["dimension_reliability_credit"])
         self.assertEqual(1, len(items["source_subject_assessments"]))
