@@ -1405,6 +1405,30 @@ def _structure_reference(record: Mapping[str, Any]) -> dict[str, Any]:
     return {"schema_version": "structure-audit-v6", "artifact_path": record["path"], "sha256": record["sha256"]}
 
 
+def _public_density(structure: Mapping[str, Any], calculation: Mapping[str, Any]) -> dict[str, Any]:
+    selectivity = next(item for item in calculation["dimensions"] if item["dimension_id"] == "editorial_selectivity")
+    component = next(item for item in selectivity["components"] if item["component_id"] == "density_fit")
+    calculated_chapters = component["details"]["chapter_measurements"]
+    chapter_fits = {
+        item["chunk_id"]: {
+            key: item[key]
+            for key in ("path_fit_percentage", "occurrence_fit_percentage", "unit_fit_percentage")
+        }
+        for item in calculated_chapters
+    }
+    expected_chunks = {item["chunk_id"] for item in structure["density"]["chapter_measurements"]}
+    core.require(
+        len(chapter_fits) == len(calculated_chapters) and set(chapter_fits) == expected_chunks,
+        "density_projection_chunk_mismatch",
+        "Public density fit values must cover every and only canonical structure density chunk.",
+    )
+    return {
+        **deepcopy(structure["density"]),
+        "density_fit_percentage": component["percentage"],
+        "chapter_fit_by_chunk": chapter_fits,
+    }
+
+
 def _critical_gate_outcomes(
     policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
@@ -1568,7 +1592,7 @@ def _web_report(
         "precision_diagnostics": precision,
         "structure_audit": {**deepcopy(calculation["structure_audit"]), **structure_ref},
         "key_metrics": [{"metric_id": key, "value": value} for key, value in precision.items()],
-        "density": deepcopy(structure["density"]),
+        "density": _public_density(structure, calculation),
         "gate_status": {"critical_gates": deepcopy(result["critical_gates"]), "outcomes_sha256": core.canonical_hash({"critical_gates": result["critical_gates"]}), "used_in_score_arithmetic": False},
         "strengths": deepcopy(metadata["strengths"]),
         "defects": deepcopy(metadata["defects"]),

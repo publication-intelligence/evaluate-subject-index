@@ -37,7 +37,35 @@
       ]
     },
     "key_metrics": {"$ref": "web-report-v8.schema.json#/properties/key_metrics"},
-    "density": {"$ref": "web-report-v8.schema.json#/properties/density"},
+    "density": {
+      "allOf": [
+        {"$ref": "structure-audit-v5.schema.json#/properties/density"},
+        {
+          "type": "object",
+          "required": ["density_fit_percentage", "chapter_fit_by_chunk"],
+          "properties": {
+            "density_fit_percentage": {"$ref": "dimension-calculations-v6.schema.json#/$defs/decimal"},
+            "chapter_fit_by_chunk": {
+              "type": "object",
+              "minProperties": 1,
+              "patternProperties": {
+                "^CHUNK-": {
+                  "type": "object",
+                  "required": ["path_fit_percentage", "occurrence_fit_percentage", "unit_fit_percentage"],
+                  "properties": {
+                    "path_fit_percentage": {"$ref": "dimension-calculations-v6.schema.json#/$defs/decimal"},
+                    "occurrence_fit_percentage": {"$ref": "dimension-calculations-v6.schema.json#/$defs/decimal"},
+                    "unit_fit_percentage": {"$ref": "dimension-calculations-v6.schema.json#/$defs/decimal"}
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
     "gate_status": {"$ref": "web-report-v8.schema.json#/properties/gate_status"},
     "strengths": {"$ref": "web-report-v8.schema.json#/properties/strengths"},
     "defects": {"$ref": "web-report-v8.schema.json#/properties/defects"},
