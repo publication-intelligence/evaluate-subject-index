@@ -18,7 +18,7 @@ from unittest.mock import patch
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "evaluate-subject-index" / "scripts"))
 
-from candidate_preparation_cli import command_normalize, normalize_layout, split_heading_and_payload  # noqa: E402
+from candidate_preparation_cli import PreparationError, command_normalize, normalize_layout, split_heading_and_payload  # noqa: E402
 
 
 def page_map() -> dict:
@@ -178,6 +178,56 @@ class HeadingPayloadTests(unittest.TestCase):
 
 
 class WhitespaceLayoutNormalizationTests(unittest.TestCase):
+    def test_authoritative_heading_text_preserves_ambiguous_boundaries(self) -> None:
+        candidate_layout = layout([
+            ("Year 1, 194", 0),
+            ("Continued heading,", 0),
+            ("42", 0),
+            ("Du Barry,, 42, 59", 0),
+            ("Pompadour,, 42", 0),
+            ("Aachen 171", 0),
+            ("References see also Other", 0),
+        ])
+        lines = candidate_layout["pages"][0]["regions"][0]["lines"]
+        lines[0]["heading_text"] = "Year 1"
+        lines[1].update({"heading_text": "Continued heading", "continuation_status": "continues_next"})
+        lines[2]["continuation_status"] = "continues_previous"
+        lines[3]["heading_text"] = "Du Barry,"
+        lines[4]["heading_text"] = "Pompadour,"
+
+        candidate, _, _ = normalize_layout(candidate_layout, page_map())
+
+        records = {record["original_displayed_form"]: record for record in candidate["records"]}
+        year = records["Year 1, 194"]
+        self.assertEqual(["Year 1"], year["heading_path"])
+        self.assertEqual(["194"], [item["displayed_locator"] for item in year["locator_displays"]])
+        self.assertEqual(["Continued heading"], records["Continued heading,\n42"]["heading_path"])
+        self.assertEqual(["Du Barry,"], records["Du Barry,, 42, 59"]["heading_path"])
+        self.assertEqual(["42", "59"], [item["displayed_locator"] for item in records["Du Barry,, 42, 59"]["locator_displays"]])
+        self.assertEqual(["Pompadour,"], records["Pompadour,, 42"]["heading_path"])
+        self.assertEqual(["Aachen"], records["Aachen 171"]["heading_path"])
+        self.assertEqual("Other", records["References see also Other"]["cross_references"][0]["target"])
+
+    def test_inconsistent_authoritative_heading_text_is_rejected(self) -> None:
+        cases = {
+            "not a prefix": ("Year 1, 194", "Year 2"),
+            "mid-token boundary": ("Year 10, 194", "Year 1"),
+            "unassigned punctuation": ("Du Barry,, 42", "Du Barry"),
+        }
+        for label, (text, heading_text) in cases.items():
+            with self.subTest(label=label):
+                candidate_layout = layout([(text, 0)])
+                candidate_layout["pages"][0]["regions"][0]["lines"][0]["heading_text"] = heading_text
+                with self.assertRaises(PreparationError):
+                    normalize_layout(candidate_layout, page_map())
+
+        duplicated = layout([("Year 1,", 0), ("194", 0)])
+        lines = duplicated["pages"][0]["regions"][0]["lines"]
+        lines[0].update({"heading_text": "Year 1", "continuation_status": "continues_next"})
+        lines[1].update({"heading_text": "Year 1", "continuation_status": "continues_previous"})
+        with self.assertRaises(PreparationError):
+            normalize_layout(duplicated, page_map())
+
     def test_first_whitespace_delimited_locator_is_preserved_and_expanded(self) -> None:
         candidate, _, issues = normalize_layout(
             layout([

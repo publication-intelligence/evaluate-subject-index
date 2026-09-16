@@ -309,6 +309,9 @@ def merge_continuation_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]
         }
         if continuation and groups:
             previous = groups[-1]
+            if line.get("heading_text") is not None:
+                require(previous.get("heading_text") is None, "duplicate_heading_text", "A continued entry may provide at most one authoritative heading_text hint.")
+                previous["heading_text"] = line["heading_text"]
             joiner = "" if text[:1] in {",", ";", ":"} else " "
             previous["displayed_line_text"] += joiner + text
             previous["original_displayed_form"] += "\n" + str(line.get("original_displayed_form", text))
@@ -321,6 +324,7 @@ def merge_continuation_lines(lines: list[dict[str, Any]]) -> list[dict[str, Any]
             continue
         groups.append({
             "displayed_line_text": text,
+            "heading_text": line.get("heading_text"),
             "original_displayed_form": str(line.get("original_displayed_form", text)),
             "indentation_level": int(line.get("indentation_level", 0)),
             "line_ids": [line.get("line_id")],
@@ -407,7 +411,21 @@ def looks_like_locator_payload(
     return all(is_locator(token) for token in tokens)
 
 
-def split_heading_and_payload(text: str, lookup: dict[str, dict[str, Any]]) -> tuple[str, str]:
+def split_heading_and_payload(
+    text: str,
+    lookup: dict[str, dict[str, Any]],
+    heading_text: str | None = None,
+) -> tuple[str, str]:
+    if heading_text is not None:
+        require(heading_text == heading_text.strip(), "invalid_heading_text", "Authoritative heading_text must not have surrounding whitespace.")
+        require(text.startswith(heading_text), "heading_text_mismatch", "Authoritative heading_text must be an exact prefix of the assembled displayed line.")
+        remainder = text[len(heading_text):]
+        require(not remainder or remainder[0].isspace() or remainder[0] in {",", ";", ":"}, "heading_text_boundary_mismatch", "Authoritative heading_text must end at a whitespace or punctuation boundary.")
+        payload = remainder.strip()
+        if payload[:1] in {",", ";", ":"}:
+            payload = payload[1:].strip()
+        require(not payload or payload[:1] not in {",", ";", ":"} and looks_like_locator_payload(payload, lookup), "heading_text_payload_mismatch", "Text after authoritative heading_text must be a faithful locator or cross-reference payload.")
+        return heading_text, payload
     fallback: tuple[str, str] | None = None
     for match in re.finditer(r"[,;:]|\s+", text):
         tail = text[match.end():].strip()
@@ -598,7 +616,7 @@ def normalize_layout(layout: dict[str, Any], page_map: dict[str, Any]) -> tuple[
 
     for record_index, group in enumerate(groups):
         text = group["displayed_line_text"]
-        heading, payload = split_heading_and_payload(text, lookup)
+        heading, payload = split_heading_and_payload(text, lookup, group.get("heading_text"))
         indent = max(0, int(group.get("indentation_level", 0)))
         reference_only = not heading and bool(payload) and bool(heading_stack)
         if not heading and not reference_only:

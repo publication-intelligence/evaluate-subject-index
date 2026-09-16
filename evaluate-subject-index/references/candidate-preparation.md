@@ -8,10 +8,12 @@ The input is JSON conforming to [`candidate-layout-extraction-v1`](schemas/candi
 
 The V1 layout contract keeps its `pdf`-named fields for stable interchange. For a non-PDF input, set `pdf_metadata.is_pdf` to `false` and use one-based logical pages for `candidate_pdf_page`. Preserve the original bytes and place uncertainty in `limitations` or line-level `extraction_warnings`.
 
+A line may include optional `heading_text` when the converter knows the exact delivered heading/payload boundary. The value is authoritative and preserved verbatim, but it must be whitespace-trimmed and an exact prefix of the assembled logical line, ending at a whitespace or punctuation boundary. After removal of one boundary delimiter, the remainder must be empty or a locator/cross-reference payload. A continuation group may provide the hint once; inconsistent or duplicate hints fail normalization. Omit the field when the boundary is uncertain.
+
 If supplied input does not match the contract, use this conversion prompt with the schema and the original candidate:
 
 ```text
-Convert the supplied subject index mechanically into candidate-layout-extraction-v1 JSON that validates against the supplied schema. Preserve every displayed index line, its reading order, hierarchy/indentation, locators, cross-references, continuations, and original spelling and punctuation. Do not repair, summarize, deduplicate, classify, or judge the index. Hash the exact candidate bytes for candidate_sha256, assign stable unique IDs, record extraction uncertainty in the provided warning fields, and return only the complete JSON object. If faithful conversion is impossible, stop and identify the missing evidence instead of inventing content.
+Convert the supplied subject index mechanically into candidate-layout-extraction-v1 JSON that validates against the supplied schema. Preserve every displayed index line, its reading order, hierarchy/indentation, locators, cross-references, continuations, and original spelling and punctuation. When the source representation provides an exact heading/payload boundary, add the optional heading_text prefix exactly as delivered; omit it when uncertain. Do not repair, summarize, deduplicate, classify, or judge the index. Hash the exact candidate bytes for candidate_sha256, assign stable unique IDs, record extraction uncertainty in the provided warning fields, and return only the complete JSON object. If faithful conversion is impossible, stop and identify the missing evidence instead of inventing content.
 ```
 
 ## Workflow
