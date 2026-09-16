@@ -73,6 +73,21 @@ class PublicLocatorNarrativeTests(unittest.TestCase):
         benchmark_path = self.fixture.root / "source-benchmark.json"
         benchmark = json.loads(benchmark_path.read_text())
         benchmark["subjects"][0]["stance"] = stance_secret
+        benchmark["subjects"][0]["required_access_facets"] = [{
+            "facet_id": "FACET-001", "meaning": "Public requirement summary.",
+            "stance": stance_secret, "private_evidence": evidence_secret,
+            "unknown_metadata": access_secret, "independently_weighted": False,
+        }]
+        benchmark["subjects"][0]["retained_source_distinctions"] = [{
+            "source_local_subject_id": "LOCAL-001", "qualification": "Public qualification.",
+            "source_excerpt": evidence_secret, "unknown_metadata": access_secret,
+        }]
+        benchmark["reader_tasks"][0]["required_access_facets"] = [{
+            "facet_id": "FACET-001", "question": "A specific public question?",
+            "required_subject_ids": [benchmark["subjects"][0]["subject_id"]],
+            "weight": "unweighted_access_facet", "historical_lineage": evidence_secret,
+            "binding_rationale": access_secret,
+        }]
         benchmark_path.write_text(json.dumps(benchmark, indent=2) + "\n")
         record = next(item for item in state["artifacts"] if item["path"] == "source-benchmark.json")
         record["sha256"] = completion.file_hash(benchmark_path)
@@ -118,6 +133,16 @@ class PublicLocatorNarrativeTests(unittest.TestCase):
         self.assertTrue(all(factor["explanation"] for factor in public["popover"]["factors"]))
         source_subjects = next(item for item in collections if item["collection_kind"] == "source_subjects")
         source = source_subjects["items"][0]
+        self.assertEqual([{
+            "facet_id": "FACET-001", "meaning": "Public requirement summary.",
+            "independently_weighted": False,
+            "stance": "Authored facet stance narrative withheld from the public projection; no facet-level stance outcome is asserted.",
+        }], source["required_access_facets"])
+        self.assertEqual([{"source_local_subject_id": "LOCAL-001", "qualification": "Public qualification."}], source["retained_source_distinctions"])
+        self.assertEqual([{
+            "facet_id": "FACET-001", "question": "A specific public question?",
+            "required_subject_ids": [source["subject_id"]], "weight": "unweighted_access_facet",
+        }], source["reader_tasks"][0]["required_access_facets"])
         self.assertEqual("Synthetic meaning.", source["meaning"])
         self.assertEqual(
             "Benchmark stance narrative withheld from the public projection; stance preservation outcome: yes.",

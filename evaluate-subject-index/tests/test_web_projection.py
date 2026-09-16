@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from copy import deepcopy
 from pathlib import Path
 
 
@@ -68,6 +69,72 @@ def locator_assessment() -> dict:
     })
     value["popover"]["factors"] = item_grades._locator_factor(assignment, explanation)
     return value
+
+
+class PublicBenchmarkRequirementsTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.benchmark = {
+            "subjects": [{
+                "subject_id": "SUBJ-001", "label": "Methods", "priority": "core",
+                "meaning": "Comparison methods.", "acceptable_access": ["Methods"],
+                "evidence": [], "access_scope_rule": "Both methods must be accessible.",
+                "required_access_facets": [
+                    {"facet_id": facet_id, "label": label, "meaning": label + " method.",
+                     "acceptable_access": [label], "document_pages": pages, "independently_weighted": False}
+                    for facet_id, label, pages in [("FACET-B", "Second", [3, 1]), ("FACET-A", "First", [2])]
+                ],
+                "retained_source_distinctions": [
+                    {"source_local_subject_id": "LOCAL-B", "meaning": "Second method.", "qualification": "Conditional.", "source_pages": [3, 1]},
+                    {"source_local_subject_id": "LOCAL-A", "meaning": "First method.", "qualification": "General.", "source_pages": [2]},
+                ],
+            }, {
+                "subject_id": "SUBJ-002", "label": "Limits", "priority": "core",
+                "meaning": "Method limits.", "acceptable_access": ["Limits"], "evidence": [],
+            }],
+            "reader_tasks": [{
+                "task_id": "TASK-001", "question": "Compare methods and limits.",
+                "subject_ids": ["SUBJ-002", "SUBJ-001"],
+                "required_access_facets": [
+                    {"facet_id": "FACET-B", "question": "Where are the limits?", "required_subject_ids": ["SUBJ-002", "SUBJ-001"], "weight": "unweighted_access_facet"},
+                    {"facet_id": "FACET-A", "question": "Where is the first method?", "required_subject_ids": ["SUBJ-001"], "weight": "unweighted_access_facet"},
+                ],
+            }],
+        }
+        self.items = {"source_subject_assessments": [{"subject_id": row["subject_id"]} for row in self.benchmark["subjects"]]}
+        self.missing = [{
+            "subject_judgments": [{"subject_id": row["subject_id"], "coverage": "complete"} for row in self.benchmark["subjects"]],
+            "reader_task_results": [{"task_id": "TASK-001", "result": "succeeds"}],
+            "treatment_judgments": [],
+        }]
+
+    def project(self) -> dict:
+        return web_projection.build_source_subjects(self.benchmark, self.items, self.missing)
+
+    def test_requirements_preserve_order_bindings_and_parent_counts(self) -> None:
+        original = deepcopy(self.benchmark)
+        projected = self.project()
+        source = projected["items"][0]
+        for field in ("access_scope_rule", "required_access_facets", "retained_source_distinctions"):
+            self.assertEqual(original["subjects"][0][field], source[field])
+        for parent in projected["items"]:
+            task = parent["reader_tasks"][0]
+            self.assertEqual(original["reader_tasks"][0]["required_access_facets"], task["required_access_facets"])
+            self.assertEqual(["SUBJ-002", "SUBJ-001"], task["subject_ids"])
+        self.assertEqual({"source_subjects": 2, "reader_tasks": 1, "expected_treatments": 0}, projected["counts"])
+        self.assertEqual(original, self.benchmark)
+        self.benchmark["reader_tasks"][0]["required_access_facets"][0]["question"] = "A revised requirement?"
+        changed = self.project()
+        self.assertNotEqual(projected["collection_sha256"], changed["collection_sha256"])
+        self.assertEqual(projected["counts"], changed["counts"])
+
+    def test_older_benchmarks_do_not_gain_optional_requirements(self) -> None:
+        for row in self.benchmark["subjects"] + self.benchmark["reader_tasks"]:
+            for field in ("required_access_facets", "access_scope_rule", "retained_source_distinctions"):
+                row.pop(field, None)
+        for subject in self.project()["items"]:
+            for row in [subject, *subject["reader_tasks"]]:
+                for field in ("required_access_facets", "access_scope_rule", "retained_source_distinctions"):
+                    self.assertNotIn(field, row)
 
 
 class PublicScoringProjectionTests(unittest.TestCase):
