@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -168,7 +169,8 @@ def read_input(path: Path) -> dict[str, Any]:
     return value
 
 
-def build_policy(source: dict[str, Any]) -> dict[str, Any]:
+def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | None = None,
+                 base_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     scope = source.get("source_scope", {})
     audience = source.get("audience", {})
     audit = source.get("audit_design", {})
@@ -231,6 +233,54 @@ def build_policy(source: dict[str, Any]) -> dict[str, Any]:
         "freeze": {"frozen_at": stamp, "candidate_seen": False},
         "policy_sha256": None,
     }
+    migration = source.get("retrospective_migration")
+    if migration is not None:
+        errors = schema_errors(migration, "retrospective-migration.schema.json")
+        if errors:
+            raise ValueError("Invalid migration provenance: " + "; ".join(errors))
+        if original_policy is None:
+            raise ValueError("Retrospective migration requires --original-policy.")
+        if not isinstance(original_policy, dict) or not isinstance(original_policy.get("policy_profile"), dict):
+            raise ValueError("Original policy must be a policy object with a profile.")
+        original = migration["original_policy"]
+        for field in ("policy_id", "policy_sha256", "freeze"):
+            if original[field] != original_policy.get(field):
+                raise ValueError(f"Original policy {field} does not match preserved evidence.")
+        if original["policy_profile_id"] != original_policy.get("policy_profile", {}).get("id"):
+            raise ValueError("Original policy profile does not match preserved evidence.")
+        if original_policy.get("policy_sha256") != canonical_hash(original_policy, "policy_sha256"):
+            raise ValueError("Original policy self-hash does not reconstruct.")
+        # Validate archived V8's structure without relabeling its preserved bytes.
+        original_shape = deepcopy(original_policy)
+        original_shape["policy_profile"]["id"] = POLICY_PROFILE
+        errors = schema_errors(original_shape, "evaluation-policy-v4.schema.json")
+        if errors:
+            raise ValueError("Invalid original policy: " + "; ".join(errors))
+        if base_policy is not None:
+            errors = schema_errors(base_policy, "evaluation-policy-v4.schema.json")
+            if errors or base_policy.get("policy_sha256") != canonical_hash(base_policy, "policy_sha256"):
+                raise ValueError("Migration base must be a valid self-hashed V8.1 policy: " + "; ".join(errors))
+            policy = deepcopy(base_policy)
+            policy["policy_id"] = source["policy_id"]
+            if policy["policy_id"] == base_policy["policy_id"]:
+                raise ValueError("Provenance cleanup requires a new policy_id distinct from its base.")
+        # Retain the frozen evaluation settings, including any non-default density.
+        for field in ("source_scope", "audience", "audit_design", "density_profile", "deviations"):
+            if base_policy is not None and field in ("source_scope", "audience", "audit_design") and base_policy[field] != original_policy[field]:
+                raise ValueError(f"Migration base changed original {field}; investigate before cleanup.")
+            policy[field] = deepcopy((base_policy or original_policy)[field])
+        for field in ("source_sha256", "document_page_span", "page_map_sha256", "chunk_manifest_sha256", "availability"):
+            if scope.get(field, {}) != policy["source_scope"][field]:
+                raise ValueError(f"Migration input changed original source_scope.{field}.")
+        if audience != policy["audience"] or any(audit.get(k) != policy["audit_design"][k] for k in ("mode", "candidate_blindness")):
+            raise ValueError("Migration input must preserve original audience and audit design.")
+        if deviations != policy["deviations"]:
+            raise ValueError("Migration input must preserve original deviations.")
+        policy["policy_profile"].pop("targeted_migration", None)
+        policy["retrospective_migration"] = deepcopy(migration)
+        policy["freeze"] = {"frozen_at": migration["migrated_at"], "candidate_seen": migration["candidate_seen"]}
+    elif original_policy is not None or base_policy is not None:
+        raise ValueError("Original/base policies require explicit retrospective_migration input.")
     policy["policy_sha256"] = canonical_hash(policy, "policy_sha256")
     errors = schema_errors(policy, "evaluation-policy-v4.schema.json")
     if errors:
@@ -243,7 +293,26 @@ def command_build(args: argparse.Namespace) -> None:
     output_path = Path(args.output)
     try:
         source = read_input(input_path)
-        policy = build_policy(source)
+        migration = source.get("retrospective_migration")
+        preserved_paths = [input_path]
+        preserved_paths += [Path(p) for p in (args.original_policy, args.base_policy) if p]
+        if migration is not None:
+            # References resolve relative to build input, never to process cwd.
+            references = [migration["original_policy"]["artifact"]]
+            references += [ref for stage in migration["reused_stages"].values() for ref in stage["evidence"]]
+            for reference in references:
+                evidence_path = input_path.parent / reference["path"]
+                preserved_paths.append(evidence_path)
+                content = evidence_path.read_bytes()
+                if hashlib.sha256(content).hexdigest() != reference["sha256"]:
+                    raise ValueError(f"Preserved evidence hash mismatch: {reference['path']}")
+            if args.original_policy and Path(args.original_policy).read_bytes() != (input_path.parent / migration["original_policy"]["artifact"]["path"]).read_bytes():
+                raise ValueError("--original-policy differs from the recorded original artifact.")
+        original = json.loads(Path(args.original_policy).read_text()) if args.original_policy else None
+        baseline = json.loads(Path(args.base_policy).read_text()) if args.base_policy else None
+        policy = build_policy(source, original_policy=original, base_policy=baseline)
+        if any(output_path.resolve() == p.resolve() or (output_path.exists() and output_path.samefile(p)) for p in preserved_paths):
+            raise ValueError("Output must not overwrite build input or preserved migration evidence, even with --force.")
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2))
         raise SystemExit(1)
@@ -269,6 +338,8 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--input", required=True)
     build.add_argument("--output", required=True)
     build.add_argument("--force", action="store_true")
+    build.add_argument("--original-policy", help="Preserved candidate-blind policy required for retrospective migration.")
+    build.add_argument("--base-policy", help="Latest frozen V8.1 policy to preserve during provenance-only cleanup.")
     build.set_defaults(func=command_build)
     return parser
 
