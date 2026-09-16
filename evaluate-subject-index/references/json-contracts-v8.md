@@ -36,6 +36,7 @@ The active workflow uses these primary identities:
 - Python validators enforce only semantics that span fields or artifacts, such as
   identity agreement, exact workset coverage, ownership, and recomputed totals.
 - Policy V4 and build-input V1 optionally carry `retrospective_migration`, defined by `retrospective-migration.schema.json`. Fresh freezes remain candidate-blind; migrations bind the original policy/freeze, actual migration visibility/time, authorization, change ledger, and reused stage evidence. See the [migration contract](consequence-policy-v8.2.md#retrospective-policy-provenance-contract). This field never enters score arithmetic.
+- Structure V6 optionally carries `uncertainty_gate_scopes`, an evidence-bound supplement to unchanged uncertainty records. It distinguishes exact locator support, explicitly path-wide support, benchmark access, measurement/provenance limitations, reference destinations, and unknown scope. Missing/unknown applicability yields a gate-assessment gap; contextual paths do not automatically make sibling locators uncertain. See [scoped uncertainty](consequence-policy-v8.2.md#scoped-uncertainty). The supplement never enters arithmetic.
 - `evaluation-state.json` is the only control inventory.
 - Registered paths are relative to the evaluation root and unique.
 - Stable semantic IDs join worker records. Calculation-input file references and their

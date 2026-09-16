@@ -157,7 +157,7 @@ class WrongDestinationTests(unittest.TestCase):
             row = data[2][0]['judgments'][0]
             if change == 'low': row['confidence'] = 'low'
             if change == 'uninspectable': row.update(judgment='uninspectable',complete_path_fit='uninspectable',treatment_class='unavailable',source_scope_status='unavailable')
-            if change == 'uncertainty': data[0]['uncertainties']=[{'affected_item_ids':['LOC-ONE']}]
+            if change == 'uncertainty': data[0]['uncertainties']=[{'uncertainty_id':'UNC-ONE','affected_item_ids':['LOC-ONE'],'summary':'Unresolved support.'}]
             if change == 'wrong_source': data[0]['defects']=[defect('DEFECT-SPAN','scope_failure','LOC-ONE')]
             if change == 'missing_evidence': row['evidence_ids']=[]
             gates, assessment = outcomes(data)

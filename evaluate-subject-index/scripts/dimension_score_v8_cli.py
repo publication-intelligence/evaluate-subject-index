@@ -52,6 +52,7 @@ from structure_audit import (
     id_set_hash,
     materialize_structure_records,
     validate_structure_audit_semantics,
+    validate_uncertainty_gate_scopes,
 )
 
 
@@ -468,6 +469,7 @@ def preflight_loaded(
     if "structure" in loaded:
         scoring_inputs["structure"] = deepcopy(loaded["structure"])
         scoring_inputs["structure"].pop("causal_projection", None)
+        scoring_inputs["structure"].pop("uncertainty_gate_scopes", None)
         scoring_inputs["structure"]["schema_version"] = "structure-audit-v5"
         for reference in scoring_inputs["structure"].get("cross_reference_judgments", []):
             reference.pop("target_resolution", None)
@@ -1973,12 +1975,41 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
     reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
     expected = {row["locator_id"] for row in reliability.get("locator_utility_assignments", [])}
     audited = {row["locator_id"]: row for document in locator_documents for row in document["judgments"]}
-    uncertain = {item for row in structure.get("uncertainties", []) for item in row["affected_item_ids"]}
+    scopes = validate_uncertainty_gate_scopes(structure)
+    uncertain_locators, uncertain_references, unknown_ids = set(), set(), set()
     blockers = []
     wrong_locators, broken_references = [], []
 
     def block(code, ids, reason):
         blockers.append({"blocker_id": code, "affected_item_ids": sorted(set(ids)), "reason": reason})
+
+    references = {row["reference_id"]: row for row in inventory.get("cross_references", [])}
+    paths = {row["path_id"] for row in inventory.get("paths", [])}
+    delivered = set(structure["candidate_denominator"]["cross_reference_ids"])
+    locator_paths = {row["path_id"] for identity, row in audited.items() if identity in expected}
+    for record in structure.get("uncertainties", []):
+        identity = record["uncertainty_id"]
+        scope = scopes.get(identity)
+        if scope is None or scope["scope"] == "unknown":
+            unknown_ids.update(record["affected_item_ids"])
+            block("GATE-ASSESSMENT-UNCERTAINTY-SCOPE", record["affected_item_ids"], f"Uncertainty {identity} lacks confirmed gate applicability; its contextual paths must not be treated as established path-wide locator uncertainty.")
+            continue
+        targets = set(scope["target_ids"])
+        kind = scope["scope"]
+        population = {"locator_support": expected, "path_locator_support": locator_paths,
+                      "cross_reference_destination": delivered & set(references)}.get(kind)
+        if population is not None and targets - population:
+            block("GATE-ASSESSMENT-UNCERTAINTY-TARGET", targets - population, f"Uncertainty {identity} cites scope targets absent from the selected candidate evidence.")
+        if kind == "locator_support":
+            uncertain_locators.update(targets)
+        elif kind == "path_locator_support":
+            uncertain_locators.update(row["locator_id"] for row in audited.values() if row["path_id"] in targets)
+        elif kind == "cross_reference_destination":
+            uncertain_references.update(targets & delivered & set(references))
+        # benchmark_access and measurement_provenance do not assert uncertain
+        # destination support; independent source/audit safeguards still apply.
+    for reference_id in sorted(uncertain_references):
+        block("GATE-ASSESSMENT-REFERENCE-UNCERTAIN", [reference_id], "Explicitly scoped uncertainty affects this delivered reference destination.")
 
     if any(row["defect_kind"] == "scope_failure" for row in structure["defects"]):
         block("GATE-ASSESSMENT-SOURCE", [], "Wrong-source evidence cannot establish candidate destination failures.")
@@ -1987,7 +2018,9 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
         block("GATE-ASSESSMENT-LOCATOR-EVIDENCE", expected - set(audited), "Finalized locator audit evidence is missing.")
     for locator_id in sorted(expected & set(audited)):
         row = audited[locator_id]
-        if row["judgment"] == "uninspectable" or row.get("confidence") not in {"high", "medium"} or uncertain & {locator_id, row["path_id"]}:
+        if unknown_ids & {locator_id, row["path_id"]}:
+            continue  # Already disclosed as an applicability gap, not a locator judgment.
+        if row["judgment"] == "uninspectable" or row.get("confidence") not in {"high", "medium"} or locator_id in uncertain_locators:
             block("GATE-ASSESSMENT-LOCATOR-UNCERTAIN", [locator_id], "Locator support is uncertain or uninspectable; no candidate-quality gate is inferred.")
             continue
         if row["judgment"] != "unsupported" or row["complete_path_fit"] != "no_fit":
@@ -1999,17 +2032,16 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
             "locator_id", "path_id", "complete_heading_path", "document_page", "source_page_label",
             "judgment", "complete_path_fit", "treatment_class", "source_scope_status", "confidence", "evidence_ids")})
 
-    references = {row["reference_id"]: row for row in inventory.get("cross_references", [])}
-    paths = {row["path_id"] for row in inventory.get("paths", [])}
-    delivered = set(structure["candidate_denominator"]["cross_reference_ids"])
     for row in sorted(structure.get("cross_reference_judgments", []), key=lambda row: row["reference_id"]):
         reference_id = row["reference_id"]
+        if reference_id in uncertain_references or reference_id in unknown_ids:
+            continue  # The scope/uncertainty blocker already names this reference.
         resolution = row.get("target_resolution")
         target = references.get(reference_id)
         if reference_id not in delivered or target is None:
             block("GATE-ASSESSMENT-REFERENCE-IDENTITY", [reference_id], "Reference exception is not bound to the delivered candidate inventory.")
         elif (row["judgment"] in {"uninspectable", "not_measured"} or row["confidence"] not in {"high", "medium"}
-              or reference_id in uncertain or resolution is None or resolution["status"] == "uncertain"):
+              or resolution is None or resolution["status"] == "uncertain"):
             block("GATE-ASSESSMENT-REFERENCE-RESOLUTION", [reference_id], "Delivered reference exception lacks confirmed destination resolution; publication readiness is indeterminate.")
         elif (resolution["reference_type"] != target["reference_type"] or resolution["target_display"] != target["target_display"]
               or not set(resolution["resolved_path_ids"]) <= paths or not resolution["evidence_ids"] or not resolution["rationale"].strip()):
