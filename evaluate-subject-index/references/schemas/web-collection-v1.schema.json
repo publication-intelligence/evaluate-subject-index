@@ -16,9 +16,11 @@
   "allOf": [{
     "if": {"properties": {"collection_kind": {"const": "density"}}, "required": ["collection_kind"]},
     "then": {
-      "required": ["fit_percentage"],
-      "properties": {"fit_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}},
-      "not": {"required": ["fit_rating"]}
+      "required": ["fit_percentage", "fit_rating"],
+      "properties": {
+        "fit_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+        "fit_rating": {"type": ["number", "null"]}
+      }
     }
   }],
   "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}

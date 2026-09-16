@@ -2137,7 +2137,7 @@ def _web_report(
             "numeric_trigger_is_automatic_defect": False,
         },
         "comparability": deepcopy(result["comparison_key"]),
-        "disclosures": ["Item grades are diagnostic and do not reconstruct the six-dimension score.", "Critical gates are reported separately from score arithmetic."],
+        "disclosures": ["Item grades are diagnostic and do not reconstruct the six-dimension score.", "Critical gates are reported separately from score arithmetic.", web_projection.COMPATIBILITY_ALIAS_DISCLOSURE],
         "limitations": deepcopy(result["limitations"]),
         "evidence_index": {"calculation": calculation_ref, "structure_audit": structure_ref, "item_assessments": {"artifact_path": items_record["path"], "sha256": items_record["sha256"]}},
     }

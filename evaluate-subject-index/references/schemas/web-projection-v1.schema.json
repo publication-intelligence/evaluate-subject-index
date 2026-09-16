@@ -48,11 +48,26 @@
         "role": {"type": "string", "minLength": 1},
         "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
         "maximum": {"const": 100},
-        "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "web-report-v10.schema.json#/properties/scorecard/items"}},
+        "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/scorecardRow"}},
         "dimension_denominators": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "web-report-v10.schema.json#/$defs/dimensionDenominator"}},
         "critical_gates": {"type": "array"},
         "readiness": {"type": "object"},
         "provenance_artifacts": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "scorecardRow": {
+      "type": "object",
+      "required": ["dimension_id", "dimension_percentage", "weight", "weighted_contribution", "rating", "awarded_points", "maximum_points", "formula_id"],
+      "properties": {
+        "dimension_id": {"type": "string"},
+        "dimension_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+        "weight": {"type": "number"},
+        "weighted_contribution": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+        "rating": {"type": ["number", "null"]},
+        "awarded_points": {"type": ["number", "null"]},
+        "maximum_points": {"type": "number"},
+        "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v5:"}
       },
       "additionalProperties": false
     },

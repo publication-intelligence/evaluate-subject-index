@@ -71,6 +71,22 @@ def locator_assessment() -> dict:
 
 
 class PublicScoringProjectionTests(unittest.TestCase):
+    def test_scorecard_preserves_exact_values_with_adapter_aliases(self) -> None:
+        canonical = [{
+            "dimension_id": "editorial_selectivity",
+            "dimension_percentage": "63.33333333333333333333333333",
+            "weight": 15,
+            "weighted_contribution": "9.499999999999999999999999999",
+            "formula_id": "subject-index-dimension-calculation-v5:editorial_selectivity",
+        }]
+
+        projected = web_projection.scorecard_with_compatibility_aliases(canonical)
+
+        self.assertTrue(canonical[0].items() <= projected[0].items())
+        self.assertEqual(float(canonical[0]["dimension_percentage"]) / 20, projected[0]["rating"])
+        self.assertEqual(float(canonical[0]["weighted_contribution"]), projected[0]["awarded_points"])
+        self.assertEqual(canonical[0]["weight"], projected[0]["maximum_points"])
+
     def test_dimension_denominators_preserve_optional_subject_exclusions(self) -> None:
         denominator = {
             "component_id": "priority_weighted_subject_access",

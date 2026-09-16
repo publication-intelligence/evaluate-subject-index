@@ -580,16 +580,22 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual({"index_records", "source_subjects", "density"}, {row["collection_id"] for row in projection["collections"]})
         self.assertEqual({"applicable": False, "overlay_included": False, "reason": "No confirmed registered correction overlay applies.", "affected_headings": 0, "character_replacements": 0}, projection["correction_outcomes"])
         canonical_view = projection["score_views"]["views"][0]
-        self.assertEqual(report["scorecard"], canonical_view["scorecard"])
+        self.assertEqual(report["scorecard"], [
+            {key: row[key] for key in ("dimension_id", "weight", "dimension_percentage", "weighted_contribution", "formula_id")}
+            for row in canonical_view["scorecard"]
+        ])
         self.assertEqual(
             report["calculation_explainer"]["dimension_denominators"],
             canonical_view["dimension_denominators"],
         )
         self.assertTrue(all(isinstance(row["dimension_percentage"], str) for row in canonical_view["scorecard"]))
         self.assertTrue(all(isinstance(row["weighted_contribution"], str) for row in canonical_view["scorecard"]))
+        self.assertTrue(all(row["rating"] == float(row["dimension_percentage"]) / 20 for row in canonical_view["scorecard"]))
+        self.assertTrue(all(row["awarded_points"] == float(row["weighted_contribution"]) for row in canonical_view["scorecard"]))
+        self.assertTrue(all(row["maximum_points"] == row["weight"] for row in canonical_view["scorecard"]))
         density_projection = json.loads((projection_root / "data/density.v1.json").read_text())
-        self.assertNotIn("fit_rating", density_projection)
         self.assertEqual(density_component["percentage"], density_projection["fit_percentage"])
+        self.assertEqual(float(density_projection["fit_percentage"]) / 20, density_projection["fit_rating"])
         legacy_projection = copy.deepcopy(projection)
         legacy_score = legacy_projection["score_views"]["views"][0]["scorecard"][0]
         legacy_score["rating"] = float(legacy_score.pop("dimension_percentage")) / 20
@@ -598,7 +604,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         with self.assertRaises(core.CalculationError):
             core.validate_schema_document(legacy_projection, "web-projection-v1.schema.json", "Legacy projection")
         density_with_rating = copy.deepcopy(density_projection)
-        density_with_rating["fit_rating"] = float(density_with_rating["fit_percentage"]) / 20
+        density_with_rating["fit_rating"] = str(density_with_rating["fit_rating"])
         with self.assertRaises(core.CalculationError):
             core.validate_schema_document(density_with_rating, "web-collection-v1.schema.json", "Legacy density")
         corrected_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
@@ -609,7 +615,6 @@ class CurrentV8CompletionTests(unittest.TestCase):
         report_path = self.root / "scoring/web-report.v10.json"
         report_path.write_bytes(dimensions._json_bytes(legacy_report))
         legacy_density = copy.deepcopy(density_projection)
-        legacy_density["fit_rating"] = float(legacy_density["fit_percentage"]) / 20
         legacy_density["collection_sha256"] = core.canonical_hash(legacy_density, "collection_sha256")
         density_path = projection_root / "data/density.v1.json"
         density_path.write_bytes(web_projection.json_bytes(legacy_density))
@@ -661,6 +666,32 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual(scoring_bytes, {path: path.read_bytes() for path in scoring_bytes})
         rebuilt_state = json.loads(self.state_path.read_text())
         self.assertIn("Rebuilt and replaced", rebuilt_state["stages"]["web_report"]["notes"][0])
+
+        pure_density = json.loads(density_path.read_text())
+        del pure_density["fit_rating"]
+        pure_density["collection_sha256"] = core.canonical_hash(pure_density, "collection_sha256")
+        density_path.write_bytes(web_projection.json_bytes(pure_density))
+        pure_projection = json.loads(projection_path.read_text())
+        for row in pure_projection["score_views"]["views"][0]["scorecard"]:
+            for field in ("rating", "awarded_points", "maximum_points"):
+                del row[field]
+        density_binding = next(row for row in pure_projection["collections"] if row["collection_id"] == "density")
+        density_binding["content_sha256"] = pure_density["collection_sha256"]
+        density_binding["file_sha256"] = file_hash(density_path)
+        pure_projection["projection_sha256"] = core.canonical_hash(pure_projection, "projection_sha256")
+        projection_path.write_bytes(web_projection.json_bytes(pure_projection))
+        registered = {row["artifact_type"]: row for row in rebuilt_state["artifacts"] if row["stage"] == "web_report"}
+        registered["web_projection"]["sha256"] = file_hash(projection_path)
+        registered["web_density"]["sha256"] = file_hash(density_path)
+        for record in (registered["web_projection"], registered["web_density"]):
+            record["artifact_id"] = state_cli.artifact_id(record["path"], record["sha256"])
+        self.state_path.write_text(json.dumps(rebuilt_state, indent=2) + "\n")
+
+        rebuilt_pure = self.run_cli("build-report", "--state", str(self.state_path), "--replace-complete-bundle")
+        self.assertEqual(0, rebuilt_pure.returncode, rebuilt_pure.stdout + rebuilt_pure.stderr)
+        third_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [report_path, *sorted(projection_root.rglob("*.json"))]}
+        self.assertEqual(corrected_bytes, third_bytes)
+        self.assertEqual(scoring_bytes, {path: path.read_bytes() for path in scoring_bytes})
 
     def test_complete_web_bundle_replacement_rolls_back_all_bytes_on_write_failure(self) -> None:
         self.assertEqual(0, self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path)).returncode)

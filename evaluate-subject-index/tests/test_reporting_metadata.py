@@ -24,7 +24,7 @@ class ReportingMetadataTests(unittest.TestCase):
         projected = web_projection._projection_limitations({"limitations": canonical})
 
         self.assertEqual(
-            [canonical[0], canonical[1], canonical[2], web_projection.DISPLAY_CAUTIONS[1]],
+            [canonical[0], canonical[1], canonical[2], *web_projection.DISPLAY_CAUTIONS[1:]],
             projected,
         )
 
