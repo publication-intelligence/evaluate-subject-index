@@ -134,6 +134,7 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
                     "document_page": assignment["document_page"],
                     "mapping_status": assignment["mapping_status"],
                     "assessment": deepcopy(locator_items[locator_id]),
+                    "adjusted_assessment": None,
                 })
             displays.append({
                 "display_order": display_order,
@@ -150,14 +151,19 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
         references = []
         for reference_order, raw in enumerate(record["cross_references"]):
             resolved = _resolved_targets(raw["target"], target_index)
+            resolution = {"status": "resolved" if resolved else "unresolved", "targets": resolved}
+            assessment = deepcopy(reference_items[raw["reference_id"]])
             references.append({
                 "reference_order": reference_order,
                 "reference_id": raw["reference_id"],
                 "reference_type": raw["type"],
                 "source": {"record_id": record["record_id"], "path_id": record["path_id"], "node_id": terminal_node_id, "heading_path": deepcopy(record["heading_path"])},
                 "target_display": raw["target"],
-                "resolution": {"status": "resolved" if resolved else "unresolved", "targets": resolved},
-                "assessment": deepcopy(reference_items[raw["reference_id"]]),
+                "resolution": resolution,
+                "adjusted_resolution": deepcopy(resolution),
+                "assessment": assessment,
+                "adjusted_assessment": None,
+                "adjusted_judgment": assessment["judgment"],
             })
         output.append({
             "delivered_order": delivered_order,
@@ -170,10 +176,14 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
             "heading_hierarchy": [{"level": level, "node_id": node_id, "parent_node_id": nodes[node_id]["parent_node_id"], "heading": heading, "assessment": deepcopy(node_items[node_id])} for level, (node_id, heading) in enumerate(zip(path["node_ids"], record["heading_path"], strict=True))],
             "delivered_indentation_level": record.get("delivered_indentation_level", len(record["heading_path"]) - 1),
             "heading_path": deepcopy(record["heading_path"]),
+            "delivered_heading_path": deepcopy(record["heading_path"]),
+            "corrected_heading_path": [],
+            "display_heading_path": deepcopy(record["heading_path"]),
             "original_displayed_form": record["original_displayed_form"],
             "displayed_locators": displays,
             "cross_references": references,
             "heading_assessment": deepcopy(node_items[terminal_node_id]),
+            "adjusted_heading_assessment": None,
             "path_assessment": deepcopy(path_items[record["path_id"]]),
         })
     return collection("index_records", output, "candidate.records delivered order", counts={
