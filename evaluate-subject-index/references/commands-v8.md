@@ -115,7 +115,7 @@ python scripts/dimension_score_v8_cli.py build-report \
   --state evaluation-state.json
 ```
 
-`register-structure` validates the native V6 ledger, its exact candidate denominator, and every adverse heading-access causal finding before registering it. `score` resolves and verifies the registered policy, manifest, candidate, inventory, locator audits, missing-access audits, and structure audit; it then writes and registers calculation input V2, calculations V5, item assessments V7, projection metadata V2, and result V11. `build-report` validates the registered scoring set and writes web report V9. Each successful command advances canonical state under its mutation lock. Validation failure writes no output and leaves state unchanged.
+`register-structure` validates the native V6 ledger, its exact candidate denominator, and every adverse heading-access causal finding before registering it. `score` resolves and verifies the registered policy, manifest, candidate, inventory, locator audits, missing-access audits, and structure audit; it then writes and registers calculation input V2, calculations V6, item assessments V7, projection metadata V2, and result V12. `build-report` validates the registered scoring set and writes web report V10. Each successful command advances canonical state under its mutation lock. Validation failure writes no output and leaves state unchanged.
 
 For isolated calculation diagnostics, the lower-level commands remain available:
 

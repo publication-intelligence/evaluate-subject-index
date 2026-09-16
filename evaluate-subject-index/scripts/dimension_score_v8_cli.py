@@ -1627,6 +1627,7 @@ def _validate_structure_inventory(structure: Mapping[str, Any], inventory: Mappi
     nodes = [{key: item[key] for key in ("node_id", "heading_path", "role")} for item in inventory["heading_nodes"]]
     references = [item["reference_id"] for item in inventory["cross_references"]]
     path_ids = [item["path_id"] for item in inventory["paths"] if item["locator_ids"]]
+    distinct_heading_paths = {tuple(item["heading_path"]) for item in inventory["paths"]}
     core.require(denominator["nodes"] == nodes, "structure_candidate_denominator_mismatch", "Structure node denominator differs from the registered item inventory.")
     for values, field, count_field, hash_field in (
         (references, "cross_reference_ids", "cross_reference_count", "cross_reference_id_set_sha256"),
@@ -1635,7 +1636,7 @@ def _validate_structure_inventory(structure: Mapping[str, Any], inventory: Mappi
         core.require(denominator[field] == values and denominator[count_field] == len(values) and denominator[hash_field] == id_set_hash(values), "structure_candidate_denominator_mismatch", f"Structure {field} differs from the registered item inventory.")
     core.require(denominator["node_count"] == len(nodes) and denominator["node_id_set_sha256"] == id_set_hash([item["node_id"] for item in nodes]), "structure_candidate_denominator_mismatch", "Structure node count or hash differs from the registered item inventory.")
     metrics = structure["metrics"]
-    core.require(metrics["total_paths"] == len(inventory["paths"]) and metrics["total_nodes"] == len(nodes) and metrics["expanded_locators"] == len(inventory["locators"]), "structure_candidate_metric_mismatch", "Structure metrics differ from the registered item inventory.")
+    core.require(metrics["total_paths"] == len(distinct_heading_paths) and metrics["total_nodes"] == len(nodes) and metrics["expanded_locators"] == len(inventory["locators"]), "structure_candidate_metric_mismatch", "Structure metrics differ from the registered item inventory.")
 
 
 def command_register_structure(args: argparse.Namespace) -> None:
