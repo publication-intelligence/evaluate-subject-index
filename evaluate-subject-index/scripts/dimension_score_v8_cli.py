@@ -3,8 +3,7 @@
 
 V8 uses the frozen keep judgment as binary rating credit while retaining the
 independent page-treatment and complete-path-fit minimum as a diagnostic grade.
-Every non-reliability formula, cap, gate, recall rule, and rounding rule is
-unchanged.
+V8.1 revises consequence thresholds under a new frozen policy and calculation identity.
 """
 
 from __future__ import annotations
@@ -54,11 +53,11 @@ from structure_audit import (
 )
 
 
-RUBRIC_VERSION = "subject-index-rubric-v8"
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v5"
+RUBRIC_VERSION = "subject-index-rubric-v8.1"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v6"
 CALCULATION_SCHEMA = "subject-index-dimension-calculations-v6"
 ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
-POLICY_PROFILE = "subject-index-standard-policy-v8"
+POLICY_PROFILE = "subject-index-standard-policy-v8.1"
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
@@ -472,7 +471,12 @@ def preflight_loaded(
                 component.pop(field, None)
     ledgers, missing = core.preflight_loaded(scoring_inputs)
     if ledgers is None:
+        for issue in missing:
+            issue["evaluation_outcome"] = "indeterminate"
+            issue["publication_quality_failure"] = False
         return None, missing
+    validity = _evaluation_validity(loaded["policy"], loaded["structure"], {"dimensions": [{"dimension_id": "page_reference_reliability", "reliability_provenance": {"original_locator_denominator": ledgers["locator_original"], "uninspectable_locator_count": sum(row.get("judgment") == "uninspectable" for row in ledgers["locators"])}}]})
+    missing.extend({"code": row["blocker_id"], "message": row["reason"], "evaluation_outcome": validity["status"], "publication_quality_failure": False, "details": row} for row in validity["blockers"])
     missing = [
         *missing,
         *locator_state_requirements(
@@ -631,13 +635,16 @@ def calculate_reliability(
         severities={"critical"},
         kinds={"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
     )
-    # Preserve the exact cap trigger; V8 changes precision credit, not cap evidence.
+    # Only severe/no-fit delivered evidence participates in consequence ceilings.
     pattern = [
         item
         for item in measured_locators
         if item.get("judgment") == "unsupported"
+        and item.get("complete_path_fit") in {"severe_mismatch", "no_fit"}
         and set(item.get("error_codes", [])) & core.RELIABILITY_CODES
     ]
+    delivered_major = [row for row in ledgers["defects"] if core.material_consequence(row) and core.delivered_bad_locators(row, measured_locators)]
+    critical = [row for row in critical if core.material_consequence(row) and core.delivered_bad_locators(row, measured_locators)]
     pattern_units = {item.get("_source_unit_id") for item in pattern if item.get("_source_unit_id")}
     unknown_locator_units = {
         item.get("_source_unit_id") for item in uninspectable_locators if item.get("_source_unit_id")
@@ -653,11 +660,12 @@ def calculate_reliability(
         high_miss_evidence: Sequence[str],
         pattern_evidence: Sequence[str],
     ) -> list[dict[str, Any]]:
-        high_max, high_triggered, high_band = core.high_value_cap(high_found_value, high_total)
+        high_max, _, high_band = core.high_value_cap(high_found_value, high_total)
         pattern_max, pattern_triggered, pattern_band = core.reliability_pattern_cap(
             pattern_count, locator_total, units, unit_denominator
         )
         return [
+            core.cap_record("reliability.major_delivered_no_fit", Decimal(80), bool(delivered_major), {"severity": ["major", "critical"], "fit": ["severe_mismatch", "no_fit"], "consequence": ["blocks", "misleads"]}, {"defect_count": len(delivered_major)}, [row["defect_id"] for row in delivered_major]),
             core.cap_record(
                 "reliability.critical_locator",
                 Decimal(40),
@@ -669,8 +677,8 @@ def calculate_reliability(
             core.cap_record(
                 "reliability.high_value_treatment_recall",
                 high_max,
-                high_triggered,
-                {"table": "pooled_principal_and_synthesis_recall_v1", "band": high_band},
+                False,
+                {"rule": "V8.1 recall omissions receive ordinary score deductions only", "band": high_band},
                 {"found": high_found_value, "expected": high_total, "rate": core.decimal_text(core.rate(high_found_value, high_total))},
                 high_miss_evidence,
             ),
@@ -678,7 +686,7 @@ def calculate_reliability(
                 "reliability.distributed_unsupported_pattern",
                 pattern_max,
                 pattern_triggered,
-                {"minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band},
+                {"minimum_count": 3, "fit": ["severe_mismatch", "no_fit"], "minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band},
                 {
                     "unsupported_count": pattern_count,
                     "assessable_locator_denominator": locator_total,
@@ -828,8 +836,8 @@ def calculate_reliability(
             "raw_numerator": core.decimal_text(Decimal(high_found)),
             "raw_denominator": core.decimal_text(Decimal(len(high_measured))),
             "normalized_value": core.decimal_text(core.rate(high_found, len(high_measured))),
-            "weight": "cap_only",
-            "effective_weight": "cap_only",
+            "weight": "reported_diagnostic_only",
+            "effective_weight": "reported_diagnostic_only",
             "weight_renormalized": False,
         },
     ]
@@ -849,6 +857,7 @@ def calculate_reliability(
         "counts_by_diagnostic_credit_value": diagnostic_counts,
         "counts_by_rating_credit_value": rating_counts,
         "locator_utility_assignments": assignments,
+        "locator_path_bindings": {row["locator_id"]: row.get("path_id") for row in ledgers["locators"]},
         "mapping_rejections": [],
         "treatment_score_numerator": core.decimal_text(treatment_numerator),
         "treatment_score_denominator": assessable,
@@ -914,6 +923,24 @@ def calculate_loaded(
         core.calculate_mechanics(ledgers, audit_mode),
     ]
     for dimension in dimensions:
+        for cap_set in (dimension["cap_evaluations"], dimension["missing_data_bounds"]["lower"]["cap_evaluations"], dimension["missing_data_bounds"]["upper"]["cap_evaluations"]):
+            for cap in cap_set:
+                evidence = set(cap["affected_evidence_ids"])
+                rows = [row for row in ledgers["defects"] if row["defect_id"] in evidence]
+                cap["observed"]["consequence_evidence"] = deepcopy(rows)
+                cap["observed"]["qualifying_locator_evidence"] = [{key: locator.get(key) for key in ("locator_id", "path_id", "complete_path_fit", "severity", "judgment")} for row in rows for locator in core.delivered_bad_locators(row, ledgers["locators"])]
+                cap["affected_evidence_ids"] = sorted(evidence | {item for row in rows for item in row["affected_item_ids"]})
+                consequences = {
+                    "meaningful_coverage": "Essential subject access is absent.",
+                    "editorial_selectivity": "Systemic contentless entries dilute useful retrieval.",
+                    "conceptual_stance_fidelity": "Material heading meaning or source stance is misrepresented.",
+                    "page_reference_reliability": "Delivered severe/no-fit locators materially mislead retrieval.",
+                    "findability_navigation": "Delivered routes mislead or block retrieval, high-priority access is destroyed, or the frozen aggregate access threshold is met.",
+                    "mechanics_consistency": "Material structural failure or frozen aggregate mechanical friction impairs navigation.",
+                }
+                cap["observed"]["severity_basis"] = sorted({row["severity_basis"] for row in rows}) if rows else ["frozen_quantitative_threshold"]
+                cap["observed"]["retrieval_consequence"] = sorted({row["retrieval_consequence"] for row in rows}) if rows else [consequences[dimension["dimension_id"]]]
+                cap["observed"]["threshold_reason"] = (consequences[dimension["dimension_id"]] + " Observed evidence satisfies " + core.canonical_json_text(cap["threshold"])) if cap["triggered"] else "Threshold not met."
         dimension["formula_id"] = f"{CALCULATION_PROFILE}:{dimension['dimension_id']}"
         selected: list[dict[str, Any]] = []
         for artifact in calculation_artifacts:
@@ -1040,6 +1067,8 @@ def command_preflight(args: argparse.Namespace) -> None:
             "target_rubric_version": RUBRIC_VERSION,
             "target_calculation_profile": CALCULATION_PROFILE,
             "sufficient": not missing,
+            "evaluation_outcome": "invalid" if any(row.get("evaluation_outcome") == "invalid" for row in missing) else "indeterminate" if missing else "valid",
+            "publication_quality_failure": loaded["structure"].get("scoring_context", {}).get("candidate_attempt", {}).get("status") in {"empty", "structurally_incomplete", "unparseable"},
             "missing_requirements": missing,
             "locator_fit_preflight": public_fit_report,
             "aggregate_v8_score_available": False,
@@ -1792,11 +1821,11 @@ def _presentation_calculation_basis(dimension: Mapping[str, Any]) -> list[dict[s
         ceiling = Decimal(str(applied_cap["maximum_percentage"]))
         final = Decimal(str(dimension["dimension_percentage"]))
         lines.append({
-            "equation": f"Applied cap = min({core.decimal_text(pre_cap)}%, {core.decimal_text(ceiling)}%) = {core.decimal_text(final)}%",
+            "equation": (f"Applied cap ({core.decimal_text(ceiling)}% ceiling): {core.decimal_text(pre_cap)}% → {core.decimal_text(final)}%" if final < pre_cap else f"Non-binding triggered ceiling = {core.decimal_text(ceiling)}%; score remains {core.decimal_text(final)}%"),
             "kind": "step",
-            "number_scores": [float(pre_cap), None, float(final)],
+            "number_scores": [None, float(pre_cap), float(final)] if final < pre_cap else [None, float(final)],
             "score": float(final),
-            "tooltip": f"Canonical cap: {applied_cap['cap_id']}.",
+            "tooltip": core.canonical_json_text(next(row for row in dimension["cap_evaluations"] if row["cap_id"] == applied_cap["cap_id"])),
         })
     elif dimension["dimension_percentage"] is not None:
         final = Decimal(str(dimension["dimension_percentage"]))
@@ -1937,38 +1966,82 @@ def _critical_gate_outcomes(
     policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
     defects = structure["defects"]
-    reference_ids = set(structure["candidate_denominator"]["cross_reference_ids"])
-    predicates = {
-        "GATE-SCOPE-LOCATOR": lambda item: item["defect_kind"] in {"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
-        "GATE-SYSTEMIC-UNSUPPORTED": lambda item: item["severity_basis"] == "systemic_nonuse" and item["dimension_owner"] == "page_reference_reliability",
-        "GATE-CENTRAL-OMISSION": lambda item: item["defect_kind"] == "central_omission",
-        "GATE-STANCE": lambda item: item["defect_kind"] in {"stance_reversal", "misleading_relationship"},
-        "GATE-COMPOUND": lambda item: item["code"] == "CMP",
-        "GATE-SEE-SUBSTITUTION": lambda item: item["defect_kind"] == "substitutive_see",
-        "GATE-CROSS-REFERENCE": lambda item: item["code"] == "XRF"
-        and item["defect_kind"] in {"circular_or_chained_reference", "unsupported_reference"}
-        and bool(reference_ids & set(item["affected_item_ids"])),
-        "GATE-CLUTTER": lambda item: item["defect_kind"] == "clutter_pattern",
-        "GATE-GROUNDING": lambda item: item["severity"] in {"major", "critical"} and item["dimension_owner"] in {"conceptual_stance_fidelity", "page_reference_reliability"},
-        "GATE-SOURCE-SPAN": lambda item: item["defect_kind"] == "scope_failure",
-        "GATE-STRUCTURE": lambda item: item["severity"] == "critical" and item["dimension_owner"] in {"findability_navigation", "mechanics_consistency"},
-    }
+    references = set(structure["candidate_denominator"]["cross_reference_ids"])
     reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
-    denominator = reliability["original_locator_denominator"]
-    uninspectable_rate = Decimal(reliability["uninspectable_locator_count"]) / Decimal(denominator) if denominator else ZERO
-    tolerance = Decimal(str(policy["audit_design"]["uninspectable_locator_rate_tolerance"]))
+    locators = [dict(row, path_id=reliability.get("locator_path_bindings", {}).get(row["locator_id"], row.get("path_id"))) for row in reliability.get("locator_utility_assignments", [])]
+    def bad(item):
+        return core.delivered_bad_locators(item, locators)
+    def major(item):
+        return core.material_consequence(item) and not core.partial_fit_only(item, locators)
+    def delivered_reference(item):
+        return bool(references & set(item["affected_item_ids"]))
+    predicates = {
+        "GATE-SCOPE-LOCATOR": lambda item: major(item) and bool(bad(item)) and item["defect_kind"] in {"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
+        "GATE-CENTRAL-OMISSION": lambda item: major(item) and item["defect_kind"] == "central_omission" and (item["severity"] == "critical" or item.get("high_priority_access_destroyed")),
+        "GATE-STANCE": lambda item: major(item) and item["retrieval_consequence"] == "misleads" and item["defect_kind"] in {"stance_reversal", "misleading_relationship"},
+        "GATE-COMPOUND": lambda item: major(item) and item["code"] == "CMP" and bool(bad(item)),
+        "GATE-SEE-SUBSTITUTION": lambda item: major(item) and item["retrieval_consequence"] == "blocks" and item["defect_kind"] == "substitutive_see" and (delivered_reference(item) or any(x.startswith("NODE-") for x in item["affected_item_ids"]) or item.get("high_priority_access_destroyed")),
+        "GATE-CROSS-REFERENCE": lambda item: major(item) and item["code"] == "XRF" and item["defect_kind"] in {"circular_or_chained_reference", "unsupported_reference"} and delivered_reference(item),
+        # Stance and compound failures have specific gates; no generic duplicate.
+        "GATE-GROUNDING": lambda item: major(item) and bool(bad(item)) and item["code"] not in {"STA", "CON", "CMP"} and item["defect_kind"] not in {"stance_reversal", "misleading_relationship", "fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
+        "GATE-STRUCTURE": lambda item: major(item) and item["severity"] == "critical" and item["defect_kind"] in {"representation_corruption", "mechanical_invariant"} and item["dimension_owner"] == "mechanics_consistency",
+    }
+    aggregate_candidates = {
+        "GATE-CLUTTER": [row for row in defects if row["defect_kind"] == "clutter_pattern"],
+        "GATE-CROSS-REFERENCE": [row for row in defects if row["code"] == "XRF" and row["defect_kind"] in {"circular_or_chained_reference", "unsupported_reference"} and delivered_reference(row)],
+        "GATE-SYSTEMIC-UNSUPPORTED": [row for row in defects if row["dimension_owner"] == "page_reference_reliability" and bad(row)],
+    }
     results = []
     for gate in policy["critical_gates"]:
         gate_id = gate["gate_id"]
-        matching = [item["defect_id"] for item in defects if predicates.get(gate_id, lambda _: False)(item)]
-        if gate_id == "GATE-DEPTH":
-            triggered = any(len(item["heading_path"]) >= 3 for item in structure["candidate_denominator"]["nodes"])
-        else:
-            triggered = uninspectable_rate > tolerance if gate_id == "GATE-UNINSPECTABLE" else bool(matching)
-        if gate_id == "GATE-STRUCTURE":
-            triggered = triggered or not structure["full_scope_attestation"]["complete"]
-        results.append({**deepcopy(gate), "triggered": triggered, "defect_ids": sorted(matching)})
+        matching = [row for row in defects if predicates.get(gate_id, lambda _: False)(row)]
+        groups = core.systemic_defect_groups([row for row in aggregate_candidates.get(gate_id, []) if not core.has_partial_fit(row, locators)])
+        group_ids = {item for group in groups for item in group["defect_ids"]}
+        matching = [row for row in defects if row in matching or row["defect_id"] in group_ids]
+        triggered = bool(matching)
+        attempt = structure.get("scoring_context", {}).get("candidate_attempt", {})
+        candidate_failure = gate_id == "GATE-STRUCTURE" and attempt.get("status") in {"empty", "structurally_incomplete", "unparseable"}
+        triggered = triggered or candidate_failure
+        threshold = ("10 distinct items, >=5% of one denominator, >=2 sections and >=25% source/structural spread" if groups or gate_id in {"GATE-CLUTTER", "GATE-SYSTEMIC-UNSUPPORTED"} else gate["description"])
+        results.append({**deepcopy(gate), "triggered": triggered,
+                        "defect_ids": sorted(row["defect_id"] for row in matching),
+                        "affected_evidence_ids": sorted({item for row in matching for item in row["affected_item_ids"]} | set(attempt.get("evidence_ids", []) if candidate_failure else [])),
+                        "threshold": threshold, "systemic_groups": groups,
+                        "consequence_evidence": [deepcopy(row) for row in matching],
+                        "qualifying_locator_evidence": [deepcopy(locator) for row in matching for locator in bad(row)],
+                        "threshold_reason": ("Frozen systemic threshold met: " + core.canonical_json_text(groups) if groups else "Qualifying material consequence: " + core.canonical_json_text(matching) if matching else "Candidate output cannot function as an index: " + core.canonical_json_text(attempt) if candidate_failure else "No qualifying evidence crosses this threshold.")})
     return results
+
+
+def _evaluation_validity(policy, structure, calculation):
+    reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
+    denominator = reliability["original_locator_denominator"]
+    count = reliability["uninspectable_locator_count"]
+    value = core.rate(count, denominator)
+    tolerance = Decimal(str(policy["audit_design"]["uninspectable_locator_rate_tolerance"]))
+    blockers = []
+    if value > tolerance:
+        blockers.append({"blocker_id": "VALIDITY-UNINSPECTABLE", "outcome": "indeterminate", "count": count, "denominator": denominator, "rate": core.decimal_text(value), "threshold": core.decimal_text(tolerance), "reason": "Uninspectability exceeds frozen audit tolerance; index quality is undetermined."})
+    wrong_span = [row for row in structure["defects"] if row["defect_kind"] == "scope_failure"]
+    if wrong_span:
+        blockers.append({"blocker_id": "VALIDITY-SOURCE-SPAN", "outcome": "invalid", "evidence": deepcopy(wrong_span), "reason": "Evaluated source span is wrong; this audit cannot establish index quality."})
+    if not structure["full_scope_attestation"]["complete"]:
+        blockers.append({"blocker_id": "VALIDITY-ATTESTATION", "outcome": "indeterminate", "reason": "Incomplete audit attestation does not establish an index defect."})
+    return {"status": "invalid" if wrong_span else "indeterminate" if blockers else "valid", "blockers": blockers, "used_as_publication_gate": False}
+
+
+def _review_signals(structure, calculation):
+    reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
+    partial = [row["locator_id"] for row in reliability.get("locator_utility_assignments", []) if row["fit_category"] == "material_partial_fit"]
+    missing = structure.get("scoring_context", {}).get("cross_reference_applicability", {}).get("warranted_reference_obligation_ids", [])
+    supplemental = sorted(set(missing) | {item for row in structure["defects"] if row["dimension_owner"] == "findability_navigation" and row["code"] in {"HED", "SUB", "XRF"} and not row.get("high_priority_access_destroyed") for item in row["affected_item_ids"] if item.startswith(("TASK-", "SUBJ-", "TREAT-"))})
+    deep = [row["node_id"] for row in structure["candidate_denominator"]["nodes"] if len(row["heading_path"]) >= 3]
+    return [{"signal_id": name, "color": "yellow", "affected_evidence_ids": sorted(ids), "count": len(ids), "reason": reason, "individually_caps_or_gates": False}
+            for name, ids, reason in [
+                ("REVIEW-PARTIAL-FIT", partial, "Partial fits retain ordinary diagnostic and rating consequences; no cap or gate."),
+                ("REVIEW-MISSING-SUPPLEMENTAL-ROUTE", supplemental, "Supplemental route omissions remain scored; no individual cap or gate."),
+                ("REVIEW-HEADING-DEPTH", deep, "Third-level headings prompt review only.")]
+            if ids]
 
 
 def _projection_metadata(
@@ -1988,6 +2061,8 @@ def _projection_metadata(
         "inclusion_policy": "Frozen current-V8 source scope and candidate-blind benchmark.",
         "uncertainty_policy": policy["audit_design"]["uncertainty_policy"],
         "critical_gates": gates,
+        "evaluation_validity": _evaluation_validity(policy, structure, calculation),
+        "review_signals": _review_signals(structure, calculation),
         "report_id": f"{calculation['evaluation_id']}-v8",
         "headline": "Subject-index evaluation",
         "summary": "Current-V8 source-grounded evaluation from validated registered artifacts.",
@@ -2043,6 +2118,8 @@ def _evaluation_result(
         "structure_audit": _structure_reference(structure_record),
         "projection_metadata": {"schema_version": metadata["schema_version"], "artifact_path": metadata_record["path"], "sha256": metadata_record["sha256"], "projection_metadata_sha256": metadata["projection_metadata_sha256"]},
         "critical_gates": deepcopy(metadata["critical_gates"]),
+        "evaluation_validity": deepcopy(metadata["evaluation_validity"]),
+        "review_signals": deepcopy(metadata["review_signals"]),
         "defect_counts": deepcopy(metadata["defect_counts"]),
         "comparison_key": {
             "source_sha256": identity["source_sha256"],
@@ -2124,6 +2201,8 @@ def _web_report(
         "locator_explanations": [web_projection.public_locator_explanation(item) for item in items["locator_assessments"]],
         "heading_access_causal_provenance": deepcopy(items["heading_access_causal_provenance"]),
         "score_views": {"primary_view_id": "canonical_as_delivered", "adjustment_status": "none", "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "score": calculation["overall_percentage"], "maximum": 100, "calculation": calculation_ref, "structure_audit": structure_ref, "causal_attribution": "primary_observed_result", "provenance_artifacts": []}]},
+        "evaluation_validity": deepcopy(result["evaluation_validity"]),
+        "review_signals": deepcopy(result["review_signals"]),
         "methodology": {
             "rubric_version": calculation["rubric_version"],
             "calculation_profile": calculation["calculation_profile"],

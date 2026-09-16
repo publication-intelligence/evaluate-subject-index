@@ -14,7 +14,7 @@ from schema_validation import schema_errors
 
 
 POLICY_SCHEMA = "subject-index-evaluation-policy-v4"
-POLICY_PROFILE = "subject-index-standard-policy-v8"
+POLICY_PROFILE = "subject-index-standard-policy-v8.1"
 
 DEFAULT_INCLUDED = [
     "preparation-approved indexable content",
@@ -124,19 +124,16 @@ DENSITY_METRICS = [
 ]
 
 CRITICAL_GATES = [
-    ("GATE-SCOPE-LOCATOR", "fabricated, nonexistent, or out-of-scope locator"),
-    ("GATE-SYSTEMIC-UNSUPPORTED", "systematic incidental or unsupported locator pattern"),
-    ("GATE-CENTRAL-OMISSION", "central subject or conclusion materially omitted"),
-    ("GATE-STANCE", "heading reverses or seriously misrepresents source stance"),
-    ("GATE-COMPOUND", "compound heading locators support only separate components"),
-    ("GATE-SEE-SUBSTITUTION", "see source replaces a warranted substantive entry"),
-    ("GATE-CROSS-REFERENCE", "unresolved, self-referential, circular, or chained cross-reference"),
-    ("GATE-DEPTH", "third-level heading"),
-    ("GATE-CLUTTER", "systematic named-entity, example, or citation clutter"),
-    ("GATE-GROUNDING", "critical or major unresolved grounding"),
-    ("GATE-UNINSPECTABLE", "more than 1% of in-scope locator assignments uninspectable without a frozen alternative tolerance"),
-    ("GATE-SOURCE-SPAN", "wrong source span"),
-    ("GATE-STRUCTURE", "structurally invalid or incomplete output"),
+    ("GATE-SCOPE-LOCATOR", "Major/critical misleading or blocking delivered fabricated, nonexistent, or out-of-scope locator with severe mismatch/no fit"),
+    ("GATE-SYSTEMIC-UNSUPPORTED", "Delivered severe/no-fit locator pattern: >=10 distinct items, >=5% of denominator, >=2 sections spanning >=25% of source or structure"),
+    ("GATE-CENTRAL-OMISSION", "Critical central omission or major omission demonstrably destroying high-priority access"),
+    ("GATE-STANCE", "Major/critical materially misleading reversal or misrepresentation of source stance or relationship"),
+    ("GATE-COMPOUND", "Major/critical misleading or blocking compound heading supported by delivered severe-mismatch/no-fit locator evidence"),
+    ("GATE-SEE-SUBSTITUTION", "Major/critical delivered substitutive see blocks warranted substantive access"),
+    ("GATE-CROSS-REFERENCE", "Delivered broken reference with major/critical blocking or misleading consequence, or frozen systemic threshold; missing warranted routes excluded"),
+    ("GATE-CLUTTER", "One clutter root cause: >=10 distinct items, >=5% of applicable population, >=2 sections spanning >=25% of source or structure"),
+    ("GATE-GROUNDING", "Major/critical delivered severe-mismatch/no-fit locator materially misleads or blocks; stance, compound, and invalid destination gates own their specific evidence"),
+    ("GATE-STRUCTURE", "True candidate-output structural failure: critical representation/mechanical corruption, or empty, incomplete, unparseable candidate output"),
 ]
 
 
@@ -186,6 +183,7 @@ def build_policy(source: dict[str, Any]) -> dict[str, Any]:
         "policy_id": source.get("policy_id") or "subject-index-policy",
         "policy_profile": {
             "id": POLICY_PROFILE,
+            "consequence_policy_reference": "consequence-policy-v8.1.md",
         },
         "source_scope": {
             "source_sha256": scope["source_sha256"],

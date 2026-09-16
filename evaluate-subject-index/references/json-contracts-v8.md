@@ -1,5 +1,7 @@
 # Current V8 JSON contracts
 
+Current methodology: **V8.1**. Read [Consequence policy and targeted migration](consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+
 The active workflow uses these primary identities:
 
 | Artifact | Schema identity |

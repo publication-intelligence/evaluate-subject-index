@@ -318,7 +318,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
             "updated_at": "2026-01-01T00:00:00Z",
             "source": {"title": "Synthetic source", "filename": "synthetic.pdf", "sha256": SOURCE_SHA, "document_page_span": [1, 1]},
             "candidate": {"candidate_id": candidate["candidate_id"], "candidate_sha256": CANDIDATE_SHA, "schema_version": "candidate-index-v2", "normalized_path": candidate_record["path"], "normalized_sha256": candidate_record["sha256"], "item_inventory_path": next(item["path"] for item in records if item["artifact_type"] == "item_inventory"), "benchmark_path": next(item["path"] for item in records if item["stage"] == "benchmark_freeze"), "benchmark_sha256": BENCHMARK_SHA},
-            "configuration": {"audit_mode": "full", "index_type": "subject_index", "intended_readership": "general", "readership_provenance": {"basis": "inferred", "confidence": "high", "rationale": "Synthetic fixture."}, "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8", "rubric_version": "subject-index-rubric-v8", "scoring_identity": {"rubric_version": "subject-index-rubric-v8", "dimension_calculation_profile": "subject-index-dimension-calculation-v5"}},
+            "configuration": {"audit_mode": "full", "index_type": "subject_index", "intended_readership": "general", "readership_provenance": {"basis": "inferred", "confidence": "high", "rationale": "Synthetic fixture."}, "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8.1", "rubric_version": "subject-index-rubric-v8.1", "scoring_identity": {"rubric_version": "subject-index-rubric-v8.1", "dimension_calculation_profile": "subject-index-dimension-calculation-v6"}},
             "stages": {stage: {"status": "completed" if STAGES_INDEX[stage] <= STAGES_INDEX["missing_access_audit"] else "not_started", "updated_at": "2026-01-01T00:00:00Z" if STAGES_INDEX[stage] <= STAGES_INDEX["missing_access_audit"] else None, "notes": []} for stage in state_cli.STAGES},
             "artifacts": sorted(records, key=lambda item: item["path"]),
             "blockers": [],
@@ -414,7 +414,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         concept_dimension = next(item for item in calculations["dimensions"] if item["dimension_id"] == "conceptual_stance_fidelity")
         localized_cap = next(item for item in concept_dimension["cap_evaluations"] if item["cap_id"] == "concept.localized_major_defect")
         self.assertTrue(localized_cap["triggered"])
-        self.assertEqual(["DEFECT-001"], localized_cap["affected_evidence_ids"])
+        self.assertEqual(["DEFECT-001", "NODE-001"], localized_cap["affected_evidence_ids"])
 
     def test_standalone_preflight_accepts_native_v6_and_preserves_validation(self) -> None:
         registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
@@ -896,11 +896,13 @@ class PresentationCalculationBasisTests(unittest.TestCase):
             "applied_cap": {"cap_id": "findability.example", "maximum_percentage": 60, "affected_evidence_ids": []},
         }
 
+        dimension["cap_evaluations"] = [dict(dimension["applied_cap"], triggered=True, threshold={"severity": "major"}, observed={"defect_count": 1})]
         lines = dimensions._presentation_calculation_basis(dimension)
 
         self.assertTrue(any("Canonical weighted combination" in line["equation"] for line in lines))
         cap = next(line for line in lines if line["equation"].startswith("Applied cap"))
-        self.assertEqual("Canonical cap: findability.example.", cap["tooltip"])
+        self.assertIn("findability.example", cap["tooltip"])
+        self.assertIn("threshold", cap["tooltip"])
         self.assertIn("85%", cap["equation"])
         self.assertIn("60%", cap["equation"])
         for line in lines:

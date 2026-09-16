@@ -15,7 +15,7 @@ from schema_validation import schema_errors
 from structure_audit import StructureAuditError, materialize_structure_records
 
 
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v5"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v6"
 INPUT_SCHEMA = "subject-index-dimension-calculation-input-v2"
 
 WEIGHTS = {
@@ -1139,8 +1139,8 @@ def cap_record(
         "cap_id": cap_id,
         "maximum_percentage": displayed_number(maximum),
         "triggered": bool(triggered),
-        "threshold": threshold,
-        "observed": observed,
+        "threshold": deepcopy(threshold),
+        "observed": deepcopy(observed),
         "affected_evidence_ids": sorted({item for item in evidence_ids if isinstance(item, str) and item}),
     }
 
@@ -1243,7 +1243,81 @@ def defect_subset(ledgers: dict[str, Any], owner: str, *, severities: set[str] |
         result = [item for item in result if item.get("defect_kind") in kinds]
     if codes is not None:
         result = [item for item in result if item.get("code") in codes]
-    return result
+    return [item for item in result if not partial_fit_only(item, ledgers.get("locators", []))]
+
+
+def partial_fit_only(defect, locators):
+    ids = set(defect.get("affected_item_ids", []))
+    linked = [row for row in locators if row.get("locator_id") in ids or row.get("path_id") in ids]
+    return bool(linked) and all(row.get("complete_path_fit", row.get("fit_category")) == "material_partial_fit" for row in linked)
+
+
+def has_partial_fit(defect, locators):
+    ids = set(defect.get("affected_item_ids", []))
+    return any((row.get("locator_id") in ids or row.get("path_id") in ids) and row.get("complete_path_fit", row.get("fit_category")) == "material_partial_fit" for row in locators)
+
+
+def material_consequence(defect: dict[str, Any]) -> bool:
+    return (defect.get("severity") in {"major", "critical"}
+            and defect.get("retrieval_consequence") in {"blocks", "misleads"}
+            and defect.get("severity_basis") in VALID_SEVERITY_BASES[defect["severity"]])
+
+
+def delivered_bad_locators(defect: dict[str, Any], locators: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Resolve delivered evidence; partial fits can never establish a ceiling."""
+    affected = set(defect.get("affected_item_ids", []))
+    return [row for row in locators
+            if (row.get("locator_id") in affected or row.get("path_id") in affected)
+            and row.get("complete_path_fit", row.get("fit_category")) in {"severe_mismatch", "no_fit"}
+            and row.get("severity", row.get("locator_severity")) in {"major", "critical"}]
+
+
+def systemic_defect_groups(defects: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Frozen V8.1 threshold: 10 items, 5%, and 25% of >=2 sections.
+
+    Union IDs within a root cause and denominator family; never sum duplicates
+    or mix locator, subject, node, and reference populations.
+    """
+    groups: dict[tuple, list] = defaultdict(list)
+    for defect in defects:
+        ids = defect.get("affected_item_ids", [])
+        families = {item.split("-", 1)[0] for item in ids}
+        if len(families) == 1 and defect.get("root_cause_family"):
+            groups[(defect["root_cause_family"], next(iter(families)), defect.get("applicable_count", 0))].append(defect)
+    results = []
+    for (root, family, denominator), rows in sorted(groups.items()):
+        ids = sorted({item for row in rows for item in row["affected_item_ids"]})
+        source = {item for row in rows for item in row.get("affected_source_sections", [])}
+        structural = {item for row in rows for item in row.get("affected_structural_sections", [])}
+        source_den = max(row.get("source_section_denominator", 0) for row in rows)
+        struct_den = max(row.get("structural_section_denominator", 0) for row in rows)
+        spread = ((len(source) >= 2 and rate(len(source), source_den) >= Decimal("0.25"))
+                  or (len(structural) >= 2 and rate(len(structural), struct_den) >= Decimal("0.25")))
+        if len(ids) >= 10 and rate(len(ids), denominator) >= Decimal("0.05") and spread:
+            results.append({"root_cause_family": root, "item_family": family,
+                            "affected_count": len(ids), "applicable_count": denominator,
+                            "affected_rate": decimal_text(rate(len(ids), denominator)),
+                            "source_section_count": len(source), "source_section_denominator": source_den,
+                            "source_section_rate": decimal_text(rate(len(source), source_den)),
+                            "structural_section_count": len(structural), "structural_section_denominator": struct_den,
+                            "structural_section_rate": decimal_text(rate(len(structural), struct_den)),
+                            "affected_evidence_ids": ids, "defect_ids": sorted(row["defect_id"] for row in rows)})
+    return results
+
+
+def navigation_cap_defects(ledgers: dict[str, Any]) -> list[dict[str, Any]]:
+    delivered = {row["reference_id"] for row in ledgers["references"] if row.get("judgment") == "unsupported"}
+    nodes = {row["node_id"] for row in ledgers["nodes"]}
+    eligible = []
+    for defect in ledgers["defects"]:
+        if defect.get("dimension_owner") != "findability_navigation" or not material_consequence(defect):
+            continue
+        ids = set(defect["affected_item_ids"])
+        # NODE attachments alone do not prove a delivered destructive route.
+        delivered_route = bool(ids & delivered) or (bool(ids & nodes) and defect["defect_kind"] == "substitutive_see")
+        if defect.get("high_priority_access_destroyed") or delivered_route or delivered_bad_locators(defect, ledgers["locators"]):
+            eligible.append(defect)
+    return eligible
 
 
 def essential_cap(missing: int, denominator: int) -> tuple[Decimal, str]:
@@ -1522,7 +1596,7 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         central_base = HUNDRED * credit / Decimal(len(measured)) if measured else ZERO
     lower_base = HUNDRED * credit / Decimal(len(measured) + len(uninspectable) + len(not_measured)) if applicable else ZERO
     upper_base = HUNDRED * (credit + Decimal(len(uninspectable) + len(not_measured))) / Decimal(applicable) if applicable else ZERO
-    zero_measured = [item for item in measured if SELECTIVITY_CREDIT[item["treatment_class"]] == 0]
+    zero_measured = [item for item in measured if SELECTIVITY_CREDIT[item["treatment_class"]] == 0 and item.get("complete_path_fit") != "material_partial_fit"]
     unit_total = max(1, len(ledgers["source_units"]))
 
     def caps(zero_count: int, denom: int, units: set[str], evidence_ids: Sequence[str]) -> list[dict[str, Any]]:
@@ -1634,8 +1708,8 @@ def prevalence_caps(prefix: str, major_fail: int, denominator: int, evidence_ids
         records.append(cap_record(
             f"{prefix}.prevalence_at_least_{decimal_text(threshold)}",
             maximum,
-            denominator > 0 and observed_rate >= threshold,
-            {"operator": ">=", "rate": decimal_text(threshold)},
+            major_fail >= 10 and denominator > 0 and observed_rate >= threshold,
+            {"minimum_count": 10, "operator": ">=", "rate": decimal_text(threshold)},
             {"affected_count": major_fail, "applicable_count": denominator, "rate": decimal_text(observed_rate)},
             evidence_ids,
         ))
@@ -1701,7 +1775,7 @@ def high_value_cap(found: int, denominator: int) -> tuple[Decimal, bool, str]:
 def reliability_pattern_cap(pattern_count: int, denominator: int, affected_units: int, unit_denominator: int) -> tuple[Decimal, bool, str]:
     value = rate(pattern_count, denominator)
     distributed = unit_denominator > 0 and rate(affected_units, unit_denominator) >= Decimal("0.25")
-    if not distributed or value < Decimal("0.01"):
+    if pattern_count < 3 or not distributed or value < Decimal("0.01"):
         return HUNDRED, False, "below_1_percent_or_not_distributed"
     if value < Decimal("0.03"):
         return Decimal(90), True, "1_to_below_3_percent"
@@ -1719,109 +1793,10 @@ def f1(precision: Decimal, recall: Decimal) -> Decimal:
 
 
 def calculate_reliability(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
-    measured_locators = [item for item in ledgers["locators"] if item.get("judgment") in {"supported", "partially_supported", "unsupported"}]
-    uninspectable_locators = [item for item in ledgers["locators"] if item.get("judgment") == "uninspectable"]
-    locator_not_measured = ledgers["locator_not_measured"]
-    precision_denom = component_denominators("keep_precision", ledgers["locator_original"], ledgers["locator_original"], len(measured_locators), len(uninspectable_locators), len(locator_not_measured), {})
-    measured_treatments = [item for item in ledgers["treatments"] if item.get("status") in {"found", "missed"}]
-    uninspectable_treatments = [item for item in ledgers["treatments"] if item.get("status") == "uninspectable"]
-    explicit_treatment_not_measured_records = [item for item in ledgers["treatments"] if item.get("status") is None]
-    explicit_treatment_not_measured = [item["treatment_id"] for item in explicit_treatment_not_measured_records]
-    treatment_not_measured = ledgers["treatment_not_measured"] + explicit_treatment_not_measured
-    recall_denom = component_denominators("expected_treatment_recall", ledgers["treatment_original"], ledgers["treatment_original"], len(measured_treatments), len(uninspectable_treatments), len(treatment_not_measured), {})
-    supported = sum(item["judgment"] == "supported" for item in measured_locators)
-    found = sum(item["status"] == "found" for item in measured_treatments)
-    p = rate(supported, len(measured_locators))
-    r = rate(found, len(measured_treatments))
-    unknown_loc = len(uninspectable_locators) + len(locator_not_measured)
-    unknown_treat = len(uninspectable_treatments) + len(treatment_not_measured)
-    p_lower = rate(supported, len(measured_locators) + unknown_loc)
-    p_upper = rate(supported + unknown_loc, len(measured_locators) + unknown_loc)
-    r_lower = rate(found, len(measured_treatments) + unknown_treat)
-    r_upper = rate(found + unknown_treat, len(measured_treatments) + unknown_treat)
-    expected_treatments = ledgers["treatment_original"]
-    no_locator_assignments = ledgers["locator_original"] == 0
-    attempt = ledgers["context"]["candidate_attempt"]["status"]
-    if expected_treatments > 0 and no_locator_assignments:
-        central_base = lower_base = upper_base = ZERO
-        mark_defined_zero(precision_denom, "expected_treatments_but_no_locator_assignments")
-    else:
-        central_base = HUNDRED * f1(p, r)
-        lower_base = HUNDRED * f1(p_lower, r_lower)
-        upper_base = HUNDRED * f1(p_upper, r_upper)
-    if attempt in {"empty", "structurally_incomplete", "unparseable"}:
-        central_base = lower_base = upper_base = ZERO
-        for component in (precision_denom, recall_denom):
-            mark_defined_zero(component, f"candidate_attempt:{attempt}", non_attempt=True)
-    high_measured = [item for item in measured_treatments if item.get("locator_class") in {"principal", "synthesis_or_conclusion"}]
-    high_unknown = [item for item in uninspectable_treatments if item.get("locator_class") in {"principal", "synthesis_or_conclusion"}]
-    high_not_measured_ids = [
-        item["treatment_id"]
-        for item in explicit_treatment_not_measured_records
-        if item.get("locator_class") in {"principal", "synthesis_or_conclusion"}
-    ] + ledgers["treatment_not_measured"]
-    high_found = sum(item["status"] == "found" for item in high_measured)
-    critical = defect_subset(ledgers, "page_reference_reliability", severities={"critical"}, kinds={"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"})
-    pattern = [item for item in measured_locators if item.get("judgment") == "unsupported" and set(item.get("error_codes", [])) & RELIABILITY_CODES]
-    pattern_units = {item.get("_source_unit_id") for item in pattern if item.get("_source_unit_id")}
-    unknown_locator_units = {
-        item.get("_source_unit_id") for item in uninspectable_locators if item.get("_source_unit_id")
-    } | {item for item in ledgers["locator_not_measured_units"] if item}
-    unit_denominator = max(1, len(ledgers["source_units"]))
-
-    def caps(
-        high_found_value: int,
-        high_total: int,
-        pattern_count: int,
-        locator_total: int,
-        units: int,
-        high_miss_evidence: Sequence[str],
-        pattern_evidence: Sequence[str],
-    ) -> list[dict[str, Any]]:
-        high_max, high_triggered, high_band = high_value_cap(high_found_value, high_total)
-        pattern_max, pattern_triggered, pattern_band = reliability_pattern_cap(pattern_count, locator_total, units, unit_denominator)
-        return [
-            cap_record("reliability.critical_locator", Decimal(40), bool(critical), {"severity": "critical", "defect_kinds": ["fabricated_locator", "nonexistent_locator", "out_of_scope_locator"]}, {"defect_count": len(critical)}, [item["defect_id"] for item in critical]),
-            cap_record("reliability.high_value_treatment_recall", high_max, high_triggered, {"table": "pooled_principal_and_synthesis_recall_v1", "band": high_band}, {"found": high_found_value, "expected": high_total, "rate": decimal_text(rate(high_found_value, high_total))}, high_miss_evidence),
-            cap_record("reliability.distributed_unsupported_pattern", pattern_max, pattern_triggered, {"minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band}, {"unsupported_count": pattern_count, "keep_precision_denominator": locator_total, "rate": decimal_text(rate(pattern_count, locator_total)), "affected_source_units": units, "source_unit_denominator": unit_denominator, "source_unit_rate": decimal_text(rate(units, unit_denominator))}, pattern_evidence),
-        ]
-
-    known_high_misses = [item["treatment_id"] for item in high_measured if item["status"] == "missed"]
-    known_pattern_ids = [item["locator_id"] for item in pattern]
-    central_caps = caps(high_found, len(high_measured), len(pattern), len(measured_locators), len(pattern_units), known_high_misses, known_pattern_ids)
-    lower_caps = caps(
-        high_found,
-        len(high_measured) + len(high_unknown) + len(high_not_measured_ids),
-        len(pattern) + unknown_loc,
-        len(measured_locators) + unknown_loc,
-        len(pattern_units | unknown_locator_units),
-        known_high_misses + [item["treatment_id"] for item in high_unknown] + high_not_measured_ids,
-        known_pattern_ids + [item["locator_id"] for item in uninspectable_locators] + locator_not_measured,
-    )
-    upper_caps = caps(
-        high_found + len(high_unknown) + len(high_not_measured_ids),
-        len(high_measured) + len(high_unknown) + len(high_not_measured_ids),
-        len(pattern),
-        len(measured_locators) + unknown_loc,
-        len(pattern_units),
-        known_high_misses,
-        known_pattern_ids,
-    )
-    result = finish_dimension("page_reference_reliability", [precision_denom, recall_denom], central_base, lower_base, upper_base, central_caps, lower_caps, upper_caps, audit_mode)
-    result["input_roles"] = ["locator_audit", "missing_access_audit", "structure_audit"]
-    result["raw_status_counts"] = {
-        "locator_support": dict(Counter(item["judgment"] for item in ledgers["locators"])),
-        "treatment_recall": dict(Counter(item.get("status") or "not_measured" for item in ledgers["treatments"])),
-        "not_measured_locators": len(locator_not_measured),
-        "not_measured_treatments": len(treatment_not_measured),
-    }
-    result["credit_mappings"] = {"rating_credit": {"supported": "1", "partially_supported": "0", "unsupported": "0"}, "treatment_recall": {"found": "1", "missed": "0"}}
-    result["components"] = [
-        {"component_id": "keep_precision", "raw_numerator": decimal_text(Decimal(supported)), "raw_denominator": decimal_text(Decimal(len(measured_locators))), "normalized_value": decimal_text(p), "weight": "harmonic_mean", "effective_weight": "harmonic_mean", "weight_renormalized": False},
-        {"component_id": "expected_treatment_recall", "raw_numerator": decimal_text(Decimal(found)), "raw_denominator": decimal_text(Decimal(len(measured_treatments))), "normalized_value": decimal_text(r), "weight": "harmonic_mean", "effective_weight": "harmonic_mean", "weight_renormalized": False},
-        {"component_id": "high_value_treatment_recall_safeguard", "raw_numerator": decimal_text(Decimal(high_found)), "raw_denominator": decimal_text(Decimal(len(high_measured))), "normalized_value": decimal_text(rate(high_found, len(high_measured))), "weight": "cap_only", "effective_weight": "cap_only", "weight_renormalized": False},
-    ]
-    return result
+    # One active algorithm; the historical duplicate implementation is
+    # available from the frozen V8 Git release, never under the V8.1 identity.
+    from dimension_score_v8_cli import calculate_reliability as current_reliability
+    return current_reliability(ledgers, audit_mode)
 
 
 def mean_credit(values: Sequence[Decimal]) -> Decimal:
@@ -1947,18 +1922,18 @@ def task_component(
 def reference_rate_caps(unsupported: int, denominator: int, evidence_ids: list[str]) -> list[dict[str, Any]]:
     value = rate(unsupported, denominator)
     return [
-        cap_record("findability.reference_unsupported_10_percent", Decimal(80), unsupported >= 2 and value >= Decimal("0.10"), {"minimum_count": 2, "operator": ">=", "rate": "0.10"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.reference_unsupported_25_percent", Decimal(60), unsupported >= 2 and value >= Decimal("0.25"), {"minimum_count": 2, "operator": ">=", "rate": "0.25"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.reference_unsupported_50_percent", Decimal(40), unsupported >= 3 and value >= Decimal("0.50"), {"minimum_count": 3, "operator": ">=", "rate": "0.50"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.reference_unsupported_10_percent", Decimal(80), unsupported >= 10 and value >= Decimal("0.10"), {"minimum_count": 10, "operator": ">=", "rate": "0.10"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.reference_unsupported_25_percent", Decimal(60), unsupported >= 10 and value >= Decimal("0.25"), {"minimum_count": 10, "operator": ">=", "rate": "0.25"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.reference_unsupported_50_percent", Decimal(40), unsupported >= 10 and value >= Decimal("0.50"), {"minimum_count": 10, "operator": ">=", "rate": "0.50"}, {"unsupported": unsupported, "denominator": denominator, "rate": decimal_text(value)}, evidence_ids),
     ]
 
 
 def task_failure_caps(failures: int, denominator: int, evidence_ids: Sequence[str]) -> list[dict[str, Any]]:
     value = rate(failures, denominator)
     return [
-        cap_record("findability.task_failure_10_percent", Decimal(80), denominator > 0 and value >= Decimal("0.10"), {"operator": ">=", "rate": "0.10"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.task_failure_25_percent", Decimal(60), denominator > 0 and value >= Decimal("0.25"), {"operator": ">=", "rate": "0.25"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
-        cap_record("findability.task_failure_50_percent", Decimal(40), denominator > 0 and value >= Decimal("0.50"), {"operator": ">=", "rate": "0.50"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.task_failure_10_percent", Decimal(80), failures >= 10 and denominator > 0 and value >= Decimal("0.10"), {"minimum_count": 10, "operator": ">=", "rate": "0.10"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.task_failure_25_percent", Decimal(60), failures >= 10 and denominator > 0 and value >= Decimal("0.25"), {"minimum_count": 10, "operator": ">=", "rate": "0.25"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
+        cap_record("findability.task_failure_50_percent", Decimal(40), failures >= 10 and denominator > 0 and value >= Decimal("0.50"), {"minimum_count": 10, "operator": ">=", "rate": "0.50"}, {"failures": failures, "eligible_tasks": denominator, "rate": decimal_text(value)}, evidence_ids),
     ]
 
 
@@ -2010,9 +1985,12 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         central_base = HUNDRED * (weights[0] * task_central + weights[1] * arch_central + weights[2] * ref_central)
         lower_base = HUNDRED * (weights[0] * task_lower + weights[1] * arch_lower + weights[2] * ref_lower)
         upper_base = HUNDRED * (weights[0] * task_upper + weights[1] * arch_upper + weights[2] * ref_upper)
-    nav_critical = defect_subset(ledgers, "findability_navigation", severities={"critical"})
-    nav_major = defect_subset(ledgers, "findability_navigation", severities={"major"})
-    destructive = [item for item in nav_major if item.get("defect_kind") in {"substitutive_see", "circular_or_chained_reference", "misleading_access_route"} and item.get("high_priority_access_destroyed")]
+    eligible_navigation = navigation_cap_defects(ledgers)
+    systemic_navigation = systemic_defect_groups([row for row in ledgers["defects"] if row["dimension_owner"] == "findability_navigation" and not has_partial_fit(row, ledgers["locators"])])
+    systemic_navigation_ids = [item for group in systemic_navigation for item in group["defect_ids"]]
+    nav_critical = [row for row in eligible_navigation if row["severity"] == "critical"]
+    nav_major = [row for row in eligible_navigation if row["severity"] == "major"]
+    destructive = [item for item in nav_major if item.get("high_priority_access_destroyed")]
     eligible_failures = [item for item in eligible_tasks if item.get("result") == "fails"]
     arch_major_fail = [item for item in architecture if item["_status"] in {"major_issues", "fails"}]
     unsupported_refs = [item for item in refs_measured if item.get("judgment") == "unsupported"]
@@ -2030,8 +2008,9 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     ) -> list[dict[str, Any]]:
         return [
             cap_record("findability.critical_navigation", Decimal(40), bool(nav_critical), {"severity": "critical"}, {"defect_count": len(nav_critical)}, [item["defect_id"] for item in nav_critical]),
-            cap_record("findability.localized_major_navigation", Decimal(90), bool(nav_major), {"severity": "major"}, {"defect_count": len(nav_major)}, [item["defect_id"] for item in nav_major]),
+            cap_record("findability.localized_major_navigation", Decimal(90), bool(nav_major), {"severity": "major", "consequence": "delivered misleading/destructive route or destroyed high-priority access"}, {"defect_count": len(nav_major)}, [item["defect_id"] for item in nav_major]),
             cap_record("findability.destructive_access_route", Decimal(70), bool(destructive), {"severity": "major", "high_priority_access_destroyed": True}, {"defect_count": len(destructive)}, [item["defect_id"] for item in destructive]),
+            cap_record("findability.systemic_access_failure", Decimal(80), bool(systemic_navigation), {"minimum_count": 10, "minimum_rate": "0.05", "minimum_sections": 2, "minimum_section_rate": "0.25"}, {"groups": systemic_navigation}, systemic_navigation_ids),
             *task_failure_caps(task_failures, task_total, task_evidence),
             *prevalence_caps("findability.architecture", architecture_bad, architecture_total, list(architecture_evidence), ((Decimal("0.05"), Decimal(80)), (Decimal("0.15"), Decimal(60)), (Decimal("0.30"), Decimal(40)))),
             *reference_rate_caps(ref_bad, ref_total, list(reference_evidence)),
@@ -2103,8 +2082,8 @@ def mechanics_aggregate_caps(affected: int, denominator: int, evidence_ids: Sequ
     affected_rate = rate(affected, denominator)
     observed = {"affected_count": affected, "node_denominator": denominator, "rate": decimal_text(affected_rate)}
     return [
-        cap_record("mechanics.aggregate_cosmetic_minor_5_percent", Decimal(90), denominator > 0 and affected_rate >= Decimal("0.05"), {"operator": ">=", "rate": "0.05"}, observed, evidence_ids),
-        cap_record("mechanics.aggregate_cosmetic_minor_20_percent", Decimal(80), denominator > 0 and affected_rate >= Decimal("0.20"), {"operator": ">=", "rate": "0.20"}, observed, evidence_ids),
+        cap_record("mechanics.aggregate_cosmetic_minor_5_percent", Decimal(90), affected >= 3 and denominator > 0 and affected_rate >= Decimal("0.05"), {"minimum_count": 3, "operator": ">=", "rate": "0.05"}, observed, evidence_ids),
+        cap_record("mechanics.aggregate_cosmetic_minor_20_percent", Decimal(80), affected >= 3 and denominator > 0 and affected_rate >= Decimal("0.20"), {"minimum_count": 3, "operator": ">=", "rate": "0.20"}, observed, evidence_ids),
     ]
 
 

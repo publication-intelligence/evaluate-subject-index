@@ -15,7 +15,7 @@
         "source_sha256": {"$ref": "#/$defs/sha256"},
         "judgment_policy_sha256": {"$ref": "#/$defs/sha256"},
         "benchmark_sha256": {"$ref": "#/$defs/sha256"},
-        "rubric_version": {"const": "subject-index-rubric-v8"},
+        "rubric_version": {"const": "subject-index-rubric-v8.1"},
         "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v4"}
       },
       "additionalProperties": true
@@ -43,7 +43,7 @@
         "inclusion_policy": {"type": "string"},
         "audit_mode": {"enum": ["full", "pilot"]},
         "uncertainty_policy": {"type": "string"},
-        "rubric_version": {"const": "subject-index-rubric-v8"},
+        "rubric_version": {"const": "subject-index-rubric-v8.1"},
         "dimension_calculation_profile": {"const": "subject-index-dimension-calculation-v4"}
       },
       "additionalProperties": true

@@ -19,6 +19,7 @@ def defect(defect_id: str, kind: str, affected_item_id: str, *, code: str = "XRF
         "defect_kind": kind,
         "severity": "major",
         "severity_basis": "blocked_retrieval",
+        "retrieval_consequence": "blocks",
         "dimension_owner": "findability_navigation",
         "affected_item_ids": [affected_item_id],
     }
@@ -68,9 +69,8 @@ class CriticalGateTests(unittest.TestCase):
             defects=[],
         )
 
-        self.assertFalse(shallow["GATE-DEPTH"]["triggered"])
-        self.assertTrue(deep["GATE-DEPTH"]["triggered"])
-        self.assertEqual([], deep["GATE-DEPTH"]["defect_ids"])
+        self.assertNotIn("GATE-DEPTH", shallow)
+        self.assertNotIn("GATE-DEPTH", deep)
 
     def test_cross_reference_gate_excludes_missing_warranted_route(self) -> None:
         outcomes = gate_outcomes(

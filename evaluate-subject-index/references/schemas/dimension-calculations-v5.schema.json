@@ -8,7 +8,7 @@
     "schema_version": {"const": "subject-index-dimension-calculations-v5"},
     "calculation_id": {"type": "string", "pattern": "^CALC-[A-F0-9]{12}$"},
     "evaluation_id": {"type": "string", "minLength": 1},
-    "rubric_version": {"const": "subject-index-rubric-v8"},
+    "rubric_version": {"const": "subject-index-rubric-v8.1"},
     "calculation_profile": {"const": "subject-index-dimension-calculation-v4"},
     "audit_mode": {"enum": ["full", "pilot"]},
     "status": {"enum": ["scored", "not_scored_insufficient_evidence"]},
