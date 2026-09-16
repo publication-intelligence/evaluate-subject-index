@@ -70,6 +70,37 @@ def locator_assessment() -> dict:
     return value
 
 
+class PublicScoringProjectionTests(unittest.TestCase):
+    def test_dimension_denominators_preserve_optional_subject_exclusions(self) -> None:
+        denominator = {
+            "component_id": "priority_weighted_subject_access",
+            "original": 90,
+            "applicable": 4,
+            "measured": 4,
+            "excluded": 86,
+            "uninspectable": 0,
+            "not_measured": 0,
+            "exclusion_reasons": {"optional_not_frozen_as_scored": 86},
+            "measurement_coverage": "1",
+            "small_denominator_exception": False,
+            "genuinely_inapplicable": False,
+            "zero_due_to_non_attempt": False,
+            "defined_zero_rule": None,
+            "provisionally_scoreable": True,
+        }
+        calculation = {"dimensions": [{
+            "dimension_id": "meaningful_coverage",
+            "denominators": {"components": [denominator]},
+        }]}
+
+        disclosures = web_projection.dimension_denominator_disclosures(calculation)
+
+        self.assertEqual([{
+            "dimension_id": "meaningful_coverage",
+            "components": [denominator],
+        }], disclosures)
+
+
 class CrossReferenceResolverTests(unittest.TestCase):
     def test_existing_em_dash_resolution_is_preserved(self) -> None:
         destination = target("REC-001", "PATH-001", "NODE-001")

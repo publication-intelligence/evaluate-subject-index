@@ -6,6 +6,7 @@ The report exposes:
 
 - evaluation identity and status;
 - six full-precision dimension percentages and weighted contributions;
+- canonical component denominator counts and exclusion reasons for each dimension;
 - final overall percentage and uncertainty where applicable;
 - gate outcomes;
 - item-level findings and evidence links;

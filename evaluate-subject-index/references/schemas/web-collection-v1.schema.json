@@ -13,5 +13,13 @@
     "collection_sha256": {"$ref": "#/$defs/hash"}
   },
   "additionalProperties": true,
+  "allOf": [{
+    "if": {"properties": {"collection_kind": {"const": "density"}}, "required": ["collection_kind"]},
+    "then": {
+      "required": ["fit_percentage"],
+      "properties": {"fit_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}},
+      "not": {"required": ["fit_rating"]}
+    }
+  }],
   "$defs": {"hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
 }

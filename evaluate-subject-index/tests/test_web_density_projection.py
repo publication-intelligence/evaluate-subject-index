@@ -34,7 +34,7 @@ class WebDensityProjectionTests(unittest.TestCase):
         self.assertEqual("80", density["items"][0]["canonical_fit_judgment"]["occurrence_fit_percentage"])
         self.assertEqual("measured", density["items"][0]["canonical_fit_judgment"]["status"])
         self.assertEqual("87.5", density["fit_percentage"])
-        self.assertEqual(4.375, density["fit_rating"])
+        self.assertNotIn("fit_rating", density)
         self.assertEqual(structure["density"]["targets"], density["targets"])
 
     def test_unmeasured_or_uncertain_fit_is_not_projected_as_failure(self) -> None:
@@ -50,7 +50,8 @@ class WebDensityProjectionTests(unittest.TestCase):
         self.assertIsNone(judgment["combined"])
         self.assertEqual("uncertain", judgment["status"])
         self.assertNotIn("outside_one_or_more_acceptable_bands", judgment.values())
-        self.assertIsNone(density["fit_rating"])
+        self.assertIsNone(density["fit_percentage"])
+        self.assertNotIn("fit_rating", density)
 
     @staticmethod
     def calculated(chunk_id, path_rate, occurrence_rate, path_fit, occurrence_fit, unit_fit) -> dict:

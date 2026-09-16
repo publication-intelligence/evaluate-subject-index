@@ -1217,6 +1217,7 @@ def _validate_complete_web_bundle(
     output: Path,
     bundle_output: Path,
     current_inputs: Sequence[Mapping[str, Any]],
+    calculation: Mapping[str, Any],
 ) -> None:
     """Validate the registered web bundle and require an exact managed target set."""
     registered = [deepcopy(item) for item in state["artifacts"] if item.get("stage") == "web_report"]
@@ -1252,11 +1253,27 @@ def _validate_complete_web_bundle(
         core.require(actual == record["sha256"], "registered_artifact_hash_mismatch", f"Registered artifact bytes changed: {relative}", {"expected_sha256": record["sha256"], "actual_sha256": actual})
         artifact_type = record["artifact_type"]
         document = core.load_json(path, record["schema_version"])
-        core.validate_schema_document(document, schema_names[artifact_type], record["schema_version"])
+        if artifact_type != "web_report":
+            if artifact_type not in {"web_projection", "web_density"}:
+                core.validate_schema_document(document, schema_names[artifact_type], record["schema_version"])
         documents[artifact_type] = document
 
     report = documents["web_report"]
     projection = documents["web_projection"]
+    expected_scorecard = _scorecard(calculation)
+    dimension_denominators = web_projection.dimension_denominator_disclosures(calculation)
+    core.require(report.get("scorecard") == expected_scorecard, "replacement_bundle_identity_mismatch", "Registered web report scorecard differs from the current canonical calculation.")
+    try:
+        core.validate_schema_document(report, "web-report-v10.schema.json", report["schema_version"])
+    except core.CalculationError:
+        core.require(
+            "dimension_denominators" not in report.get("calculation_explainer", {}),
+            "invalid_legacy_web_report",
+            "Legacy web report compatibility permits only the missing denominator disclosure.",
+        )
+        normalized_report = deepcopy(report)
+        normalized_report["calculation_explainer"]["dimension_denominators"] = deepcopy(dimension_denominators)
+        core.validate_schema_document(normalized_report, "web-report-v10.schema.json", "Legacy web report shape")
     registered_by_type = {item["artifact_type"]: item for item in registered}
     input_by_type = {item["artifact_type"]: item for item in current_inputs}
     core.require(
@@ -1294,7 +1311,13 @@ def _validate_complete_web_bundle(
         for row in projection["collections"]
     }
     core.require(projection["evaluation_id"] == state["evaluation_id"], "replacement_bundle_identity_mismatch", "Registered web projection evaluation identity differs from canonical state.")
-    web_projection.validate_bundle(projection, collections)
+    web_projection.validate_bundle(
+        projection,
+        collections,
+        allow_legacy_display=True,
+        canonical_scorecard=expected_scorecard,
+        dimension_denominators=dimension_denominators,
+    )
     provenance = {item["artifact_path"]: item["sha256"] for item in projection["provenance"]["source_artifacts"]}
     required_bindings = [*current_inputs, registered_by_path[portable_relative_path(output, state_path.parent)]]
     core.require(
@@ -2076,7 +2099,12 @@ def _web_report(
         "summary": metadata["summary"],
         "grade": {"score": calculation["overall_percentage"], "maximum": 100, "label": _grade_label(calculation["overall_percentage"])},
         "scorecard": _scorecard(calculation),
-        "calculation_explainer": {**calculation_ref, "item_grades_used": False, "gates_used": False},
+        "calculation_explainer": {
+            **calculation_ref,
+            "item_grades_used": False,
+            "gates_used": False,
+            "dimension_denominators": web_projection.dimension_denominator_disclosures(calculation),
+        },
         "presentation_summary": _presentation_summary(
             calculation=calculation,
             calculation_record=calculation_record,
@@ -2363,7 +2391,7 @@ def command_build_report_state(args: argparse.Namespace) -> None:
                 current_inputs = [result_record, calculation_record, items_record, structure_record, candidate_record, inventory_record, benchmark_record, manifest_record, *[item[1] for item in missing_entries]]
                 if overlay_record is not None:
                     current_inputs.append(overlay_record)
-                _validate_complete_web_bundle(state, state_path, records, output, bundle_output, current_inputs)
+                _validate_complete_web_bundle(state, state_path, records, output, bundle_output, current_inputs, calculation)
                 updated = _replace_records_and_complete(state, state_path, "web_report", records, "Rebuilt and replaced the complete canonical public web projection bundle atomically.")
             else:
                 updated = _add_records_and_complete(state, state_path, "web_report", records, "Built and registered web-report.v10 and the complete canonical public web projection bundle atomically.")

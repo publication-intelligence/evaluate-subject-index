@@ -57,6 +57,16 @@ def _projection_limitations(result: Mapping[str, Any]) -> list[str]:
     return list(dict.fromkeys([*public_safe(deepcopy(result["limitations"])), *DISPLAY_CAUTIONS]))
 
 
+def dimension_denominator_disclosures(calculation: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "dimension_id": dimension["dimension_id"],
+            "components": deepcopy(dimension["denominators"]["components"]),
+        }
+        for dimension in calculation["dimensions"]
+    ]
+
+
 def _public_label(value: Any) -> str:
     return "not measured" if value is None else str(value).replace("_", " ")
 
@@ -395,7 +405,7 @@ def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any], cal
         })
     density = structure["density"]
     fit_percentage = component.get("percentage")
-    return collection("density", rows, "chunk manifest packet order", policy_status=density["policy_status"], measurement_level=density["measurement_level"], targets=deepcopy(density["targets"]), maximum_score_contribution=density["maximum_score_contribution"], fit_percentage=fit_percentage, fit_rating=None if fit_percentage is None else float(fit_percentage) / 20)
+    return collection("density", rows, "chunk manifest packet order", policy_status=density["policy_status"], measurement_level=density["measurement_level"], targets=deepcopy(density["targets"]), maximum_score_contribution=density["maximum_score_contribution"], fit_percentage=fit_percentage)
 
 
 def _artifact_binding(record: Mapping[str, Any]) -> dict[str, Any]:
@@ -418,7 +428,8 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     bindings = [{"collection_id": key, "artifact_path": COLLECTION_PATHS[key], "count": collections[key].get("affected_heading_count", collections[key].get("count", 0)), "content_sha256": collections[key].get("overlay_sha256", collections[key].get("collection_sha256")), "file_sha256": _file_hash(payloads[key])} for key in binding_order]
     gates = deepcopy(result["critical_gates"])
     readiness = {"status": "not_publication_ready" if any(row["triggered"] for row in gates) else "publication_ready", "triggered_gate_ids": [row["gate_id"] for row in gates if row["triggered"]]}
-    scorecard = [{"dimension_id": row["dimension_id"], "rating": float(row["dimension_percentage"]) / 20, "awarded_points": float(row["weighted_contribution"]), "maximum_points": row["weight"], "formula_id": row["formula_id"]} for row in report["scorecard"]]
+    scorecard = deepcopy(report["scorecard"])
+    dimension_denominators = deepcopy(report["calculation_explainer"]["dimension_denominators"])
     source_records = [benchmark_record, calculation_record, items_record, candidate_record, inventory_record, structure_record, manifest_record, result_record, report_record, *missing_records]
     if overlay_record is not None:
         source_records.append(overlay_record)
@@ -444,7 +455,7 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
         "projection_id": "OHFR-V8-WEB-" + hashlib.sha256(json.dumps({"evaluation_id": result["evaluation_id"], "result_sha256": result_record["sha256"]}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12].upper(),
         "projection_role": "deterministic_public_safe_display_projection", "evaluation_id": result["evaluation_id"],
         "view_selection": {"authoritative_view_id": "canonical_as_delivered", "primary_view_id": "canonical_as_delivered", "default_display_view_id": "canonical_as_delivered", "display_view_rationale": "The canonical as-delivered result is authoritative."},
-        "score_views": {"canonical_source_adjustment_status": report["score_views"]["adjustment_status"], "projection_adjustment_status": "confirmed_representation_adjustment_applied" if overlay_applicable else "not_applicable", "total_delta": 0, "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "role": "authoritative_primary_observation", "score": result["overall_percentage"], "maximum": 100, "scorecard": scorecard, "critical_gates": gates, "readiness": readiness, "provenance_artifacts": [_artifact_binding(result_record), _artifact_binding(report_record), _artifact_binding(calculation_record)]}]},
+        "score_views": {"canonical_source_adjustment_status": report["score_views"]["adjustment_status"], "projection_adjustment_status": "confirmed_representation_adjustment_applied" if overlay_applicable else "not_applicable", "total_delta": 0, "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "role": "authoritative_primary_observation", "score": result["overall_percentage"], "maximum": 100, "scorecard": scorecard, "dimension_denominators": dimension_denominators, "critical_gates": gates, "readiness": readiness, "provenance_artifacts": [_artifact_binding(result_record), _artifact_binding(report_record), _artifact_binding(calculation_record)]}]},
         "correction_outcomes": correction_outcomes,
         "item_summaries": {"observed": deepcopy(items["summary"])}, "collections": bindings,
         "provenance": {"source_artifacts": [_artifact_binding(row) for row in sorted(source_records, key=lambda row: row["path"])], "source_sha256": result["provenance"]["source_sha256"], "benchmark_sha256": result["provenance"]["benchmark_sha256"], "judgment_policy_sha256": result["provenance"]["judgment_policy_sha256"], "rubric_version": result["provenance"]["rubric_version"], "dimension_calculation_profile": result["provenance"]["dimension_calculation_profile"], "projection_metadata_sha256": result["projection_metadata"]["projection_metadata_sha256"], "calculation_sha256": result["dimension_calculations"]["calculation_sha256"], "missing_access_audit_set_sha256": items["evidence_identity"]["missing_access_audit_set_sha256"], "correction_overlay_sha256": overlay.get("overlay_sha256") if overlay_applicable else None},
@@ -456,15 +467,88 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     return projection, collections
 
 
-def validate_bundle(projection: Mapping[str, Any], collections: Mapping[str, Mapping[str, Any]]) -> None:
-    core.validate_schema_document(dict(projection), "web-projection-v1.schema.json", "Generated canonical web projection")
+def _validate_legacy_display_contract(
+    projection: Mapping[str, Any],
+    *,
+    canonical_scorecard: Sequence[Mapping[str, Any]],
+    dimension_denominators: Sequence[Mapping[str, Any]],
+) -> None:
+    views = projection.get("score_views", {}).get("views", [])
+    core.require(len(views) == 1, "invalid_legacy_projection", "Legacy projection must contain exactly one canonical score view.")
+    view = views[0]
+    core.require(
+        set(view) == {"view_id", "label", "view_kind", "role", "score", "maximum", "scorecard", "critical_gates", "readiness", "provenance_artifacts"},
+        "invalid_legacy_projection",
+        "Legacy projection score view has an unexpected shape.",
+    )
+    expected = [
+        {
+            "dimension_id": row["dimension_id"],
+            "rating": float(row["dimension_percentage"]) / 20,
+            "awarded_points": float(row["weighted_contribution"]),
+            "maximum_points": row["weight"],
+            "formula_id": row["formula_id"],
+        }
+        for row in canonical_scorecard
+    ]
+    actual = [
+        {
+            **row,
+            "rating": float(row["rating"]),
+            "awarded_points": float(row["awarded_points"]),
+            "maximum_points": float(row["maximum_points"]),
+        }
+        for row in view["scorecard"]
+    ]
+    core.require(
+        actual == expected,
+        "invalid_legacy_projection",
+        "Legacy projection score aliases do not reconstruct from the canonical report scorecard.",
+        {"expected": expected, "actual": view["scorecard"]},
+    )
+    normalized = deepcopy(projection)
+    normalized_view = normalized["score_views"]["views"][0]
+    normalized_view["scorecard"] = deepcopy(list(canonical_scorecard))
+    normalized_view["dimension_denominators"] = deepcopy(list(dimension_denominators))
+    normalized["projection_sha256"] = _self_hash(normalized, "projection_sha256")
+    core.validate_schema_document(normalized, "web-projection-v1.schema.json", "Legacy canonical web projection shape")
+
+
+def validate_bundle(
+    projection: Mapping[str, Any],
+    collections: Mapping[str, Mapping[str, Any]],
+    *,
+    allow_legacy_display: bool = False,
+    canonical_scorecard: Sequence[Mapping[str, Any]] = (),
+    dimension_denominators: Sequence[Mapping[str, Any]] = (),
+) -> None:
+    try:
+        core.validate_schema_document(dict(projection), "web-projection-v1.schema.json", "Generated canonical web projection")
+    except core.CalculationError:
+        if not allow_legacy_display:
+            raise
+        _validate_legacy_display_contract(
+            projection,
+            canonical_scorecard=canonical_scorecard,
+            dimension_denominators=dimension_denominators,
+        )
     core.require(projection["projection_sha256"] == _self_hash(projection, "projection_sha256"), "projection_self_hash_mismatch", "Projection self-hash does not reconstruct.")
     by_id = {row["collection_id"]: row for row in projection["collections"]}
     expected = {"index_records", "source_subjects", "density"} | ({"correction_overlay"} if "correction_overlay" in collections else set())
     core.require(set(by_id) == expected, "projection_collection_set_mismatch", "Projection collection bindings are incomplete or unexpected.")
     for key, value in collections.items():
         schema = "correction-overlay-v1.schema.json" if key == "correction_overlay" else "web-collection-v1.schema.json"
-        core.validate_schema_document(dict(value), schema, f"Generated {key} collection")
+        try:
+            core.validate_schema_document(dict(value), schema, f"Generated {key} collection")
+        except core.CalculationError:
+            if not allow_legacy_display or key != "density" or "fit_rating" not in value:
+                raise
+            expected_rating = None if value.get("fit_percentage") is None else float(value["fit_percentage"]) / 20
+            core.require(value["fit_rating"] == expected_rating, "invalid_legacy_projection", "Legacy density fit_rating does not reconstruct from fit_percentage.")
+            normalized_density = deepcopy(value)
+            del normalized_density["fit_rating"]
+            normalized_density["collection_sha256"] = _self_hash(normalized_density, "collection_sha256")
+            core.validate_schema_document(normalized_density, schema, "Legacy density collection shape")
         hash_field = "overlay_sha256" if key == "correction_overlay" else "collection_sha256"
         core.require(value[hash_field] == _self_hash(value, hash_field) == by_id[key]["content_sha256"], "projection_collection_hash_mismatch", f"{key} content hash does not reconstruct.")
         core.require(_file_hash(json_bytes(value)) == by_id[key]["file_sha256"], "projection_collection_file_hash_mismatch", f"{key} file hash does not reconstruct.")

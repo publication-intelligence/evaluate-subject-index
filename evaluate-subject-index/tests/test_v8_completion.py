@@ -579,8 +579,73 @@ class CurrentV8CompletionTests(unittest.TestCase):
         projection = json.loads((projection_root / "projection.v1.json").read_text())
         self.assertEqual({"index_records", "source_subjects", "density"}, {row["collection_id"] for row in projection["collections"]})
         self.assertEqual({"applicable": False, "overlay_included": False, "reason": "No confirmed registered correction overlay applies.", "affected_headings": 0, "character_replacements": 0}, projection["correction_outcomes"])
-        first_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
+        canonical_view = projection["score_views"]["views"][0]
+        self.assertEqual(report["scorecard"], canonical_view["scorecard"])
+        self.assertEqual(
+            report["calculation_explainer"]["dimension_denominators"],
+            canonical_view["dimension_denominators"],
+        )
+        self.assertTrue(all(isinstance(row["dimension_percentage"], str) for row in canonical_view["scorecard"]))
+        self.assertTrue(all(isinstance(row["weighted_contribution"], str) for row in canonical_view["scorecard"]))
+        density_projection = json.loads((projection_root / "data/density.v1.json").read_text())
+        self.assertNotIn("fit_rating", density_projection)
+        self.assertEqual(density_component["percentage"], density_projection["fit_percentage"])
+        legacy_projection = copy.deepcopy(projection)
+        legacy_score = legacy_projection["score_views"]["views"][0]["scorecard"][0]
+        legacy_score["rating"] = float(legacy_score.pop("dimension_percentage")) / 20
+        legacy_score["awarded_points"] = float(legacy_score.pop("weighted_contribution"))
+        legacy_score["maximum_points"] = legacy_score.pop("weight")
+        with self.assertRaises(core.CalculationError):
+            core.validate_schema_document(legacy_projection, "web-projection-v1.schema.json", "Legacy projection")
+        density_with_rating = copy.deepcopy(density_projection)
+        density_with_rating["fit_rating"] = float(density_with_rating["fit_percentage"]) / 20
+        with self.assertRaises(core.CalculationError):
+            core.validate_schema_document(density_with_rating, "web-collection-v1.schema.json", "Legacy density")
+        corrected_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
         scoring_bytes = {self.root / item["path"]: (self.root / item["path"]).read_bytes() for item in state["artifacts"] if item["stage"] == "scoring"}
+
+        legacy_report = copy.deepcopy(report)
+        del legacy_report["calculation_explainer"]["dimension_denominators"]
+        report_path = self.root / "scoring/web-report.v10.json"
+        report_path.write_bytes(dimensions._json_bytes(legacy_report))
+        legacy_density = copy.deepcopy(density_projection)
+        legacy_density["fit_rating"] = float(legacy_density["fit_percentage"]) / 20
+        legacy_density["collection_sha256"] = core.canonical_hash(legacy_density, "collection_sha256")
+        density_path = projection_root / "data/density.v1.json"
+        density_path.write_bytes(web_projection.json_bytes(legacy_density))
+        legacy_projection = copy.deepcopy(projection)
+        legacy_view = legacy_projection["score_views"]["views"][0]
+        del legacy_view["dimension_denominators"]
+        legacy_view["scorecard"] = [{
+            "dimension_id": row["dimension_id"],
+            "rating": float(row["dimension_percentage"]) / 20,
+            "awarded_points": float(row["weighted_contribution"]),
+            "maximum_points": row["weight"],
+            "formula_id": row["formula_id"],
+        } for row in report["scorecard"]]
+        registered = {row["artifact_type"]: row for row in state["artifacts"] if row["stage"] == "web_report"}
+        old_report_sha = registered["web_report"]["sha256"]
+        registered["web_report"]["sha256"] = file_hash(report_path)
+        for binding in [
+            *legacy_projection["provenance"]["source_artifacts"],
+            *legacy_view["provenance_artifacts"],
+        ]:
+            if binding["artifact_path"] == registered["web_report"]["path"]:
+                binding["sha256"] = registered["web_report"]["sha256"]
+        density_binding = next(row for row in legacy_projection["collections"] if row["collection_id"] == "density")
+        density_binding["content_sha256"] = legacy_density["collection_sha256"]
+        density_binding["file_sha256"] = file_hash(density_path)
+        legacy_projection["projection_sha256"] = core.canonical_hash(legacy_projection, "projection_sha256")
+        projection_path = projection_root / "projection.v1.json"
+        projection_path.write_bytes(web_projection.json_bytes(legacy_projection))
+        registered["web_projection"]["sha256"] = file_hash(projection_path)
+        registered["web_density"]["sha256"] = file_hash(density_path)
+        for record in registered.values():
+            record["artifact_id"] = state_cli.artifact_id(record["path"], record["sha256"])
+            if record["artifact_type"] != "web_report":
+                record["input_sha256"] = sorted(registered["web_report"]["sha256"] if value == old_report_sha else value for value in record["input_sha256"])
+        self.state_path.write_text(json.dumps(state, indent=2) + "\n")
+        legacy_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [report_path, *sorted(projection_root.rglob("*.json"))]}
         state_before_refusal = self.state_path.read_bytes()
         refused = self.run_cli("build-report", "--state", str(self.state_path))
         self.assertNotEqual(0, refused.returncode)
@@ -591,7 +656,8 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual(0, rebuilt.returncode, rebuilt.stdout + rebuilt.stderr)
         self.assertTrue(json.loads(rebuilt.stdout)["replacement"])
         second_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
-        self.assertEqual(first_bytes, second_bytes)
+        self.assertNotEqual(legacy_bytes, second_bytes)
+        self.assertEqual(corrected_bytes, second_bytes)
         self.assertEqual(scoring_bytes, {path: path.read_bytes() for path in scoring_bytes})
         rebuilt_state = json.loads(self.state_path.read_text())
         self.assertIn("Rebuilt and replaced", rebuilt_state["stages"]["web_report"]["notes"][0])
