@@ -77,7 +77,7 @@ class PublicScoringProjectionTests(unittest.TestCase):
             "dimension_percentage": "63.33333333333333333333333333",
             "weight": 15,
             "weighted_contribution": "9.499999999999999999999999999",
-            "formula_id": "subject-index-dimension-calculation-v6:editorial_selectivity",
+            "formula_id": "subject-index-dimension-calculation-v7:editorial_selectivity",
         }]
 
         projected = web_projection.scorecard_with_compatibility_aliases(canonical)

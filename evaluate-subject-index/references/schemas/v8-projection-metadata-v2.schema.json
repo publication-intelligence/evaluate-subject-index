@@ -3,8 +3,9 @@
   "$id": "v8-projection-metadata-v2.schema.json",
   "title": "V8 result, web, and score-view projection metadata with causal source binding",
   "type": "object",
-  "required": ["schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_audit", "canonical_heading_access_source", "projection_metadata_sha256"],
+  "required": ["gate_assessment", "schema_version", "candidate_label", "inclusion_policy", "uncertainty_policy", "critical_gates", "canonical_calculation", "canonical_structure_audit", "canonical_heading_access_source", "projection_metadata_sha256"],
   "properties": {
+    "gate_assessment": {"type": "object", "required": ["status", "blockers"], "properties": {"status": {"enum": ["sufficient", "indeterminate"]}, "blockers": {"type": "array", "items": {"type": "object", "required": ["blocker_id", "affected_item_ids", "reason"], "properties": {"blocker_id": {"type": "string"}, "affected_item_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}, "reason": {"type": "string"}}, "additionalProperties": false}}}, "additionalProperties": false},
     "review_signals": {"type": "array", "items": {"type": "object"}},
     "evaluation_validity": {"type": "object"},
     "schema_version": {"const": "subject-index-v8-projection-metadata-v2"},
@@ -29,8 +30,8 @@
         "artifact_path": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/portablePath"},
         "sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"},
         "calculation_sha256": {"$ref": "v8-projection-metadata-v1.schema.json#/$defs/sha256"},
-        "rubric_version": {"const": "subject-index-rubric-v8.1"},
-        "calculation_profile": {"const": "subject-index-dimension-calculation-v6"}
+        "rubric_version": {"const": "subject-index-rubric-v8.2"},
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v7"}
       },
       "additionalProperties": false
     },

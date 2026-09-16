@@ -1,6 +1,6 @@
 # Current V8 JSON contracts
 
-Current methodology: **V8.1**. Read [Consequence policy and targeted migration](consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+Current methodology: **V8.2**. Read [Consequence policy and targeted migration](consequence-policy-v8.2.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
 
 The active workflow uses these primary identities:
 
@@ -35,7 +35,7 @@ The active workflow uses these primary identities:
   types, enums, and nested object shapes live in `references/schemas/`.
 - Python validators enforce only semantics that span fields or artifacts, such as
   identity agreement, exact workset coverage, ownership, and recomputed totals.
-- Policy V4 and build-input V1 optionally carry `retrospective_migration`, defined by `retrospective-migration.schema.json`. Fresh freezes remain candidate-blind; migrations bind the original policy/freeze, actual migration visibility/time, authorization, change ledger, and reused stage evidence. See the [migration contract](consequence-policy-v8.1.md#retrospective-policy-provenance-contract). This field never enters score arithmetic.
+- Policy V4 and build-input V1 optionally carry `retrospective_migration`, defined by `retrospective-migration.schema.json`. Fresh freezes remain candidate-blind; migrations bind the original policy/freeze, actual migration visibility/time, authorization, change ledger, and reused stage evidence. See the [migration contract](consequence-policy-v8.2.md#retrospective-policy-provenance-contract). This field never enters score arithmetic.
 - `evaluation-state.json` is the only control inventory.
 - Registered paths are relative to the evaluation root and unique.
 - Stable semantic IDs join worker records. Calculation-input file references and their

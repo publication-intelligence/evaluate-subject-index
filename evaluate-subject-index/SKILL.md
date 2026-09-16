@@ -1,18 +1,18 @@
 ---
 name: evaluate-subject-index
-description: Run a repeatable, source-grounded V8.1 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
+description: Run a repeatable, source-grounded V8.2 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
 ---
 
 # Evaluate Subject Index
 
-Current methodology: **V8.1**. Read [Consequence policy and targeted migration](references/consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+Current methodology: **V8.2**. Read [Consequence policy and targeted migration](references/consequence-policy-v8.2.md); it supersedes older publication-gate language while retaining V8.1 scoring/caps and validity separation. Frozen evaluations require explicit migration and new policy/calculation identities.
 
-Evaluate one finished subject index against its source and a frozen policy. Use the current V8.1 workflow and create current-schema artifacts.
+Evaluate one finished subject index against its source and a frozen policy. Use the current V8.2 workflow and create current-schema artifacts.
 
 ## Method
 
 1. Map one-based document pages to source page labels. Store labels as strings and require the user to approve chunk boundaries.
-2. Freeze the standard V8.1 policy, then discover source subjects before exposing the candidate index to the discovery context.
+2. Freeze the standard V8.2 policy, then discover source subjects before exposing the candidate index to the discovery context.
 3. Synthesize, independently review, and freeze the candidate-blind benchmark.
 4. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments from the published layout contract.
 5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.
@@ -69,7 +69,7 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 
 Native V8 uses evaluation-policy V4, state V6, `structure-audit-v6`, `locator-audit-v2`, calculation input V2, dimension calculations V6, item assessments V7, result V12, projection metadata V2, and web report V10. Every adverse heading-access judgment carries source-linked causal findings, which are reporting provenance and never arithmetic inputs. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
 
-For an authorized retrospective migration, use the schema-defined `retrospective_migration` policy/build-input field and `policy_cli.py build --original-policy`; add `--base-policy` for provenance-only cleanup of a finished V8.1 migration. Read the [migration contract](references/consequence-policy-v8.1.md#retrospective-policy-provenance-contract) first. The current freeze records actual migration visibility; the original candidate-blind freeze and original review/release evidence remain separate preserved provenance. This does not authorize or claim fresh discovery, review, or approval.
+For an authorized retrospective migration, use the schema-defined `retrospective_migration` policy/build-input field and `policy_cli.py build --original-policy`; add `--base-policy` for provenance-only cleanup of a finished V8.2 migration. Read the [migration contract](references/consequence-policy-v8.2.md#retrospective-policy-provenance-contract) first. The current freeze records actual migration visibility; the original candidate-blind freeze and original review/release evidence remain separate preserved provenance. This does not authorize or claim fresh discovery, review, or approval.
 
 Complete the final stages with `dimension_score_v8_cli.py register-structure`, `score`, and `build-report`. These commands select exact registered current artifacts from canonical state, validate their bytes and bindings, write current-schema outputs, and advance state atomically. Do not complete these stages with generic `state_cli.py set-stage`.
 

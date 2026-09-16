@@ -60,8 +60,8 @@
         "artifact_path": {"$ref": "#/$defs/portablePath"},
         "sha256": {"$ref": "#/$defs/sha256"},
         "calculation_sha256": {"$ref": "#/$defs/sha256"},
-        "rubric_version": {"const": "subject-index-rubric-v8.1"},
-        "calculation_profile": {"const": "subject-index-dimension-calculation-v6"}
+        "rubric_version": {"const": "subject-index-rubric-v8.2"},
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v7"}
       },
       "additionalProperties": false
     },

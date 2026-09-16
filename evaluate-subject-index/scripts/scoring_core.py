@@ -15,7 +15,7 @@ from schema_validation import schema_errors
 from structure_audit import StructureAuditError, materialize_structure_records
 
 
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v6"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v7"
 INPUT_SCHEMA = "subject-index-dimension-calculation-input-v2"
 
 WEIGHTS = {

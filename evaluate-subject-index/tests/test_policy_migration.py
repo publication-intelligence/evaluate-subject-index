@@ -57,7 +57,7 @@ class PolicyMigrationTests(unittest.TestCase):
         self.assertTrue(schema_errors(self.original, 'evaluation-policy-v4.schema.json'))
 
     def test_v8_and_v81_originals_preserve_freeze_and_custom_density(self):
-        for profile in ('subject-index-standard-policy-v8', 'subject-index-standard-policy-v8.1'):
+        for profile in ('subject-index-standard-policy-v8', 'subject-index-standard-policy-v8.1', 'subject-index-standard-policy-v8.2'):
             original = deepcopy(self.original)
             original['policy_profile']['id'] = profile
             original['density_profile']['metrics'][0]['target'] = 7.5
@@ -84,6 +84,19 @@ class PolicyMigrationTests(unittest.TestCase):
                 value.pop(field, None)
             value['policy_profile'].pop('targeted_migration', None)
         self.assertEqual(expected, result)
+
+    def test_v81_base_upgrades_gate_identity_without_changing_scoring_settings(self):
+        base = deepcopy(self.original)
+        base['policy_id'] = 'BASE-V81'
+        base['policy_profile']['id'] = 'subject-index-standard-policy-v8.1'
+        base['critical_gates'] = [g for g in base['critical_gates'] if g['gate_id'] not in {'GATE-WRONG-LOCATOR', 'GATE-BROKEN-REFERENCE'}]
+        base['policy_sha256'] = policy_cli.canonical_hash(base, 'policy_sha256')
+        result = self.build(base=base)
+        self.assertEqual('subject-index-standard-policy-v8.2', result['policy_profile']['id'])
+        for field in ('source_scope', 'audience', 'audit_design', 'density_profile', 'deviations', 'content_policies'):
+            self.assertEqual(base[field], result[field], field)
+        self.assertTrue(all(g in result['critical_gates'] for g in base['critical_gates']))
+        self.assertEqual(2, len(result['critical_gates']) - len(base['critical_gates']))
 
     def test_missing_and_inconsistent_migration_is_rejected(self):
         for field in self.source['retrospective_migration']:

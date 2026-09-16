@@ -160,7 +160,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             policy = json.loads(output.read_text())
             self.assertEqual("subject-index-evaluation-policy-v4", policy["schema_version"])
-            self.assertEqual("subject-index-standard-policy-v8.1", policy["policy_profile"]["id"])
+            self.assertEqual("subject-index-standard-policy-v8.2", policy["policy_profile"]["id"])
             self.assertNotIn("standard_policy_sha256", policy["policy_profile"])
 
 

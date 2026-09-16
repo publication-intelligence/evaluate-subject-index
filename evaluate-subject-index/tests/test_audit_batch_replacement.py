@@ -147,9 +147,9 @@ class ReplacementFixture:
             "configuration": {
                 "audit_mode": "full", "index_type": "subject_index", "intended_readership": "general",
                 "readership_provenance": {"basis": "inferred", "confidence": "high", "rationale": "Synthetic fixture."},
-                "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8.1",
-                "rubric_version": "subject-index-rubric-v8.1",
-                "scoring_identity": {"rubric_version": "subject-index-rubric-v8.1", "dimension_calculation_profile": "subject-index-dimension-calculation-v6"},
+                "output_format": "json", "storage_mode": "local", "policy_profile": "subject-index-standard-policy-v8.2",
+                "rubric_version": "subject-index-rubric-v8.2",
+                "scoring_identity": {"rubric_version": "subject-index-rubric-v8.2", "dimension_calculation_profile": "subject-index-dimension-calculation-v7"},
             },
             "stages": {stage: {"status": "completed", "updated_at": "2026-09-09T00:00:00Z", "notes": []} for stage in STAGES},
             "artifacts": sorted(records, key=lambda item: item["path"]),

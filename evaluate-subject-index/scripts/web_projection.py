@@ -428,6 +428,15 @@ def _artifact_binding(record: Mapping[str, Any]) -> dict[str, Any]:
     return {"artifact_path": record["path"], "sha256": record["sha256"], "schema_version": record.get("schema_version"), "availability": "canonical_registered_input"}
 
 
+def publication_readiness(result: Mapping[str, Any]) -> dict[str, Any]:
+    gates = result["critical_gates"]
+    validity = result.get("evaluation_validity", {}).get("status", "valid")
+    assessment = result.get("gate_assessment", {"status": "indeterminate", "blockers": [{"blocker_id": "GATE-ASSESSMENT-MISSING", "affected_item_ids": [], "reason": "Destination-gate assessment is unavailable."}]})
+    triggered = [row["gate_id"] for row in gates if row["triggered"]]
+    status = validity if validity != "valid" else "not_publication_ready" if triggered else "indeterminate" if assessment["status"] != "sufficient" else "publication_ready"
+    return {"status": status, "triggered_gate_ids": triggered, "assessment_blockers": deepcopy(assessment["blockers"])}
+
+
 def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any], report: Mapping[str, Any], report_record: Mapping[str, Any], calculation: Mapping[str, Any], calculation_record: Mapping[str, Any], items: Mapping[str, Any], items_record: Mapping[str, Any], candidate: Mapping[str, Any], candidate_record: Mapping[str, Any], inventory: Mapping[str, Any], inventory_record: Mapping[str, Any], benchmark: Mapping[str, Any], benchmark_record: Mapping[str, Any], structure: Mapping[str, Any], structure_record: Mapping[str, Any], manifest: Mapping[str, Any], manifest_record: Mapping[str, Any], missing_documents: Sequence[Mapping[str, Any]], missing_records: Sequence[Mapping[str, Any]], overlay: Mapping[str, Any] | None, overlay_record: Mapping[str, Any] | None) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     collections = {
         "index_records": public_safe(build_index_records(candidate, inventory, items)),
@@ -443,7 +452,7 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     binding_order = (["correction_overlay"] if "correction_overlay" in collections else []) + ["index_records", "source_subjects", "density"]
     bindings = [{"collection_id": key, "artifact_path": COLLECTION_PATHS[key], "count": collections[key].get("affected_heading_count", collections[key].get("count", 0)), "content_sha256": collections[key].get("overlay_sha256", collections[key].get("collection_sha256")), "file_sha256": _file_hash(payloads[key])} for key in binding_order]
     gates = deepcopy(result["critical_gates"])
-    readiness = {"status": result.get("evaluation_validity", {}).get("status") if result.get("evaluation_validity", {}).get("status", "valid") != "valid" else "not_publication_ready" if any(row["triggered"] for row in gates) else "publication_ready", "triggered_gate_ids": [row["gate_id"] for row in gates if row["triggered"]]}
+    readiness = publication_readiness(result)
     scorecard = scorecard_with_compatibility_aliases(report["scorecard"])
     dimension_denominators = deepcopy(report["calculation_explainer"]["dimension_denominators"])
     source_records = [benchmark_record, calculation_record, items_record, candidate_record, inventory_record, structure_record, manifest_record, result_record, report_record, *missing_records]

@@ -258,7 +258,7 @@ def load_source_identities(
     rubric_version = configuration.get("rubric_version")
     audit_mode = policy.get("audit_design", {}).get("mode")
     require(configuration.get("policy_profile") == policy_profile, "policy_identity_mismatch", "State and policy profile identities differ.")
-    require(rubric_version == "subject-index-rubric-v8.1", "rubric_identity_mismatch", "Candidate preparation requires the current V8 rubric identity.")
+    require(rubric_version == "subject-index-rubric-v8.2", "rubric_identity_mismatch", "Candidate preparation requires the current V8 rubric identity.")
     require(configuration.get("audit_mode") == audit_mode, "audit_mode_mismatch", "State and policy audit modes differ.")
     return {
         "state": state,
