@@ -250,8 +250,10 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
                     "source_page_label": assignment["source_page_label"],
                     "document_page": assignment["document_page"],
                     "mapping_status": assignment["mapping_status"],
-                    "assessment": public_locator_assessment(locator_items[locator_id]),
                     "adjusted_assessment": None,
+
+
+                    "assessment": public_locator_assessment(locator_items[locator_id]),
                 })
             displays.append({
                 "display_order": display_order,
