@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import item_grade_v8_cli as item_grades  # noqa: E402
+from locator_utility import assign_locator_utility  # noqa: E402
 import web_projection  # noqa: E402
 
 
@@ -42,6 +44,29 @@ def assessment(identity: str, *, judgment: str | None = None) -> dict:
     }
     if judgment is not None:
         value["judgment"] = judgment
+    return value
+
+
+def locator_assessment() -> dict:
+    value = {
+        "locator_id": "LOC-001", "path_id": "PATH-SOURCE", "source_page_label": "7",
+        "document_page": 9, "mapping_status": "resolved",
+        **assessment("LOC-001", judgment="supported"),
+    }
+    assignment = assign_locator_utility({
+        "locator_id": "LOC-001", "judgment": "supported", "treatment_class": "substantive",
+        "complete_path_fit": "exact_fit", "source_scope_status": "indexable",
+        "error_codes": [], "severity": "none",
+    }).as_dict()
+    explanation = item_grades._locator_explanation(
+        value, assignment, {"evidence_summary": "Synthetic assessment."}
+    )
+    value.update({
+        "dimension_reliability_credit": assignment["rating_credit"],
+        "locator_utility": assignment,
+        "locator_explanation": explanation,
+    })
+    value["popover"]["factors"] = item_grades._locator_factor(assignment, explanation)
     return value
 
 
@@ -250,7 +275,7 @@ class IndexRecordProjectionTests(unittest.TestCase):
             ],
         }
         items = {
-            "locator_assessments": [{"locator_id": "LOC-001", **assessment("LOC-001", judgment="supported")}],
+            "locator_assessments": [locator_assessment()],
             "path_assessments": [
                 {"path_id": row["path_id"], **assessment(row["path_id"])}
                 for row in inventory["paths"]
