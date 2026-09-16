@@ -438,6 +438,13 @@ def publication_readiness(result: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any], report: Mapping[str, Any], report_record: Mapping[str, Any], calculation: Mapping[str, Any], calculation_record: Mapping[str, Any], items: Mapping[str, Any], items_record: Mapping[str, Any], candidate: Mapping[str, Any], candidate_record: Mapping[str, Any], inventory: Mapping[str, Any], inventory_record: Mapping[str, Any], benchmark: Mapping[str, Any], benchmark_record: Mapping[str, Any], structure: Mapping[str, Any], structure_record: Mapping[str, Any], manifest: Mapping[str, Any], manifest_record: Mapping[str, Any], missing_documents: Sequence[Mapping[str, Any]], missing_records: Sequence[Mapping[str, Any]], overlay: Mapping[str, Any] | None, overlay_record: Mapping[str, Any] | None) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    import study_comparison
+    study_comparison.require(result["provenance"]["benchmark_sha256"] == benchmark["benchmark_sha256"], "Bundle result and selected benchmark differ")
+    study_comparison.require(all(row["benchmark_sha256"] == benchmark["benchmark_sha256"] for row in missing_documents), "Bundle contains mixed benchmark audit evidence")
+    comparison_identity = result["comparison_key"].get("study_identity")
+    if comparison_identity is not None:
+        study_comparison.require(comparison_identity["benchmark_semantic_sha256"] == study_comparison.benchmark_semantic_hash(benchmark), "Bundle uses a different semantic benchmark")
+        study_comparison.require(report["comparability"].get("study_identity") == comparison_identity, "Report/result comparison mismatch")
     collections = {
         "index_records": public_safe(build_index_records(candidate, inventory, items)),
         "source_subjects": public_safe(build_source_subjects(benchmark, items, missing_documents)),
@@ -489,6 +496,10 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
         "public_safety": {"source_excerpts_included": False, "restricted_files_included": False, "private_layout_evidence_included": False, "absolute_paths_included": False, "source_subject_summaries_are_synthesized_not_quoted": True},
         "limitations": _projection_limitations(result),
     }
+    projection["methodology"] = {"rubric_version": calculation["rubric_version"], "calculation_profile": calculation["calculation_profile"], "benchmark": study_comparison.benchmark_identity(benchmark)}
+    if comparison_identity is not None:
+        projection["comparison_identity"] = deepcopy(comparison_identity)
+        projection["methodology"]["benchmark"]["release"] = deepcopy(comparison_identity["release"])
     projection["projection_sha256"] = _self_hash(projection, "projection_sha256")
     return projection, collections
 

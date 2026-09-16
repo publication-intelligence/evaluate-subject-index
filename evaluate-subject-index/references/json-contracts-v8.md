@@ -71,3 +71,5 @@ The active workflow uses these primary identities:
 - Checkpoint import validates safe ZIP structure, inventory membership, and current state shape; it does not require a previously published checksum.
 
 Runtime commands accept the listed schemas directly.
+
+For candidate-visible cross-evaluation migration and comparison, see [Retrospective study binding and comparison](study-comparison.md), including historical release proof, semantic policy, density evidence, and import/bundle preflight.

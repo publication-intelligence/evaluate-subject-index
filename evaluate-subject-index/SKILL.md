@@ -34,6 +34,7 @@ Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-
 - `scripts/dimension_score_v8_cli.py`: typed structure registration, canonical-state input assembly, deterministic V8 scoring, and web-report projection; low-level preflight and calculation remain available for diagnostics.
 - `scripts/item_grade_v8_cli.py`: low-level current item-projection validation.
 - `scripts/bundle_cli.py`: optional checkpoints, artifact listing, and resume imports.
+- `scripts/study_cli.py`: explicitly authorized retrospective study binding, comparison preflight, and comparison bundle assembly.
 
 ## State and artifacts
 
@@ -52,6 +53,8 @@ A checkpoint contains the canonical state plus accessible registered artifacts. 
 Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before checkpointing or resuming.
 
 An already frozen, independently reviewed candidate-blind benchmark may bypass repeated discovery and full editorial review only through `benchmark_review_cli.py import-reviewed-legacy`. Read [benchmark-review.md](references/benchmark-review.md) first. The command requires exact legacy release evidence plus a separate current-schema compatibility approval, permits only its enumerated mechanical normalization and policy/release rebinding, and records explicitly that the four imported stages were not rerun. Never author the compatibility approval on the reviewer's behalf.
+
+For authorized comparison of already candidate-visible evaluations, read [Retrospective study binding and comparison](references/study-comparison.md). Preserve both historical freezes and actual candidate visibility; a reviewed release and approved common policy/density lock are required before binding or assembling comparable outputs. This workflow does not select a release or authorize audit transfer.
 
 ## Parallel chats
 

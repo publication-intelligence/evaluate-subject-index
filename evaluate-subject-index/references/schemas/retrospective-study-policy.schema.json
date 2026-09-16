@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retrospective-study-policy.schema.json",
+  "type": "object",
+  "required": [
+    "candidate_seen",
+    "migrated_at",
+    "approval_id",
+    "approval_sha256",
+    "authorization",
+    "study_lock_sha256",
+    "target_policy_semantic_sha256",
+    "previous_policy",
+    "original_freeze",
+    "audit_transfer_authorized"
+  ],
+  "properties": {
+    "candidate_seen": {
+      "const": true
+    },
+    "migrated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approval_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approval_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "authorization": {
+      "type": "object",
+      "required": [
+        "authorized_by",
+        "reference"
+      ],
+      "properties": {
+        "authorized_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "study_lock_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "target_policy_semantic_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "previous_policy": {
+      "type": "object",
+      "required": [
+        "policy_id",
+        "policy_sha256",
+        "artifact",
+        "freeze"
+      ],
+      "properties": {
+        "policy_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact": {
+          "type": "object",
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "freeze": {
+          "type": "object",
+          "required": [
+            "frozen_at",
+            "candidate_seen"
+          ],
+          "properties": {
+            "frozen_at": {
+              "type": "string",
+              "minLength": 1
+            },
+            "candidate_seen": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "original_freeze": {
+      "type": "object",
+      "required": [
+        "frozen_at",
+        "candidate_seen"
+      ],
+      "properties": {
+        "frozen_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_seen": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "audit_transfer_authorized": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

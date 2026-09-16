@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retrospective-benchmark-approval.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "approval_id",
+    "authorized_by",
+    "authorization_reference",
+    "approved_at",
+    "candidate_seen",
+    "previous_state_sha256",
+    "previous_benchmark_sha256",
+    "study_lock_sha256",
+    "target_benchmark_sha256",
+    "audit_transfer_authorized",
+    "previous_policy_sha256",
+    "target_policy_semantic_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-retrospective-benchmark-approval-v1"
+    },
+    "approval_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorized_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorization_reference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approved_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_seen": {
+      "const": true
+    },
+    "previous_state_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "previous_benchmark_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "study_lock_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "target_benchmark_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "audit_transfer_authorized": {
+      "const": false
+    },
+    "previous_policy_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "target_policy_semantic_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "study_policy_template_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}

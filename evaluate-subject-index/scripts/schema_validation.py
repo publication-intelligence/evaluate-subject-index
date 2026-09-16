@@ -54,6 +54,8 @@ def schema_errors(document: Any, schema_name: str) -> list[str]:
         f"{'.'.join(map(str, error.absolute_path)) or '<root>'}: {error.message}"
         for error in errors
     ]
+    if not messages and schema_name == "evaluation-state.schema.json" and "study_comparison" in document:
+        messages.extend("study_comparison." + message for message in schema_errors(document["study_comparison"], "retrospective-study-binding.schema.json"))
     if not messages and schema_name == "evaluation-policy-v4.schema.json":
         messages.extend(policy_migration_errors(document))
     return messages
@@ -61,6 +63,24 @@ def schema_errors(document: Any, schema_name: str) -> list[str]:
 
 def policy_migration_errors(policy: dict[str, Any]) -> list[str]:
     """Cross-field provenance checks shared by every policy schema consumer."""
+    study = policy.get("retrospective_study_migration")
+    if study is not None:
+        errors = []
+        if policy["freeze"] != {"frozen_at": study["migrated_at"], "candidate_seen": True}:
+            errors.append("Study migration must preserve actual candidate-visible freeze.")
+        if policy["policy_id"] == study["previous_policy"]["policy_id"] or policy["policy_sha256"] == study["previous_policy"]["policy_sha256"]:
+            errors.append("Study policy migration requires a distinct policy identity.")
+        try:
+            dates = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in (study["original_freeze"]["frozen_at"], study["previous_policy"]["freeze"]["frozen_at"], study["migrated_at"])]
+            if any(value.utcoffset() is None for value in dates) or not dates[0] <= dates[1] <= dates[2]:
+                errors.append("Study migration chronology is inconsistent.")
+        except ValueError:
+            errors.append("Study policy migration dates require ISO 8601 timezones.")
+        # This check covers every policy schema consumer, including audit import.
+        from study_comparison import policy_semantic_hash
+        if policy_semantic_hash(policy) != study["target_policy_semantic_sha256"]:
+            errors.append("Study policy settings do not match the approved semantic fingerprint.")
+        return errors
     migration = policy.get("retrospective_migration")
     if migration is None:
         return []

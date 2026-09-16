@@ -54,3 +54,5 @@ An attachment, Library item, branch, or network transfer is simply a delivery ro
 ## Concurrency
 
 All cooperative writers use `.evaluation.lock` and atomically replace `evaluation-state.json`. An operation validates its complete selected batch before writing artifacts or state. Checkpoint creation is separate from state mutation, so an interrupted checkpoint does not invalidate the canonical run.
+
+For candidate-visible cross-evaluation migration and comparison, see [Retrospective study binding and comparison](study-comparison.md), including historical release proof, semantic policy, density evidence, and import/bundle preflight.

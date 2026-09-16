@@ -1108,6 +1108,11 @@ def command_register(args: argparse.Namespace) -> None:
         state = load_json(state_path, "Canonical evaluation state")
         errors, _ = validate_state(state, state_path=state_path)
         require(not errors, "canonical_state_invalid", "Canonical evaluation state failed validation.", errors)
+        import study_comparison
+        study_lock = study_comparison.preflight_state(state, state_path)
+        if study_lock is not None:
+            selected, _ = study_comparison.registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
+            require(benchmark == selected, 'study_benchmark_mismatch', 'Candidate registration must use the selected study benchmark wrapper.')
         require(state.get("stages", {}).get("benchmark_freeze", {}).get("status") == "completed", "benchmark_stage_incomplete", "Freeze the benchmark before registering a candidate.")
         require(benchmark.get("evaluation_id") == state.get("evaluation_id"), "benchmark_identity_mismatch", "Benchmark and evaluation IDs differ.")
         require(benchmark.get("source_sha256") == state.get("source", {}).get("sha256"), "benchmark_identity_mismatch", "Benchmark and source identities differ.")
