@@ -106,10 +106,28 @@ def _validate_architecture_review(
         _require(not defect_ids and not review["evidence_ids"] and all(value is None for value in facts), "unreviewed_architecture_mismatch", "An unreviewed trigger must remain explicitly uncertain.", path_id)
 
 
+def validate_uncertainty_gate_scopes(structure: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Bind optional scope supplements to preserved uncertainty records/evidence."""
+    scopes = _unique_records(structure.get("uncertainty_gate_scopes", []), "uncertainty_id", "uncertainty_gate_scopes")
+    if not scopes:
+        return scopes
+    original = _unique_records(structure.get("uncertainties", []), "uncertainty_id", "uncertainties")
+    _require(set(scopes) <= set(original), "unknown_uncertainty_scope", "Scope supplements must identify existing frozen uncertainty records.")
+    for identity, scope in scopes.items():
+        record = original[identity]
+        _require(set(scope["target_ids"]) <= set(record["affected_item_ids"]), "uncertainty_target_mismatch", "Scope targets must be drawn from the original uncertainty's affected IDs.", identity)
+        _require(set(scope["evidence_ids"]) <= set(record.get("evidence_ids", [])), "uncertainty_evidence_mismatch", "Scope evidence must already be cited by the preserved uncertainty record.", identity)
+        _require(bool(scope["evidence_ids"]) or not record.get("evidence_ids"), "uncertainty_evidence_omitted", "Cite preserved evidence IDs when the original uncertainty provides them; otherwise justify scope from its preserved statement.", identity)
+        if scope["scope"] == "unknown":
+            _require(set(scope["target_ids"]) == set(record["affected_item_ids"]), "unknown_uncertainty_narrowed", "Unknown scope cannot narrow the original affected IDs.", identity)
+    return scopes
+
+
 def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
     """Validate exact denominator, exception-ledger, and architecture invariants."""
 
     _require(structure.get("schema_version") in {"structure-audit-v5", "structure-audit-v6"}, "unsupported_structure_audit_schema", "Current V8 structure processing requires structure-audit-v5 or structure-audit-v6.")
+    validate_uncertainty_gate_scopes(structure)
     denominator = structure["candidate_denominator"]
     node_records = _unique_records(denominator["nodes"], "node_id", "candidate_denominator.nodes")
     node_ids = list(node_records)

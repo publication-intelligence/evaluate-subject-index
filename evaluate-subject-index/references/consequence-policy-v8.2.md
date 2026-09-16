@@ -9,7 +9,7 @@ V8.2 changes publication gates for confirmed completely wrong delivered destinat
 - `judgment: unsupported` and `complete_path_fit: no_fit`;
 - inspectable `source_scope_status: indexable` or `excluded`, and a treatment class other than `unavailable`;
 - high/medium confidence, source-linked evidence IDs, and an authored fit rationale;
-- no unresolved uncertainty affecting that locator or its complete path, and no wrong-source-span finding.
+- no unresolved locator-support uncertainty explicitly scoped to that destination (or explicitly to all destinations under its path), no ambiguous uncertainty applicability, and no wrong-source-span finding.
 
 The gate reads validated locator audit rows bound to the selected calculation's delivered locator IDs. It does not require a separately authored defect, major severity, a minimum count/rate, or spread. An excluded delivered destination qualifies when the audit confirms no eligible complete-heading support; an unavailable or ambiguous source does not establish that finding.
 
@@ -52,6 +52,37 @@ The normalizer's `target_path_id: null` means unresolved normalization metadata,
 Canonical public readiness uses the evaluation-validity outcome first, then any confirmed publication gate, then assessment sufficiency. It cannot affirm `publication_ready` with a missing/indeterminate gate assessment. A known quality gate can still establish `not_publication_ready` while other assessment gaps remain disclosed. These gaps do not create candidate defects.
 
 Each direct gate records stable affected IDs, selected audit axes/target state, supporting evidence IDs, and a fixed trigger rationale. It does not publish private source evidence summaries. A direct gate owns its atomic destination failure: a legacy gate supported solely by the same destination failure is suppressed. Distinct material findings involving other items remain independently reportable, with directly owned IDs excluded from their affected-ID and qualifying-locator lists. A systemic group overlapping a directly owned destination failure is not emitted again: the direct gate already establishes non-readiness, and residual spread cannot be inferred by subtracting counts. Other nonoverlapping systemic patterns remain independently reportable. Never sum overlapping gate evidence as a count of distinct failures; use the union of stable affected IDs. Clutter and other systemic thresholds are unchanged.
+
+## Scoped uncertainty
+
+Uncertainty concerns a proposition, not every item sharing a heading path. Native V6 structure audits may add `uncertainty_gate_scopes` alongside the **unchanged** original `uncertainties` array. This additive V8.2 patch corrects broad path-based suppression; policy/rubric/calculation identities and arithmetic remain unchanged. Preserve the `adeb69171a3278893e8b7ebb3c664ee5bd428efe` release checkpoint and record the exact corrected runtime revision when rebuilding gates.
+
+Each supplement requires `uncertainty_id`, `scope`, `target_ids`, `evidence_ids`, and a nonblank `rationale`. Use one supplement per original uncertainty record. Its ID must identify that preserved record; targets must be a subset of its `affected_item_ids`; evidence IDs must already appear in that record. Cite at least one when available. If the original has none, retain `evidence_ids: []` and ground the nonblank rationale in its preserved statement and registered artifact; do not fabricate evidence IDs. The mapping is an evidence-backed clarification, never a new judgment or a resolution of the uncertainty.
+
+| Scope | Targets and effect |
+| --- | --- |
+| `locator_support` | Exact `LOC-*` IDs whose destination support is uncertain. A contextual `PATH-*` on the original record does not extend uncertainty to sibling locators. |
+| `path_locator_support` | Exact `PATH-*` IDs when preserved evidence explicitly questions support at **every** destination under those paths. It expands to their selected delivered locators. |
+| `benchmark_access` | `SUBJ-*`, `TASK-*`, `TREAT-*`, `PATH-*`, or `NODE-*` IDs describing subject/task access. This does not veto delivered locator support or reference-destination existence merely because a path overlaps. |
+| `cross_reference_destination` | Exact `XREF-*` IDs with uncertain destination existence. This also blocks affirmative readiness when the reference otherwise has an implicit supported-pass attestation. |
+| `measurement_provenance` | `GLOBAL-*` or `CHUNK-*` IDs for known non-destination limitations in density measurement, historical extraction, authorized evaluation extent, or producer-file/representation provenance. The rationale must explain why the limitation does not question the independently bound evaluated source, candidate, or destination support. This scope does not waive wrong-source, missing-evidence, low-confidence, or uninspectable findings. |
+| `unknown` | All original affected IDs, without narrowing. Retain an applicability gap until frozen evidence establishes the scope. |
+
+For example, when a record names one uncertain locator plus its contextual path, a justified supplement has this shape:
+
+```json
+{
+  "uncertainty_id": "UNCERTAINTY-LOC-EXAMPLE",
+  "scope": "locator_support",
+  "target_ids": ["LOC-EXAMPLE"],
+  "evidence_ids": ["EVID-ORIGINAL"],
+  "rationale": "The preserved record questions this destination only; its path ID supplies heading context."
+}
+```
+
+Do not infer the supplement from arbitrary legacy `kind`/`status` strings or ID prefixes alone. Read the frozen uncertainty statement and cited evidence; distinguish destination fit from access to a benchmark subject and known measurement/provenance limitations. A global limitation is not automatically destination uncertainty, and its namespace alone never justifies treating it as non-destination uncertainty. If it questions the evaluated source identity or the ability to inspect destinations, retain an applicability gap unless the preserved evidence establishes a more precise destination scope. If a mixed record cannot be scoped without guessing, use `unknown` or leave it unmapped. Missing and unknown scopes produce `GATE-ASSESSMENT-UNCERTAINTY-SCOPE`, naming the original uncertainty and implicated IDs. Potentially implicated destinations are withheld conservatively, but are not falsely labeled as individually uncertain. A scoped candidate target missing from selected evidence produces `GATE-ASSESSMENT-UNCERTAINTY-TARGET`. Neither gap permits affirmative publication readiness. Direct low-confidence/uninspectable audit findings and wrong-source safeguards still apply independently of the supplement.
+
+For migration, preserve all original uncertainty rows byte-equivalently as JSON values and keep the pre-patch structure/calculation/result/report bytes. Add only justified scope supplements, record their frozen evidence and rationale in the migration ledger, and update the necessary structure/hash/registration cascade and derived bundles. No discovery, benchmark review, normalization, or locator/missing-access audit rerun is required. Do not delete uncertainties or narrow their original `affected_item_ids`. Verify unchanged judgments, deductions, scores, and all triggered/binding caps; report corrected gate evidence and remaining genuine uncertainty without forcing a gate count. The supplement is removed from the arithmetic input projection, so it cannot alter score or cap calculations.
 
 ## Retrospective policy provenance contract
 
