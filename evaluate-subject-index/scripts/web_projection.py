@@ -49,6 +49,123 @@ def public_safe(value: Any) -> Any:
     return value
 
 
+def _public_label(value: Any) -> str:
+    return "not measured" if value is None else str(value).replace("_", " ")
+
+
+def public_locator_explanation(assessment: Mapping[str, Any]) -> dict[str, Any]:
+    """Replace private locator prose with structured public-safe narration."""
+    explanation = deepcopy(assessment["locator_explanation"])
+    treatment = explanation["page_treatment"]
+    fit = explanation["complete_path_fit"]
+    grade = explanation["diagnostic_locator_grade"]["score"]
+    credit = explanation["keep_rating_credit"]["credit"]
+    judgment = _public_label(assessment["judgment"])
+    label = assessment["source_page_label"]
+    explanation["evidence_summary"] = (
+        f"Page {label}: {judgment}; page treatment {_public_label(treatment['category'])}; "
+        f"complete-path fit {_public_label(fit['category'])}; diagnostic grade {_public_label(grade)}; "
+        f"keep credit {_public_label(credit)}."
+    )
+    for axis, title in ((treatment, "Page treatment"), (fit, "Complete-path fit")):
+        axis["rationale"] = (
+            f"{title} is {_public_label(axis['category'])} with score {_public_label(axis['score'])} "
+            f"under rule {axis['rule_id']}."
+        )
+        axis["rationale_source"] = "mechanical_structured_category_rule"
+    return explanation
+
+
+def public_locator_assessment(assessment: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one private locator assessment without authored evidence prose."""
+    public = deepcopy(assessment)
+    explanation = public_locator_explanation(assessment)
+    public["locator_explanation"] = explanation
+    public["summary"] = explanation["evidence_summary"]
+    public["popover"]["summary"] = explanation["evidence_summary"]
+    factor_explanations = {
+        "page_treatment": explanation["page_treatment"]["rationale"],
+        "complete_path_fit": explanation["complete_path_fit"]["rationale"],
+        "diagnostic_locator_grade": explanation["diagnostic_locator_grade"]["calculation"],
+    }
+    for factor in public["popover"]["factors"]:
+        factor["explanation"] = factor_explanations.get(factor["factor_id"], "Structured locator assessment factor.")
+    return public
+
+
+def _selected(value: Mapping[str, Any], fields: Sequence[str]) -> dict[str, Any]:
+    return {field: deepcopy(value[field]) for field in fields if field in value}
+
+
+ACCESS_IDENTITY_FIELDS = (
+    "locator_ids", "matched_path_ids", "matched_locator_ids", "usable_locator_ids", "source_evidence_ids",
+    "locator_evidence_ids", "benchmark_evidence_ids", "usable_locator_evidence_ids",
+    "tested_locator_ids", "tested_locator_evidence_ids", "tested_path_ids", "tested_direct_path_ids",
+    "usable_cross_reference_ids", "usable_cross_reference_path_ids", "usable_path_ids",
+    "tested_cross_reference_ids", "tested_cross_reference_source_path_ids", "source_path_ids",
+    "tested_source_path_ids", "matched_reference_ids", "matched_cross_reference_ids",
+)
+ACCESS_CATEGORY_FIELDS = (
+    "reason_code", "miss_reason_code", "confidence", "expected_count", "found_count",
+    "missed_count", "matched_count", "usable_count",
+)
+
+
+def _public_access_fields(value: Mapping[str, Any], fields: Sequence[str]) -> dict[str, Any]:
+    public = _selected(value, (*fields, *ACCESS_IDENTITY_FIELDS, *ACCESS_CATEGORY_FIELDS))
+    uncertainty = value.get("uncertainty")
+    if isinstance(uncertainty, Mapping):
+        projected = _selected(uncertainty, ("status", "confidence", "evidence_ids", *ACCESS_IDENTITY_FIELDS))
+        if uncertainty.get("status") in {"uncertain", "uninspectable"}:
+            projected["reason"] = f"Access uncertainty status is {uncertainty['status']}."
+        public["uncertainty"] = projected
+    elif uncertainty is not None:
+        public["uncertainty"] = uncertainty if uncertainty in {"none", "uncertain", "uninspectable", "not_measured"} else "reported"
+    return public
+
+
+def public_subject_access(judgment: Mapping[str, Any]) -> dict[str, Any]:
+    public = _public_access_fields(judgment, (
+        "subject_id", "priority", "coverage", "direct_access", "cross_reference_access",
+        "stance_preserved", "matched_path_ids", "expected_document_pages", "found_document_pages",
+        "missed_document_pages", "severity", "confidence", "realistic_first_lookup_success",
+        "treatment_recall", "locator_recall", "error_codes", "evidence_ids",
+    ))
+    public["missing_routes"] = [_public_access_fields(row, ("route_type", "reason_code", "evidence_ids")) for row in judgment.get("missing_routes", [])]
+    public["missed_treatments"] = [_public_access_fields(row, ("treatment_id", "document_page", "locator_class", "reason_code", "evidence_ids")) for row in judgment.get("missed_treatments", [])]
+    public["dependency_defects"] = []
+    for row in judgment.get("dependency_defects", []):
+        defect = _public_access_fields(row, ("defect_id", "dependency_type", "disposition", "locator_id", "coverage_subject_ids", "confidence", "evidence_ids"))
+        defect["observed_conflict"] = f"Structured locator dependency defect {row['defect_id']} was reported."
+        defect["required_adjudication"] = "Review the registered dependency defect and evidence identifiers."
+        defect["summary"] = defect["observed_conflict"]
+        public["dependency_defects"].append(defect)
+    details = [f"Coverage is {judgment['coverage']}"]
+    if "direct_access" in judgment:
+        details.append(f"direct access is {judgment['direct_access']}")
+    if "cross_reference_access" in judgment:
+        details.append(f"cross-reference access is {judgment['cross_reference_access']}")
+    public["access_rationale"] = "; ".join(details) + "."
+    return public
+
+
+def public_reader_task_result(result: Mapping[str, Any]) -> dict[str, Any]:
+    public = _public_access_fields(result, ("task_id", "subject_ids", "result", "access_mode", "matched_path_ids", "severity", "confidence", "evidence_ids"))
+    access_mode = f" through {result['access_mode']} access" if "access_mode" in result else ""
+    public["access_rationale"] = f"Reader task result is {result['result']}{access_mode}."
+    return public
+
+
+def public_treatment_judgment(treatment: Mapping[str, Any], source_page_label: str) -> dict[str, Any]:
+    public = _public_access_fields(treatment, ("treatment_id", "subject_id", "document_page", "locator_class", "status", "evidence_ids"))
+    public["source_page_label"] = source_page_label
+    public["access_rationale"] = (
+        f"{treatment['locator_class'].replace('_', ' ').capitalize()} treatment on page "
+        f"{source_page_label} is {treatment['status']}."
+    )
+    return public
+
+
 def collection(kind: str, items: list[dict[str, Any]], source_order: str, **extra: Any) -> dict[str, Any]:
     value = {
         "schema_version": COLLECTION_SCHEMA_VERSION,
@@ -125,7 +242,7 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
                     "source_page_label": assignment["source_page_label"],
                     "document_page": assignment["document_page"],
                     "mapping_status": assignment["mapping_status"],
-                    "assessment": deepcopy(locator_items[locator_id]),
+                    "assessment": public_locator_assessment(locator_items[locator_id]),
                     "adjusted_assessment": None,
                 })
             displays.append({
@@ -210,21 +327,28 @@ def build_source_subjects(benchmark: Mapping[str, Any], items: Mapping[str, Any]
         for treatment in sorted(treatments.get(subject["subject_id"], []), key=lambda row: row["treatment_id"]):
             matches = evidence_by_key.get((treatment["document_page"], treatment["locator_class"]), [])
             core.require(bool(matches), "projection_treatment_join_mismatch", f"No frozen evidence matches {treatment['treatment_id']}.")
-            expected_treatments.append({**deepcopy(treatment), "source_page_label": matches[0]["source_page_label"]})
+            expected_treatments.append(public_treatment_judgment(treatment, matches[0]["source_page_label"]))
         output.append({
             "source_order": source_order,
             "subject_id": subject["subject_id"], "label": subject["label"], "priority": subject["priority"],
-            "meaning": subject["meaning"], "stance": subject["stance"], "acceptable_access": deepcopy(subject["acceptable_access"]),
+            "meaning": subject["meaning"],
+            "stance": (
+                "Benchmark stance narrative withheld from the public projection; "
+                f"stance preservation outcome: {subject_judgments[subject['subject_id']].get('stance_preserved', 'not reported')}."
+            ),
+            "acceptable_access": deepcopy(subject["acceptable_access"]),
             "chapter_provenance": deepcopy(subject.get("chapter_provenance", [])),
             "source_chunk_ids": deepcopy(subject.get("source_chunk_ids", subject.get("chapter_provenance", []))),
             "assessment": deepcopy(assessments[subject["subject_id"]]),
-            "audit_judgment": deepcopy(subject_judgments[subject["subject_id"]]),
-            "reader_tasks": [{"task_id": task["task_id"], "question": task["question"], "subject_ids": deepcopy(task["subject_ids"]), "task_basis": deepcopy(task.get("task_basis", task.get("source_fields", []))), "result": deepcopy(task_results[task["task_id"]])} for task in tasks.get(subject["subject_id"], [])],
+            "audit_judgment": public_subject_access(subject_judgments[subject["subject_id"]]),
+            "reader_tasks": [{"task_id": task["task_id"], "question": task["question"], "subject_ids": deepcopy(task["subject_ids"]), "task_basis": deepcopy(task.get("task_basis", task.get("source_fields", []))), "result": public_reader_task_result(task_results[task["task_id"]])} for task in tasks.get(subject["subject_id"], [])],
             "expected_treatments": expected_treatments,
         })
-    return collection("source_subjects", output, "frozen benchmark subject order", counts={
-        "source_subjects": len(output), "reader_tasks": len(task_results), "expected_treatments": len(treatment_rows),
-    })
+    return collection(
+        "source_subjects", output, "frozen benchmark subject order",
+        counts={"source_subjects": len(output), "reader_tasks": len(task_results), "expected_treatments": len(treatment_rows)},
+        limitations=["Authored benchmark stance narratives are withheld; public items report only the registered stance-preservation outcome."],
+    )
 
 
 def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, Any]:
