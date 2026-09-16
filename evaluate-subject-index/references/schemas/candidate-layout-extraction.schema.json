@@ -139,6 +139,7 @@
         "bbox": {"$ref": "#/$defs/bbox"},
         "indentation_level": {"type": "integer", "minimum": 0},
         "displayed_line_text": {"type": "string"},
+        "heading_text": {"type": "string", "minLength": 1},
         "continuation_status": {"enum": ["standalone", "continued_from_previous_column", "continues_next_column", "continued_from_previous_page", "continues_next_page", "continues_previous", "continues_next", "unknown"]},
         "inferred_boundary": {"enum": ["main_entry", "subentry", "continuation", "unknown", "header_footer"]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
