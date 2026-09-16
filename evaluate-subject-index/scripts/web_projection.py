@@ -68,11 +68,28 @@ def _canonical_target(value: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip()
 
 
+def _target_lookup_keys(value: str, *, under_context: bool = False) -> tuple[str, ...]:
+    exact = _canonical_target(value)
+    hierarchy = re.match(r"(?is)^under\s+([^:]+?)\s*:\s*(.+)$", value.strip())
+    if hierarchy is None and under_context:
+        hierarchy = re.match(r"(?is)^([^:]+?)\s*:\s*(.+)$", value.strip())
+    if hierarchy is None:
+        return (exact,)
+    hierarchical = _canonical_target(f"{hierarchy.group(1)}—{hierarchy.group(2)}")
+    return (exact,) if hierarchical == exact else (exact, hierarchical)
+
+
 def _resolved_targets(target: str, index: Mapping[str, list[dict[str, str]]]) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
-    for part in re.split(r"\s*;\s*", target):
-        matches = index.get(_canonical_target(part), [])
-        if len(matches) != 1:
+    parts = re.split(r"\s*;\s*", target)
+    under_context = bool(parts and re.match(r"(?is)^under\s+[^:]+?\s*:\s*.+$", parts[0].strip()))
+    for part in parts:
+        matches: list[dict[str, str]] = []
+        for key in _target_lookup_keys(part, under_context=under_context):
+            matches = index.get(key, [])
+            if matches:
+                break
+        if not matches or len({match["node_id"] for match in matches}) != 1:
             return []
         results.extend(matches)
     return results
@@ -89,7 +106,7 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
     for record in candidate["records"]:
         path = paths[record["path_id"]]
         target_index.setdefault(_canonical_target("—".join(record["heading_path"])), []).append(
-            {"path_id": record["path_id"], "node_id": path["node_ids"][-1]}
+            {"record_id": record["record_id"], "path_id": record["path_id"], "node_id": path["node_ids"][-1]}
         )
 
     output = []
