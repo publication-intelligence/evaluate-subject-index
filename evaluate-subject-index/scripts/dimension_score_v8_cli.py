@@ -1433,6 +1433,7 @@ def _critical_gate_outcomes(
     policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
     defects = structure["defects"]
+    reference_ids = set(structure["candidate_denominator"]["cross_reference_ids"])
     predicates = {
         "GATE-SCOPE-LOCATOR": lambda item: item["defect_kind"] in {"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
         "GATE-SYSTEMIC-UNSUPPORTED": lambda item: item["severity_basis"] == "systemic_nonuse" and item["dimension_owner"] == "page_reference_reliability",
@@ -1440,8 +1441,9 @@ def _critical_gate_outcomes(
         "GATE-STANCE": lambda item: item["defect_kind"] in {"stance_reversal", "misleading_relationship"},
         "GATE-COMPOUND": lambda item: item["code"] == "CMP",
         "GATE-SEE-SUBSTITUTION": lambda item: item["defect_kind"] == "substitutive_see",
-        "GATE-CROSS-REFERENCE": lambda item: item["code"] == "XRF",
-        "GATE-DEPTH": lambda item: item["code"] == "HED" and item["severity"] in {"major", "critical"},
+        "GATE-CROSS-REFERENCE": lambda item: item["code"] == "XRF"
+        and item["defect_kind"] in {"circular_or_chained_reference", "unsupported_reference"}
+        and bool(reference_ids & set(item["affected_item_ids"])),
         "GATE-CLUTTER": lambda item: item["defect_kind"] == "clutter_pattern",
         "GATE-GROUNDING": lambda item: item["severity"] in {"major", "critical"} and item["dimension_owner"] in {"conceptual_stance_fidelity", "page_reference_reliability"},
         "GATE-SOURCE-SPAN": lambda item: item["defect_kind"] == "scope_failure",
@@ -1455,7 +1457,10 @@ def _critical_gate_outcomes(
     for gate in policy["critical_gates"]:
         gate_id = gate["gate_id"]
         matching = [item["defect_id"] for item in defects if predicates.get(gate_id, lambda _: False)(item)]
-        triggered = uninspectable_rate > tolerance if gate_id == "GATE-UNINSPECTABLE" else bool(matching)
+        if gate_id == "GATE-DEPTH":
+            triggered = any(len(item["heading_path"]) >= 3 for item in structure["candidate_denominator"]["nodes"])
+        else:
+            triggered = uninspectable_rate > tolerance if gate_id == "GATE-UNINSPECTABLE" else bool(matching)
         if gate_id == "GATE-STRUCTURE":
             triggered = triggered or not structure["full_scope_attestation"]["complete"]
         results.append({**deepcopy(gate), "triggered": triggered, "defect_ids": sorted(matching)})
