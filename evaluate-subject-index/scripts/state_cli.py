@@ -64,8 +64,8 @@ VALID_STATUSES = {"not_started", "in_progress", "completed", "blocked"}
 VALID_VISIBILITY = {"public", "private", "restricted"}
 VALID_RETENTION = {"required", "cache"}
 STATE_SCHEMA_VERSION = "subject-index-evaluation-state-v6"
-SCORE_RUBRIC_VERSION = "subject-index-rubric-v8.1"
-DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v6"
+SCORE_RUBRIC_VERSION = "subject-index-rubric-v8.2"
+DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v7"
 STRUCTURE_AUDIT_COMPLETION_SCHEMA = "structure-audit-v6"
 SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v12"
 WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v10"
@@ -335,7 +335,7 @@ def command_init(args: argparse.Namespace) -> None:
             "intended_readership": args.intended_readership,
             "readership_provenance": {"basis": args.readership_basis, "confidence": args.readership_confidence, "rationale": args.readership_rationale},
             "output_format": "json", "storage_mode": args.storage_mode,
-            "policy_profile": "subject-index-standard-policy-v8.1", "rubric_version": SCORE_RUBRIC_VERSION,
+            "policy_profile": "subject-index-standard-policy-v8.2", "rubric_version": SCORE_RUBRIC_VERSION,
             "scoring_identity": {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE},
         },
         "stages": stages, "artifacts": [], "blockers": [],
@@ -448,7 +448,7 @@ def command_adopt_standard_policy(args: argparse.Namespace) -> None:
     if args.intended_readership:
         configuration["intended_readership"] = args.intended_readership
     configuration["readership_provenance"] = {"basis": args.readership_basis, "confidence": args.readership_confidence, "rationale": args.readership_rationale}
-    configuration["policy_profile"] = "subject-index-standard-policy-v8.1"
+    configuration["policy_profile"] = "subject-index-standard-policy-v8.2"
     configuration["rubric_version"] = SCORE_RUBRIC_VERSION
     configuration["scoring_identity"] = {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE}
     state["updated_at"] = now()

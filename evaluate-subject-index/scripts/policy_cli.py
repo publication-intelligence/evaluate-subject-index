@@ -15,7 +15,7 @@ from schema_validation import schema_errors
 
 
 POLICY_SCHEMA = "subject-index-evaluation-policy-v4"
-POLICY_PROFILE = "subject-index-standard-policy-v8.1"
+POLICY_PROFILE = "subject-index-standard-policy-v8.2"
 
 DEFAULT_INCLUDED = [
     "preparation-approved indexable content",
@@ -125,6 +125,8 @@ DENSITY_METRICS = [
 ]
 
 CRITICAL_GATES = [
+    ("GATE-WRONG-LOCATOR", "Any confirmed delivered unsupported no-fit locator; no count, rate, or separate defect threshold"),
+    ("GATE-BROKEN-REFERENCE", "Any confirmed delivered see or see-also reference with no valid destination; no count, rate, or separate defect threshold"),
     ("GATE-SCOPE-LOCATOR", "Major/critical misleading or blocking delivered fabricated, nonexistent, or out-of-scope locator with severe mismatch/no fit"),
     ("GATE-SYSTEMIC-UNSUPPORTED", "Delivered severe/no-fit locator pattern: >=10 distinct items, >=5% of denominator, >=2 sections spanning >=25% of source or structure"),
     ("GATE-CENTRAL-OMISSION", "Critical central omission or major omission demonstrably destroying high-priority access"),
@@ -169,6 +171,13 @@ def read_input(path: Path) -> dict[str, Any]:
     return value
 
 
+def destination_gate_policy_errors(policy: dict[str, Any]) -> list[str]:
+    ids = [gate.get("gate_id") for gate in policy["critical_gates"]]
+    if not {"GATE-WRONG-LOCATOR", "GATE-BROKEN-REFERENCE"} <= set(ids) or len(ids) != len(set(ids)):
+        return ["V8.2 requires both direct destination gates and unique gate IDs."]
+    return []
+
+
 def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | None = None,
                  base_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     scope = source.get("source_scope", {})
@@ -185,7 +194,7 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
         "policy_id": source.get("policy_id") or "subject-index-policy",
         "policy_profile": {
             "id": POLICY_PROFILE,
-            "consequence_policy_reference": "consequence-policy-v8.1.md",
+            "consequence_policy_reference": "consequence-policy-v8.2.md",
         },
         "source_scope": {
             "source_sha256": scope["source_sha256"],
@@ -257,10 +266,20 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
         if errors:
             raise ValueError("Invalid original policy: " + "; ".join(errors))
         if base_policy is not None:
-            errors = schema_errors(base_policy, "evaluation-policy-v4.schema.json")
+            base_shape = deepcopy(base_policy)
+            if isinstance(base_shape, dict) and isinstance(base_shape.get("policy_profile"), dict):
+                if base_shape["policy_profile"].get("id") not in {"subject-index-standard-policy-v8.1", POLICY_PROFILE}:
+                    raise ValueError("Migration base must use V8.1 or the current policy profile.")
+                base_shape["policy_profile"]["id"] = POLICY_PROFILE
+            errors = schema_errors(base_shape, "evaluation-policy-v4.schema.json")
             if errors or base_policy.get("policy_sha256") != canonical_hash(base_policy, "policy_sha256"):
-                raise ValueError("Migration base must be a valid self-hashed V8.1 policy: " + "; ".join(errors))
+                raise ValueError("Migration base must be a valid self-hashed V8.1/current policy: " + "; ".join(errors))
+            current_gates = deepcopy(policy["critical_gates"])
             policy = deepcopy(base_policy)
+            if policy["policy_profile"]["id"] != POLICY_PROFILE:
+                policy["policy_profile"].update(id=POLICY_PROFILE, consequence_policy_reference="consequence-policy-v8.2.md")
+                existing_gates = {gate["gate_id"] for gate in policy["critical_gates"]}
+                policy["critical_gates"] += [gate for gate in current_gates if gate["gate_id"] not in existing_gates]
             policy["policy_id"] = source["policy_id"]
             if policy["policy_id"] == base_policy["policy_id"]:
                 raise ValueError("Provenance cleanup requires a new policy_id distinct from its base.")
@@ -283,6 +302,8 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
         raise ValueError("Original/base policies require explicit retrospective_migration input.")
     policy["policy_sha256"] = canonical_hash(policy, "policy_sha256")
     errors = schema_errors(policy, "evaluation-policy-v4.schema.json")
+    if not errors:
+        errors.extend(destination_gate_policy_errors(policy))
     if errors:
         raise ValueError("Generated policy is structurally invalid: " + "; ".join(errors))
     return policy
@@ -339,7 +360,7 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--output", required=True)
     build.add_argument("--force", action="store_true")
     build.add_argument("--original-policy", help="Preserved candidate-blind policy required for retrospective migration.")
-    build.add_argument("--base-policy", help="Latest frozen V8.1 policy to preserve during provenance-only cleanup.")
+    build.add_argument("--base-policy", help="Latest frozen V8.1/current policy; retain its scoring settings during migration.")
     build.set_defaults(func=command_build)
     return parser
 

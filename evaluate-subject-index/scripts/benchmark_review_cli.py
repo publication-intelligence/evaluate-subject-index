@@ -1141,10 +1141,10 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
             # Explicit reviewed source-only import: normalize the validation copy,
             # preserve original release bytes, and never reinterpret a scored result.
             config = native_state_for_validation["configuration"]
-            config["policy_profile"] = "subject-index-standard-policy-v8.1"
-            config["rubric_version"] = "subject-index-rubric-v8.1"
-            config["scoring_identity"] = {"rubric_version": "subject-index-rubric-v8.1", "dimension_calculation_profile": "subject-index-dimension-calculation-v6"}
-        elif historical_profile != "subject-index-dimension-calculation-v6":
+            config["policy_profile"] = "subject-index-standard-policy-v8.2"
+            config["rubric_version"] = "subject-index-rubric-v8.2"
+            config["scoring_identity"] = {"rubric_version": "subject-index-rubric-v8.2", "dimension_calculation_profile": "subject-index-dimension-calculation-v7"}
+        elif historical_profile != "subject-index-dimension-calculation-v7":
             errors.append("Native V8 source-only state has an unsupported calculation-profile identity.")
         native_state_errors, _ = validate_state(native_state_for_validation, state_path=paths["legacy_state"], check_files=False)
         errors.extend(f"Native V8 state: {error}" for error in native_state_errors)

@@ -51,10 +51,10 @@ class StateAndCheckpointTests(unittest.TestCase):
             state = json.loads(state_path.read_text())
             self.assertEqual(state["schema_version"], "subject-index-evaluation-state-v6")
             self.assertNotIn("artifact_manifest_path", state)
-            self.assertEqual(state["configuration"]["rubric_version"], "subject-index-rubric-v8.1")
+            self.assertEqual(state["configuration"]["rubric_version"], "subject-index-rubric-v8.2")
             self.assertEqual(
                 state["configuration"]["scoring_identity"]["dimension_calculation_profile"],
-                "subject-index-dimension-calculation-v6",
+                "subject-index-dimension-calculation-v7",
             )
 
     def test_v5_state_identity_is_rejected(self) -> None:

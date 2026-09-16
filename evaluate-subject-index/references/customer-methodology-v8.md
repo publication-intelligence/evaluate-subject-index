@@ -1,6 +1,6 @@
 # Customer methodology — V8
 
-Current methodology: **V8.1**. Read [Consequence policy and targeted migration](consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+Current methodology: **V8.2**. Read [Consequence policy and targeted migration](consequence-policy-v8.2.md); it supersedes older publication-gate language while retaining V8.1 scoring/caps and validity separation. Frozen evaluations require explicit migration and new policy/calculation identities.
 
 The evaluation compares a finished subject index with its source using a benchmark prepared without seeing the candidate index. It reports six dimensions, evidence-backed findings, item-level explanations, and an overall result.
 

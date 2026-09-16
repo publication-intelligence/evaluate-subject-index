@@ -30,7 +30,8 @@
         "policy_profile_id": {
           "enum": [
             "subject-index-standard-policy-v8",
-            "subject-index-standard-policy-v8.1"
+            "subject-index-standard-policy-v8.1",
+          "subject-index-standard-policy-v8.2"
           ]
         },
         "policy_sha256": {

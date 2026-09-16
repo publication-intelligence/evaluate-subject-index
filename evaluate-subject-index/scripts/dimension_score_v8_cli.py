@@ -4,6 +4,7 @@
 V8 uses the frozen keep judgment as binary rating credit while retaining the
 independent page-treatment and complete-path-fit minimum as a diagnostic grade.
 V8.1 revises consequence thresholds under a new frozen policy and calculation identity.
+V8.2 adds direct destination gates without changing ordinary scores or ceilings.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import item_grade_v8_cli as item_grades
 import item_projection_core as item_projection
 import scoring_core as core
 import web_projection
+from policy_cli import destination_gate_policy_errors
 from heading_access_provenance import (
     HeadingAccessProvenanceError,
     validate_heading_access_provenance,
@@ -53,11 +55,11 @@ from structure_audit import (
 )
 
 
-RUBRIC_VERSION = "subject-index-rubric-v8.1"
-CALCULATION_PROFILE = "subject-index-dimension-calculation-v6"
+RUBRIC_VERSION = "subject-index-rubric-v8.2"
+CALCULATION_PROFILE = "subject-index-dimension-calculation-v7"
 CALCULATION_SCHEMA = "subject-index-dimension-calculations-v6"
 ITEM_GRADING_POLICY = "subject-index-item-grading-v4"
-POLICY_PROFILE = "subject-index-standard-policy-v8.1"
+POLICY_PROFILE = "subject-index-standard-policy-v8.2"
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
@@ -342,6 +344,8 @@ def validate_v8_policy(policy_document: dict[str, Any]) -> None:
     core.validate_schema_document(
         policy_document, "evaluation-policy-v4.schema.json", "policy"
     )
+    gate_errors = destination_gate_policy_errors(policy_document)
+    core.require(not gate_errors, "destination_gate_policy_incomplete", "The V8.2 policy must retain its direct destination gates.", gate_errors)
     core.require(
         policy_document.get("policy_sha256")
         == core.canonical_hash(policy_document, "policy_sha256"),
@@ -465,6 +469,8 @@ def preflight_loaded(
         scoring_inputs["structure"] = deepcopy(loaded["structure"])
         scoring_inputs["structure"].pop("causal_projection", None)
         scoring_inputs["structure"]["schema_version"] = "structure-audit-v5"
+        for reference in scoring_inputs["structure"].get("cross_reference_judgments", []):
+            reference.pop("target_resolution", None)
         for node in scoring_inputs["structure"].get("node_judgments", []):
             component = node["component_judgments"]["heading_access_architecture"]
             for field in ("causal_findings", "primary_finding_id", "primary_basis"):
@@ -1962,17 +1968,83 @@ def _presentation_summary(
     }
 
 
+def _destination_gate_evidence(structure, calculation, locator_documents, inventory):
+    """Read finalized audit axes; never infer total wrongness from severity or prose."""
+    reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
+    expected = {row["locator_id"] for row in reliability.get("locator_utility_assignments", [])}
+    audited = {row["locator_id"]: row for document in locator_documents for row in document["judgments"]}
+    uncertain = {item for row in structure.get("uncertainties", []) for item in row["affected_item_ids"]}
+    blockers = []
+    wrong_locators, broken_references = [], []
+
+    def block(code, ids, reason):
+        blockers.append({"blocker_id": code, "affected_item_ids": sorted(set(ids)), "reason": reason})
+
+    if any(row["defect_kind"] == "scope_failure" for row in structure["defects"]):
+        block("GATE-ASSESSMENT-SOURCE", [], "Wrong-source evidence cannot establish candidate destination failures.")
+        return [], [], {"status": "indeterminate", "blockers": blockers}
+    if expected - set(audited):
+        block("GATE-ASSESSMENT-LOCATOR-EVIDENCE", expected - set(audited), "Finalized locator audit evidence is missing.")
+    for locator_id in sorted(expected & set(audited)):
+        row = audited[locator_id]
+        if row["judgment"] == "uninspectable" or row.get("confidence") not in {"high", "medium"} or uncertain & {locator_id, row["path_id"]}:
+            block("GATE-ASSESSMENT-LOCATOR-UNCERTAIN", [locator_id], "Locator support is uncertain or uninspectable; no candidate-quality gate is inferred.")
+            continue
+        if row["judgment"] != "unsupported" or row["complete_path_fit"] != "no_fit":
+            continue
+        if row["source_scope_status"] not in {"indexable", "excluded"} or row["treatment_class"] == "unavailable" or not row.get("evidence_ids") or not row.get("fit_rationale", "").strip():
+            block("GATE-ASSESSMENT-LOCATOR-EVIDENCE", [locator_id], "Zero-fit finding lacks inspectable, source-linked audit evidence.")
+            continue
+        wrong_locators.append({key: deepcopy(row[key]) for key in (
+            "locator_id", "path_id", "complete_heading_path", "document_page", "source_page_label",
+            "judgment", "complete_path_fit", "treatment_class", "source_scope_status", "confidence", "evidence_ids")})
+
+    references = {row["reference_id"]: row for row in inventory.get("cross_references", [])}
+    paths = {row["path_id"] for row in inventory.get("paths", [])}
+    delivered = set(structure["candidate_denominator"]["cross_reference_ids"])
+    for row in sorted(structure.get("cross_reference_judgments", []), key=lambda row: row["reference_id"]):
+        reference_id = row["reference_id"]
+        resolution = row.get("target_resolution")
+        target = references.get(reference_id)
+        if reference_id not in delivered or target is None:
+            block("GATE-ASSESSMENT-REFERENCE-IDENTITY", [reference_id], "Reference exception is not bound to the delivered candidate inventory.")
+        elif (row["judgment"] in {"uninspectable", "not_measured"} or row["confidence"] not in {"high", "medium"}
+              or reference_id in uncertain or resolution is None or resolution["status"] == "uncertain"):
+            block("GATE-ASSESSMENT-REFERENCE-RESOLUTION", [reference_id], "Delivered reference exception lacks confirmed destination resolution; publication readiness is indeterminate.")
+        elif (resolution["reference_type"] != target["reference_type"] or resolution["target_display"] != target["target_display"]
+              or not set(resolution["resolved_path_ids"]) <= paths or not resolution["evidence_ids"] or not resolution["rationale"].strip()):
+            block("GATE-ASSESSMENT-REFERENCE-EVIDENCE", [reference_id], "Destination resolution does not match the delivered reference or preserved evidence.")
+        elif resolution["status"] == "no_valid_destination":
+            if row["judgment"] != "unsupported" or resolution["resolved_path_ids"]:
+                block("GATE-ASSESSMENT-REFERENCE-CONTRADICTION", [reference_id], "Absent-destination claim contradicts partial support or a resolved destination.")
+            else:
+                broken_references.append({"reference_id": reference_id, "judgment": row["judgment"],
+                    "reference_type": resolution["reference_type"], "target_display": resolution["target_display"],
+                    "target_resolution": resolution["status"], "resolved_path_ids": [],
+                    "confidence": row["confidence"], "evidence_ids": sorted(set(row["evidence_ids"]) | set(resolution["evidence_ids"]))})
+        elif not resolution["resolved_path_ids"]:
+            block("GATE-ASSESSMENT-REFERENCE-EVIDENCE", [reference_id], "An identifiable destination requires its delivered path ID.")
+    return wrong_locators, broken_references, {"status": "indeterminate" if blockers else "sufficient", "blockers": blockers}
+
+
 def _critical_gate_outcomes(
-    policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any]
+    policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any],
+    *, destination_evidence: tuple | None = None,
 ) -> list[dict[str, Any]]:
+    direct_locators, direct_references, _ = destination_evidence or ([], [], {})
+    owned_locators = {row["locator_id"] for row in direct_locators}
+    owned_references = {row["reference_id"] for row in direct_references}
     defects = structure["defects"]
     references = set(structure["candidate_denominator"]["cross_reference_ids"])
     reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
     locators = [dict(row, path_id=reliability.get("locator_path_bindings", {}).get(row["locator_id"], row.get("path_id"))) for row in reliability.get("locator_utility_assignments", [])]
+    blocked_ids = {item for blocker in (destination_evidence[2]["blockers"] if destination_evidence else []) for item in blocker["affected_item_ids"]}
+    references -= blocked_ids
+    locators = [row for row in locators if not {row["locator_id"], row.get("path_id")} & blocked_ids]
     def bad(item):
         return core.delivered_bad_locators(item, locators)
     def major(item):
-        return core.material_consequence(item) and not core.partial_fit_only(item, locators)
+        return not set(item["affected_item_ids"]) & blocked_ids and core.material_consequence(item) and not core.partial_fit_only(item, locators)
     def delivered_reference(item):
         return bool(references & set(item["affected_item_ids"]))
     predicates = {
@@ -1994,22 +2066,43 @@ def _critical_gate_outcomes(
     results = []
     for gate in policy["critical_gates"]:
         gate_id = gate["gate_id"]
-        matching = [row for row in defects if predicates.get(gate_id, lambda _: False)(row)]
-        groups = core.systemic_defect_groups([row for row in aggregate_candidates.get(gate_id, []) if not core.has_partial_fit(row, locators)])
+        direct = direct_locators if gate_id == "GATE-WRONG-LOCATOR" else direct_references if gate_id == "GATE-BROKEN-REFERENCE" else []
+        def separately_owned(row):
+            # One atomic wrong destination is owned by its direct gate. Retain
+            # distinct material findings and patterns with other affected items.
+            if set(row["affected_item_ids"]) <= owned_locators | owned_references:
+                return True
+            locator_ids = {item["locator_id"] for item in bad(row)}
+            if gate_id in {"GATE-SCOPE-LOCATOR", "GATE-COMPOUND", "GATE-GROUNDING", "GATE-SYSTEMIC-UNSUPPORTED"}:
+                return bool(locator_ids) and locator_ids <= owned_locators
+            if gate_id in {"GATE-CROSS-REFERENCE", "GATE-SEE-SUBSTITUTION"}:
+                return bool(row["affected_item_ids"]) and set(row["affected_item_ids"]) <= owned_references
+            return False
+        matching = [row for row in defects if predicates.get(gate_id, lambda _: False)(row) and not separately_owned(row)]
+        groups = core.systemic_defect_groups([row for row in aggregate_candidates.get(gate_id, [])
+            if not core.has_partial_fit(row, locators) and not separately_owned(row)
+            and not blocked_ids & set(row["affected_item_ids"])
+            and not (owned_locators & {item["locator_id"] for item in bad(row)} or owned_references & set(row["affected_item_ids"]))])
         group_ids = {item for group in groups for item in group["defect_ids"]}
         matching = [row for row in defects if row in matching or row["defect_id"] in group_ids]
-        triggered = bool(matching)
+        triggered = bool(matching or direct)
         attempt = structure.get("scoring_context", {}).get("candidate_attempt", {})
         candidate_failure = gate_id == "GATE-STRUCTURE" and attempt.get("status") in {"empty", "structurally_incomplete", "unparseable"}
         triggered = triggered or candidate_failure
         threshold = ("10 distinct items, >=5% of one denominator, >=2 sections and >=25% source/structural spread" if groups or gate_id in {"GATE-CLUTTER", "GATE-SYSTEMIC-UNSUPPORTED"} else gate["description"])
+        affected = {item for row in matching for item in row["affected_item_ids"]}
+        # Preserve original defect provenance, but do not count direct failures
+        # again in another gate's affected IDs or qualifying locator rows.
+        affected -= owned_locators | owned_references
+        qualifying = {locator["locator_id"]: deepcopy(locator) for row in matching for locator in bad(row) if locator["locator_id"] not in owned_locators}
         results.append({**deepcopy(gate), "triggered": triggered,
                         "defect_ids": sorted(row["defect_id"] for row in matching),
-                        "affected_evidence_ids": sorted({item for row in matching for item in row["affected_item_ids"]} | set(attempt.get("evidence_ids", []) if candidate_failure else [])),
+                        "affected_evidence_ids": sorted(affected | set(attempt.get("evidence_ids", []) if candidate_failure else []) | {row.get("locator_id", row.get("reference_id")) for row in direct}),
                         "threshold": threshold, "systemic_groups": groups,
                         "consequence_evidence": [deepcopy(row) for row in matching],
-                        "qualifying_locator_evidence": [deepcopy(locator) for row in matching for locator in bad(row)],
-                        "threshold_reason": ("Frozen systemic threshold met: " + core.canonical_json_text(groups) if groups else "Qualifying material consequence: " + core.canonical_json_text(matching) if matching else "Candidate output cannot function as an index: " + core.canonical_json_text(attempt) if candidate_failure else "No qualifying evidence crosses this threshold.")})
+                        "direct_destination_evidence": deepcopy(direct),
+                        "qualifying_locator_evidence": [qualifying[key] for key in sorted(qualifying)],
+                        "threshold_reason": ("Confirmed delivered destination failure from finalized audit evidence; one item is sufficient, independent of severity, defect records, rates, or spread." if direct else "Frozen systemic threshold met: " + core.canonical_json_text(groups) if groups else "Qualifying material consequence: " + core.canonical_json_text(matching) if matching else "Candidate output cannot function as an index: " + core.canonical_json_text(attempt) if candidate_failure else "No qualifying evidence crosses this threshold.")})
     return results
 
 
@@ -2052,8 +2145,11 @@ def _projection_metadata(
     structure: Mapping[str, Any],
     structure_record: Mapping[str, Any],
     candidate_label: str,
+    locator_documents: Sequence[Mapping[str, Any]],
+    inventory: Mapping[str, Any],
 ) -> dict[str, Any]:
-    gates = _critical_gate_outcomes(policy, structure, calculation)
+    destination_evidence = _destination_gate_evidence(structure, calculation, locator_documents, inventory)
+    gates = _critical_gate_outcomes(policy, structure, calculation, destination_evidence=destination_evidence)
     limitations = [item["summary"] for item in structure["uncertainties"]]
     metadata = {
         "schema_version": "subject-index-v8-projection-metadata-v2",
@@ -2061,6 +2157,7 @@ def _projection_metadata(
         "inclusion_policy": "Frozen current-V8 source scope and candidate-blind benchmark.",
         "uncertainty_policy": policy["audit_design"]["uncertainty_policy"],
         "critical_gates": gates,
+        "gate_assessment": destination_evidence[2],
         "evaluation_validity": _evaluation_validity(policy, structure, calculation),
         "review_signals": _review_signals(structure, calculation),
         "report_id": f"{calculation['evaluation_id']}-v8",
@@ -2118,6 +2215,7 @@ def _evaluation_result(
         "structure_audit": _structure_reference(structure_record),
         "projection_metadata": {"schema_version": metadata["schema_version"], "artifact_path": metadata_record["path"], "sha256": metadata_record["sha256"], "projection_metadata_sha256": metadata["projection_metadata_sha256"]},
         "critical_gates": deepcopy(metadata["critical_gates"]),
+        "gate_assessment": deepcopy(metadata["gate_assessment"]),
         "evaluation_validity": deepcopy(metadata["evaluation_validity"]),
         "review_signals": deepcopy(metadata["review_signals"]),
         "defect_counts": deepcopy(metadata["defect_counts"]),
@@ -2202,6 +2300,7 @@ def _web_report(
         "heading_access_causal_provenance": deepcopy(items["heading_access_causal_provenance"]),
         "score_views": {"primary_view_id": "canonical_as_delivered", "adjustment_status": "none", "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "score": calculation["overall_percentage"], "maximum": 100, "calculation": calculation_ref, "structure_audit": structure_ref, "causal_attribution": "primary_observed_result", "provenance_artifacts": []}]},
         "evaluation_validity": deepcopy(result["evaluation_validity"]),
+        "gate_assessment": deepcopy(result["gate_assessment"]),
         "review_signals": deepcopy(result["review_signals"]),
         "methodology": {
             "rubric_version": calculation["rubric_version"],
@@ -2379,7 +2478,7 @@ def command_score_state(args: argparse.Namespace) -> None:
             input_record = _artifact_record(root, outputs["input"], input_payload, stage="scoring", artifact_type="dimension_calculation_input", schema_version="subject-index-dimension-calculation-input-v2", stamp=stamp, input_sha256=input_hashes)
             calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version="subject-index-dimension-calculations-v6", stamp=stamp, input_sha256=input_hashes)
             items_record = _artifact_record(root, outputs["items"], items_payload, stage="scoring", artifact_type="item_assessments", schema_version="subject-index-item-assessments-v7", stamp=stamp, input_sha256=(calculation_record["sha256"], inventory_record["sha256"], structure_record["sha256"]))
-            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"])
+            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, inventory=inventory)
             metadata_payload = _json_bytes(metadata)
             metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version="subject-index-v8-projection-metadata-v2", stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)

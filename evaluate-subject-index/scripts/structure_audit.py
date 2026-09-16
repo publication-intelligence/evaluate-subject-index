@@ -134,6 +134,9 @@ def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
         _require(any(status != "passes" for status in statuses), "default_pass_record_forbidden", "node_judgments stores exceptions only; omit all-pass nodes.", node_id)
     for reference_id, record in reference_exceptions.items():
         _require(record["judgment"] != "supported", "default_pass_record_forbidden", "cross_reference_judgments stores exceptions only; omit supported references.", reference_id)
+        resolution = record.get("target_resolution")
+        if resolution is not None:
+            _require(resolution["status"] != "no_valid_destination" or record["judgment"] == "unsupported", "contradictory_reference_resolution", "A confirmed absent destination requires an unsupported delivered reference, not partial correctness or uninspectability.", reference_id)
 
     attestation = structure["full_scope_attestation"]
     pilot_pass_nodes = set(attestation["pilot_pass_node_ids"])
