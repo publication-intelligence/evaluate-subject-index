@@ -18,7 +18,7 @@ The current V8 evaluation uses one linear 16-stage state machine and one control
 | locator_audit | all locator-audit V2 chunks |
 | missing_access_audit | all missing-access chunks |
 | structure_audit | global structure-audit V6 with causal provenance |
-| scoring | V8 calculation, item assessments V7, result V11 |
+| scoring | V8 calculation V6, item assessments V7, result V12 |
 | web_report | web report V10 plus canonical public web projection V1 collections |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.

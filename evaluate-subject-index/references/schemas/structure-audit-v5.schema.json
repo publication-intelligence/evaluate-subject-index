@@ -48,7 +48,7 @@
         "page_bearing_paths": {"type": "integer", "minimum": 0},
         "expanded_locators": {"type": "integer", "minimum": 0},
         "cross_references": {"type": "integer", "minimum": 0},
-        "total_paths": {"type": "integer", "minimum": 0},
+        "total_paths": {"type": "integer", "minimum": 0, "description": "Number of distinct complete heading_path tuples, not record-specific PATH-* rows."},
         "total_nodes": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": true

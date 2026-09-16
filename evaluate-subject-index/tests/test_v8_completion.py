@@ -75,6 +75,56 @@ class CurrentV8CompletionTests(unittest.TestCase):
             check=False,
         )
 
+    def add_cross_reference_record_for_existing_heading(self) -> None:
+        candidate_path = self.root / "candidate/candidate-index.json"
+        candidate = json.loads(candidate_path.read_text())
+        candidate["records"].append({
+            "record_id": "REC-002",
+            "record_type": "cross_reference",
+            "path_id": "PATH-002",
+            "heading_path": ["Synthetic subject"],
+            "original_displayed_form": "Synthetic subject. See also Synthetic subject",
+            "locator_displays": [],
+            "locator_assignments": [],
+            "cross_references": [{
+                "reference_id": "XREF-001",
+                "type": "see also",
+                "target": "Synthetic subject",
+                "target_path_id": "PATH-001",
+                "original_displayed_form": "Synthetic subject",
+            }],
+        })
+        candidate["normalization"]["record_count"] = 2
+        self.write("candidate/candidate-index.json", candidate)
+
+        inventory_path = self.root / "candidate/item-inventory.json"
+        inventory = json.loads(inventory_path.read_text())
+        inventory["paths"].append({
+            "path_id": "PATH-002", "record_id": "REC-002", "record_type": "cross_reference",
+            "heading_path": ["Synthetic subject"], "node_ids": ["NODE-001"],
+            "locator_ids": [], "reference_ids": ["XREF-001"],
+        })
+        inventory["heading_nodes"][0]["path_ids"].append("PATH-002")
+        inventory["heading_nodes"][0]["record_ids"].append("REC-002")
+        inventory["heading_nodes"][0]["direct_path_ids"].append("PATH-002")
+        inventory["cross_references"].append({
+            "reference_id": "XREF-001", "record_id": "REC-002", "source_path_id": "PATH-002",
+            "source_node_id": "NODE-001", "reference_type": "see also",
+            "target_display": "Synthetic subject", "target_path_id": "PATH-001",
+        })
+        inventory["counts"]["paths"] = 2
+        inventory["counts"]["cross_references"] = 1
+        self.write("candidate/item-inventory.json", inventory)
+
+        state = json.loads(self.state_path.read_text())
+        for artifact_type, path in (("candidate_index", candidate_path), ("item_inventory", inventory_path)):
+            record = next(item for item in state["artifacts"] if item["artifact_type"] == artifact_type)
+            record["sha256"] = file_hash(path)
+            record["artifact_id"] = state_cli.artifact_id(record["path"], record["sha256"])
+            if artifact_type == "candidate_index":
+                state["candidate"]["normalized_sha256"] = record["sha256"]
+        self.state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
     @staticmethod
     def treatment_pages(*, found: list[int] | None = None) -> dict:
         found = found or []
@@ -293,6 +343,35 @@ class CurrentV8CompletionTests(unittest.TestCase):
             self.assertEqual("scored", dimensions[component_id]["status"])
             self.assertEqual(1, dimensions[component_id]["raw_status_counts"]["major_issues"])
         self.assertEqual([], structure["defects"])
+
+    def test_distinct_heading_path_denominator_accepts_separate_cross_reference_record(self) -> None:
+        self.add_cross_reference_record_for_existing_heading()
+        structure = json.loads(self.structure_path.read_text())
+        denominator = structure["candidate_denominator"]
+        denominator["cross_reference_ids"] = ["XREF-001"]
+        denominator["cross_reference_count"] = 1
+        denominator["cross_reference_id_set_sha256"] = id_set_hash(["XREF-001"])
+        structure["metrics"]["cross_references"] = 1
+        structure["scoring_context"]["cross_reference_applicability"] = {
+            "status": "applicable", "basis_code": "delivered_references",
+            "delivered_reference_count": 1, "warranted_reference_obligation_count": 0,
+            "warranted_reference_obligation_ids": [], "reference_defect_ids": [],
+        }
+
+        structure["metrics"]["total_paths"] = 2
+        self.write("structure-audit.v5.json", structure)
+        state_before_rejection = self.state_path.read_bytes()
+        incorrect = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
+        self.assertNotEqual(0, incorrect.returncode)
+        self.assertIn("structure_candidate_metric_mismatch", incorrect.stdout)
+        self.assertEqual(state_before_rejection, self.state_path.read_bytes())
+
+        structure["metrics"]["total_paths"] = 1
+        self.write("structure-audit.v5.json", structure)
+        registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
+        self.assertEqual(0, registered.returncode, registered.stdout + registered.stderr)
+        scored = self.run_cli("score", "--state", str(self.state_path))
+        self.assertEqual(0, scored.returncode, scored.stdout + scored.stderr)
 
     def test_explicit_major_defect_still_triggers_concept_cap(self) -> None:
         structure = json.loads(self.structure_path.read_text())

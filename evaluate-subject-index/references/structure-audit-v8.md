@@ -27,4 +27,4 @@ Review is triggered by more than six displayed locators or a continuous range lo
 
 A numeric trigger is never an automatic defect. `defect_confirmed` requires all four semantic findings, evidence, and a bound `HED` or `SUB` findability defect. `reviewed_no_defect` requires evidence and at least one unmet semantic prerequisite. Full mode forbids unresolved triggers; pilot mode preserves them as heading-access uncertainty.
 
-`metrics.total_paths` is the denominator for path-scoped structure defects. It must cover every locator-bearing path and cannot exceed `total_nodes`. Locator-only density checks continue to use `page_bearing_paths`.
+`metrics.total_paths` is the number of distinct complete `heading_path` tuples and the denominator for path-scoped structure defects. It is not the number of record-specific `PATH-*` rows: separate heading, locator, or cross-reference records may share one complete heading path. It must cover every locator-bearing path and cannot exceed `total_nodes`. Locator-only density checks continue to use `page_bearing_paths`.

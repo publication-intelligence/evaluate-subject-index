@@ -10,6 +10,7 @@
     "candidate_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "paths": {
       "type": "array",
+      "description": "One stable PATH-* row per delivered candidate record; multiple rows may share the same complete heading_path.",
       "items": {
         "type": "object",
         "required": ["path_id", "record_id", "record_type", "heading_path", "node_ids", "locator_ids", "reference_ids"],
