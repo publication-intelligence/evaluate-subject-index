@@ -217,23 +217,41 @@ def build_source_subjects(benchmark: Mapping[str, Any], items: Mapping[str, Any]
     })
 
 
-def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, Any]:
+def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any], calculation: Mapping[str, Any]) -> dict[str, Any]:
     chunks = {row["chunk_id"]: row for row in manifest["chunks"]}
-    findings = {row["chunk_id"]: row for row in structure["density"]["distribution_findings"]}
+    selectivity = next(row for row in calculation["dimensions"] if row["dimension_id"] == "editorial_selectivity")
+    component = next(row for row in selectivity["components"] if row["component_id"] == "density_fit")
+    calculated_rows = component["details"]["chapter_measurements"]
+    calculated = {row["chunk_id"]: row for row in calculated_rows}
+    expected = [row["chunk_id"] for row in structure["density"]["chapter_measurements"]]
+    core.require(
+        len(calculated) == len(calculated_rows) == len(expected) and set(calculated) == set(expected),
+        "density_projection_chunk_mismatch",
+        "Projected density calculations must cover every and only canonical structure density chunk.",
+    )
     rows = []
     for source_order, measurement in enumerate(structure["density"]["chapter_measurements"]):
         chunk = chunks[measurement["chunk_id"]]
-        finding = findings.get(measurement["chunk_id"], {})
-        path_finding = finding.get("finding", finding.get("path_finding", "not_measured"))
-        occurrence_finding = finding.get("locator_occurrence_finding", "not_measured")
+        fit = calculated[measurement["chunk_id"]]
         rows.append({
             "source_order": source_order, "chunk_id": measurement["chunk_id"], "title": chunk["title"],
             "source_units": deepcopy(chunk["source_units"]), "owned_document_page_ranges": deepcopy(chunk["owned_document_page_ranges"]),
             **deepcopy(measurement),
-            "canonical_fit_judgment": {"combined": "within_acceptable_bands" if path_finding == "within_path_band" and occurrence_finding == "within_occurrence_band" else "outside_one_or_more_acceptable_bands", "path_rate": path_finding, "locator_occurrence_rate": occurrence_finding, "interpretation": finding.get("interpretation", "Descriptive distribution evidence."), "automatic_defect": False},
+            "path_rate_per_1000_words": None if fit.get("path_rate") is None else float(fit["path_rate"]),
+            "occurrence_rate_per_1000_words": None if fit.get("occurrence_rate") is None else float(fit["occurrence_rate"]),
+            "canonical_fit_judgment": {
+                "combined": fit.get("unit_fit_percentage"),
+                "path_fit_percentage": fit.get("path_fit_percentage"),
+                "occurrence_fit_percentage": fit.get("occurrence_fit_percentage"),
+                "unit_fit_percentage": fit.get("unit_fit_percentage"),
+                "status": fit.get("status", "not_measured" if fit.get("unit_fit_percentage") is None else "measured"),
+                "basis": "canonical_finalized_density_calculation",
+                "automatic_defect": False,
+            },
         })
     density = structure["density"]
-    return collection("density", rows, "chunk manifest packet order", policy_status=density["policy_status"], measurement_level=density["measurement_level"], targets=deepcopy(density["targets"]), maximum_score_contribution=density["maximum_score_contribution"], fit_rating=density.get("fit_rating"))
+    fit_percentage = component.get("percentage")
+    return collection("density", rows, "chunk manifest packet order", policy_status=density["policy_status"], measurement_level=density["measurement_level"], targets=deepcopy(density["targets"]), maximum_score_contribution=density["maximum_score_contribution"], fit_percentage=fit_percentage, fit_rating=None if fit_percentage is None else float(fit_percentage) / 20)
 
 
 def _artifact_binding(record: Mapping[str, Any]) -> dict[str, Any]:
@@ -244,7 +262,7 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     collections = {
         "index_records": public_safe(build_index_records(candidate, inventory, items)),
         "source_subjects": public_safe(build_source_subjects(benchmark, items, missing_documents)),
-        "density": public_safe(build_density(structure, manifest)),
+        "density": public_safe(build_density(structure, manifest, calculation)),
     }
     if overlay is not None:
         collections["correction_overlay"] = public_safe(deepcopy(overlay))
