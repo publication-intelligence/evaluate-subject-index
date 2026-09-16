@@ -5,6 +5,8 @@
   "type": "object",
   "required": ["schema_version", "projection_id", "projection_role", "evaluation_id", "view_selection", "score_views", "correction_outcomes", "item_summaries", "collections", "provenance", "density_denominator", "public_safety", "limitations", "projection_sha256"],
   "properties": {
+    "methodology": {"type": "object", "required": ["rubric_version", "calculation_profile", "benchmark"]},
+    "comparison_identity": {"type": "object"},
     "review_signals": {"type": "array", "items": {"type": "object"}},
     "schema_version": {"const": "ohfr-v8-canonical-web-projection-v1"},
     "projection_id": {"type": "string", "pattern": "^OHFR-V8-WEB-[A-F0-9]{12}$"},

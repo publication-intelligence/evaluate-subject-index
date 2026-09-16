@@ -167,6 +167,12 @@ def validate_json_identity_file(path: Path, label: str, schema_name: str, own_ha
 
 
 def load_frozen_inputs(args: argparse.Namespace, audit_kind: str) -> dict[str, Any]:
+    import study_comparison
+    study_state_path = Path(args.state).resolve()
+    try:
+        study_comparison.preflight_state(study_comparison.read(study_state_path), study_state_path)
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        raise PreparationError('study_comparison_failed', str(exc)) from exc
     run = load_canonical_run(Path(args.state))
     state = run["state"]
     page_map, page_map_bytes, page_map_file_sha = validate_json_identity_file(Path(args.page_map), "Page map", "page-map.schema.json", "page_map_sha256")

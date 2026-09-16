@@ -47,6 +47,7 @@ from state_cli import (
     save_state,
     validate_state,
 )
+import study_comparison
 from structure_audit import (
     StructureAuditError,
     id_set_hash,
@@ -2403,6 +2404,7 @@ def command_register_structure(args: argparse.Namespace) -> None:
             stamp = now()
             record = _artifact_record(state_path.parent, structure_path, payload, stage="structure_audit", artifact_type="structure_audit", schema_version="structure-audit-v6", stamp=stamp, input_sha256=(candidate_record["sha256"], inventory_record["sha256"]))
             updated = _add_records_and_complete(state, state_path, "structure_audit", [record], "Validated and registered the native V8 structure audit atomically.")
+            study_comparison.preflight_state(updated, state_path, require_density=True)
             save_state(state_path, updated)
         core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "artifacts_registered": [record["path"]], "artifacts_written": [str(state_path)], "next_actions": [next_stage(updated)], "warnings": warnings})
     except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, ValueError) as exc:
@@ -2416,6 +2418,7 @@ def command_register_structure(args: argparse.Namespace) -> None:
 def _calculation_loaded_from_state(
     state: Mapping[str, Any], state_path: Path, config_path: Path
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, Any]]:
+    study_identity = study_comparison.preflight_state(state, state_path, require_density=True)
     policy, policy_record, policy_path = _registered_documents(state, state_path, stage="define_policy", schema_version="subject-index-evaluation-policy-v4", schema_name="evaluation-policy-v4.schema.json")[0]
     validate_v8_policy(policy)
     manifest, manifest_record, manifest_path = _registered_documents(state, state_path, stage="chunk_definition", schema_version="chunk-manifest-v1", schema_name="chunk-manifest.schema.json")[0]
@@ -2477,6 +2480,7 @@ def _calculation_loaded_from_state(
         "input_paths": paths,
         "config_path": config_path,
     }
+    loaded["study_identity"] = study_identity
     return loaded, inventory, inventory_record, loaded["locator_documents"], loaded["missing_documents"], structure_record
 
 
@@ -2514,6 +2518,8 @@ def command_score_state(args: argparse.Namespace) -> None:
             metadata_payload = _json_bytes(metadata)
             metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version="subject-index-v8-projection-metadata-v2", stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)
+            if loaded.get("study_identity") is not None:
+                result["comparison_key"]["study_identity"] = loaded["study_identity"]
             result_payload = _json_bytes(result)
             result_record = _artifact_record(root, outputs["result"], result_payload, stage="scoring", artifact_type="evaluation_result", schema_version="subject-index-evaluation-result-v12", stamp=stamp, visibility="public", input_sha256=(calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
             records = [input_record, calculation_record, items_record, metadata_record, result_record]
@@ -2555,6 +2561,8 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             core.require(metadata["projection_metadata_sha256"] == core.canonical_hash(metadata, "projection_metadata_sha256"), "projection_metadata_self_hash_mismatch", "Registered projection metadata self-hash does not reconstruct.")
             core.require(result["evaluation_id"] == calculation["evaluation_id"] == items["evaluation_id"] == state["evaluation_id"], "evaluation_identity_mismatch", "Registered scoring artifacts use different evaluation identities.")
             core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
+            study_identity = study_comparison.preflight_state(state, state_path, require_density=True)
+            core.require(result["comparison_key"].get("study_identity") == study_identity, "study_comparison_stale", "Rescore after changing the study binding; report identity must match current evidence.")
             output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / "web-report.v10.json"))
             bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / "v8-canonical-projection"))
             if not replacing:
@@ -2571,6 +2579,10 @@ def command_build_report_state(args: argparse.Namespace) -> None:
                 candidate=candidate,
                 missing_documents=[item[0] for item in missing_entries],
             )
+            report["methodology"]["benchmark"] = study_comparison.benchmark_identity(benchmark)
+            if study_identity is not None:
+                report["methodology"]["benchmark"]["release"] = deepcopy(study_identity["release"])
+            core.validate_schema_document(report, "web-report-v10.schema.json", "Benchmark-labeled report")
             payload = _json_bytes(report)
             stamp = now()
             record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version="subject-index-web-report-v10", stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))

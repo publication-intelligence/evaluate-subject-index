@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import stat
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -134,42 +135,55 @@ def command_import(args: argparse.Namespace) -> None:
     output = Path(args.output_dir).resolve()
     if output.exists() and any(output.iterdir()):
         fail("output_not_empty", f"Import directory must be new or empty: {output}")
-    output.mkdir(parents=True, exist_ok=True)
+    destination = output
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.checkpoint-import-', dir=destination.parent) as temporary:
+        output = Path(temporary) / 'evaluation'
+        output.mkdir()
 
-    try:
-        with zipfile.ZipFile(bundle, "r") as archive:
-            infos = archive.infolist()
-            names = [info.filename for info in infos]
-            if len(names) != len(set(names)):
-                fail("duplicate_members", "Bundle contains duplicate member paths.")
-            required = {"evaluation-state.json", "bundle-metadata.json"}
-            missing = sorted(required - set(names))
-            if missing:
-                fail("missing_control_files", "Bundle is missing required control files.", missing)
-            for info in infos:
-                safe_relative_path(info.filename)
-                if info.is_dir() or is_symlink_member(info):
-                    fail("unsupported_member", f"Bundle contains an unsupported member: {info.filename}")
-            metadata = json.loads(archive.read("bundle-metadata.json").decode("utf-8"))
-            metadata_errors = schema_errors(metadata, "bundle-metadata.schema.json")
-            if metadata_errors:
-                fail("invalid_bundle_metadata", "Bundle metadata is invalid.", metadata_errors)
-            declared = set(metadata.get("included_paths", [])) | {"bundle-metadata.json"}
-            if set(names) != declared:
-                fail("bundle_inventory_mismatch", "Bundle members differ from its inventory.")
-            for info in infos:
-                target = output.joinpath(*PurePosixPath(info.filename).parts)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(archive.read(info.filename))
-    except (zipfile.BadZipFile, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        fail("invalid_bundle", f"Checkpoint cannot be read: {exc}")
+        try:
+            with zipfile.ZipFile(bundle, "r") as archive:
+                infos = archive.infolist()
+                names = [info.filename for info in infos]
+                if len(names) != len(set(names)):
+                    fail("duplicate_members", "Bundle contains duplicate member paths.")
+                required = {"evaluation-state.json", "bundle-metadata.json"}
+                missing = sorted(required - set(names))
+                if missing:
+                    fail("missing_control_files", "Bundle is missing required control files.", missing)
+                for info in infos:
+                    safe_relative_path(info.filename)
+                    if info.is_dir() or is_symlink_member(info):
+                        fail("unsupported_member", f"Bundle contains an unsupported member: {info.filename}")
+                metadata = json.loads(archive.read("bundle-metadata.json").decode("utf-8"))
+                metadata_errors = schema_errors(metadata, "bundle-metadata.schema.json")
+                if metadata_errors:
+                    fail("invalid_bundle_metadata", "Bundle metadata is invalid.", metadata_errors)
+                declared = set(metadata.get("included_paths", [])) | {"bundle-metadata.json"}
+                if set(names) != declared:
+                    fail("bundle_inventory_mismatch", "Bundle members differ from its inventory.")
+                for info in infos:
+                    target = output.joinpath(*PurePosixPath(info.filename).parts)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(archive.read(info.filename))
+        except (zipfile.BadZipFile, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            fail("invalid_bundle", f"Checkpoint cannot be read: {exc}")
 
-    state_path = output / "evaluation-state.json"
-    state = load_state(state_path)
-    errors, warnings = validate_state(state, state_path=state_path)
-    if errors:
-        fail("invalid_imported_state", "The checkpoint state is not resumable.", errors)
-    reconnect = [item["path"] for item in metadata.get("excluded", []) if item.get("reason") == "restricted_by_portable_profile"]
+        state_path = output / "evaluation-state.json"
+        state = load_state(state_path)
+        errors, warnings = validate_state(state, state_path=state_path)
+        if errors:
+            fail("invalid_imported_state", "The checkpoint state is not resumable.", errors)
+        try:
+            import study_comparison
+            study_comparison.preflight_state(state, state_path)
+        except (ValueError, KeyError, OSError) as exc:
+            fail("study_comparison_failed", "Imported checkpoint does not match its study lock.", str(exc))
+        reconnect = [item["path"] for item in metadata.get("excluded", []) if item.get("reason") == "restricted_by_portable_profile"]
+        if destination.exists():
+            destination.rmdir()
+        output.rename(destination)
+        output = destination
     emit({
         "command": "import-bundle", "ok": True, "evaluation_id": state["evaluation_id"],
         "profile": metadata.get("profile"), "artifacts_written": [{"path": str(output), "type": "evaluation_directory"}],

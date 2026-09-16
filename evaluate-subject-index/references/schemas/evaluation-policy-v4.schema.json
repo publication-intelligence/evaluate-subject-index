@@ -32,10 +32,11 @@
     "critical_gates": {"type": "array", "minItems": 10, "items": {"type": "object"}},
     "deviations": {"type": "array", "items": {"type": "object"}},
     "freeze": {"type": "object", "required": ["frozen_at", "candidate_seen"], "properties": {"frozen_at": {"type": "string"}, "candidate_seen": {"type": "boolean"}}, "additionalProperties": false},
+    "retrospective_study_migration": {"$ref": "retrospective-study-policy.schema.json"},
     "retrospective_migration": {"$ref": "retrospective-migration.schema.json"},
     "policy_sha256": {"$ref": "evaluation-policy-v4.schema.json#/$defs/sha256"}
   },
-  "allOf": [{"if": {"not": {"required": ["retrospective_migration"]}}, "then": {"properties": {"freeze": {"properties": {"candidate_seen": {"const": false}}}}}}],
+  "allOf": [{"not": {"required": ["retrospective_migration", "retrospective_study_migration"]}}, {"if": {"not": {"anyOf": [{"required": ["retrospective_migration"]}, {"required": ["retrospective_study_migration"]}]}}, "then": {"properties": {"freeze": {"properties": {"candidate_seen": {"const": false}}}}}}],
   "$defs": {"sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
   "additionalProperties": false
 }

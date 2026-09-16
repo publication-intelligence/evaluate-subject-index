@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "source-density-measurement.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "measurement_id",
+    "source_sha256",
+    "page_map_sha256",
+    "chunk_manifest_sha256",
+    "candidate_information_used",
+    "extractor",
+    "script_sha256",
+    "extraction_xml_sha256",
+    "protocol",
+    "total_indexable_source_words",
+    "chunks",
+    "pages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "source-density-measurement-v1"
+    },
+    "measurement_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "page_map_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "chunk_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "script_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "extraction_xml_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "candidate_information_used": {
+      "const": false
+    },
+    "extractor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "protocol": {
+      "type": "object",
+      "required": [
+        "inclusions",
+        "exclusions",
+        "token",
+        "scope"
+      ],
+      "properties": {
+        "inclusions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "total_indexable_source_words": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "chunks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "owned_document_pages",
+          "indexable_source_words"
+        ],
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owned_document_pages": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "indexable_source_words": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "document_page",
+          "source_page_label",
+          "indexable_source_words"
+        ],
+        "properties": {
+          "document_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "source_page_label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "indexable_source_words": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}

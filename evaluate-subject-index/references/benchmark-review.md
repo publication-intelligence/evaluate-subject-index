@@ -63,3 +63,5 @@ python scripts/benchmark_review_cli.py freeze \
 ```
 
 Do not complete `benchmark_review` or `benchmark_freeze` with `state_cli.py set-stage`; the typed freeze command is the canonical transition. Any validation failure leaves state and the supplied artifacts unchanged.
+
+For candidate-visible cross-evaluation migration and comparison, see [Retrospective study binding and comparison](study-comparison.md), including historical release proof, semantic policy, density evidence, and import/bundle preflight.
