@@ -152,6 +152,23 @@ class HeadingPayloadTests(unittest.TestCase):
         self.assertEqual(("Aachen", "see also Cologne"), split_heading_and_payload("Aachen see also Cologne", self.lookup))
         self.assertEqual(("Aachen", "171; see also Cologne"), split_heading_and_payload("Aachen 171; see also Cologne", self.lookup))
 
+    def test_heading_qualifiers_are_not_unmapped_locators(self) -> None:
+        cases = {
+            "equality, civil": ("equality, civil", ""),
+            "Italy under French occupation, 1796–99": ("Italy under French occupation, 1796–99", ""),
+            "military crisis and recovery, 1793": ("military crisis and recovery, 1793", ""),
+            "subsistence crisis, 1794–1795": ("subsistence crisis, 1794–1795", ""),
+            "See under Bonaparte, Napoleon: Italian campaign, 1796–97": (
+                "",
+                "See under Bonaparte, Napoleon: Italian campaign, 1796–97",
+            ),
+            "Appendix, 9999": ("Appendix", "9999"),
+            "Preface, xliv": ("Preface", "xliv"),
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(expected, split_heading_and_payload(text, self.lookup))
+
 
 class WhitespaceLayoutNormalizationTests(unittest.TestCase):
     def test_first_whitespace_delimited_locator_is_preserved_and_expanded(self) -> None:

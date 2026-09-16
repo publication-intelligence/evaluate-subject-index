@@ -383,19 +383,27 @@ def looks_like_locator_payload(
                 and normalize_locator_key(end) in lookup
             ):
                 return True
-        return not require_mapped and bool(
-            re.fullmatch(
-                r"(?:[0-9]+|[ivxlcdm]+)(?:\s*[–—‑‒−-]\s*(?:[0-9]+|[ivxlcdm]+))?",
-                token,
-                re.I,
+        calendar_year = re.fullmatch(
+            r"(?:1[0-9]{3}|20[0-9]{2})(?:\s*(?:–|—|‑|‒|−|--|-)\s*(?:[0-9]{2}|[12][0-9]{3}))?",
+            token,
+        )
+        if require_mapped or calendar_year:
+            return False
+        atoms = re.split(r"\s*(?:–|—|‑|‒|−|--|-)\s*", token)
+        return all(
+            bool(atom)
+            and (
+                atom.isdigit()
+                or bool(re.fullmatch(r"M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})", atom, re.I))
             )
+            for atom in atoms
         )
 
     # Arbitrary alphabetic text is a heading continuation, not a locator.  Any
     # prefixed/alphabetic locator must be present in the frozen page map and is
     # accepted by the exact lookup above.  The fallback is limited to numeric
-    # and Roman forms so prose such as ``continued mechanisms`` cannot create a
-    # false heading boundary.
+    # and valid Roman forms, excluding calendar-year qualifiers, so prose such
+    # as ``civil`` or ``continued mechanisms`` cannot create a false boundary.
     return all(is_locator(token) for token in tokens)
 
 
