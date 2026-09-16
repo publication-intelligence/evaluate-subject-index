@@ -1598,7 +1598,7 @@ def _web_report(
         "defects": deepcopy(metadata["defects"]),
         "examples": deepcopy(metadata["examples"]),
         "item_grade_index": {"schema_version": items["schema_version"], "artifact_path": items_record["path"], "sha256": items_record["sha256"], "grading_policy": items["grading_policy"], "summary": deepcopy(items["summary"]), "color_legend": deepcopy(items["color_legend"]), "interaction": {"color_source": "grade.color_token", "popover_source": "popover", "not_measured_behavior": "neutral_not_failure"}},
-        "locator_explanations": [deepcopy(item["locator_explanation"]) for item in items["locator_assessments"]],
+        "locator_explanations": [web_projection.public_locator_explanation(item) for item in items["locator_assessments"]],
         "heading_access_causal_provenance": deepcopy(items["heading_access_causal_provenance"]),
         "score_views": {"primary_view_id": "canonical_as_delivered", "adjustment_status": "none", "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "score": calculation["overall_percentage"], "maximum": 100, "calculation": calculation_ref, "structure_audit": structure_ref, "causal_attribution": "primary_observed_result", "provenance_artifacts": []}]},
         "methodology": {
