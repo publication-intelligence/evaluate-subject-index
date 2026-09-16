@@ -107,7 +107,7 @@ def _selected(value: Mapping[str, Any], fields: Sequence[str]) -> dict[str, Any]
 
 ACCESS_IDENTITY_FIELDS = (
     "locator_ids", "matched_path_ids", "matched_locator_ids", "usable_locator_ids", "source_evidence_ids",
-    "locator_evidence_ids", "benchmark_evidence_ids", "usable_locator_evidence_ids",
+    "locator_evidence_ids", "benchmark_evidence_ids", "source_uncertainty_ids", "usable_locator_evidence_ids",
     "tested_locator_ids", "tested_locator_evidence_ids", "tested_path_ids", "tested_direct_path_ids",
     "usable_cross_reference_ids", "usable_cross_reference_path_ids", "usable_path_ids",
     "tested_cross_reference_ids", "tested_cross_reference_source_path_ids", "source_path_ids",

@@ -50,7 +50,12 @@ class PublicLocatorNarrativeTests(unittest.TestCase):
         missing["reader_task_results"][0]["tested_locator_ids"] = ["LOC-001"]
         missing["reader_task_results"][0]["tested_path_ids"] = ["PATH-001"]
         missing["reader_task_results"][0]["matched_reference_ids"] = ["XREF-001"]
-        missing["reader_task_results"][0]["uncertainty"] = {"status": "uncertain", "reason": access_secret, "evidence_ids": ["EVID-TASK-001"]}
+        missing["reader_task_results"][0]["uncertainty"] = {
+            "status": "uncertain",
+            "reason": access_secret,
+            "evidence_ids": ["EVID-TASK-001"],
+            "source_uncertainty_ids": ["UNCERTAINTY-SOURCE-001"],
+        }
         missing["treatment_judgments"][0]["access_rationale"] = access_secret
         missing["treatment_judgments"][0]["matched_path_ids"] = ["PATH-001"]
         missing["treatment_judgments"][0]["matched_locator_ids"] = ["LOC-001"]
@@ -130,6 +135,10 @@ class PublicLocatorNarrativeTests(unittest.TestCase):
         self.assertEqual(["PATH-001"], source["reader_tasks"][0]["result"]["tested_path_ids"])
         self.assertEqual(["XREF-001"], source["reader_tasks"][0]["result"]["matched_reference_ids"])
         self.assertEqual("uncertain", source["reader_tasks"][0]["result"]["uncertainty"]["status"])
+        self.assertEqual(
+            ["UNCERTAINTY-SOURCE-001"],
+            source["reader_tasks"][0]["result"]["uncertainty"]["source_uncertainty_ids"],
+        )
         self.assertEqual("found", source["expected_treatments"][0]["status"])
         self.assertEqual("1", source["expected_treatments"][0]["source_page_label"])
         self.assertEqual(["PATH-001"], source["expected_treatments"][0]["matched_path_ids"])
