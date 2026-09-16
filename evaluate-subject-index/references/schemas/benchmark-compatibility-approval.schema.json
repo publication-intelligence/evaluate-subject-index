@@ -6,41 +6,35 @@
   "required": ["schema_version", "approval_id", "approved_at", "reviewer_attestation", "legacy", "current", "allowed_changes"],
   "properties": {
     "schema_version": {"const": "source-benchmark-compatibility-approval-v1"},
+    "reuse_mode": {"const": "native_v8_exact"},
     "approval_id": {"type": "string", "minLength": 1},
     "approved_at": {"type": "string", "minLength": 1},
     "reviewer_attestation": {
       "type": "object",
-      "required": ["reviewer_id", "candidate_unseen", "legacy_full_review_verified", "normalization_semantics_preserving", "policy_rebinding_compatible", "no_new_editorial_review_claimed"],
+      "required": ["reviewer_id", "candidate_unseen", "legacy_full_review_verified", "no_new_editorial_review_claimed"],
       "properties": {
         "reviewer_id": {"type": "string", "minLength": 1},
         "candidate_unseen": {"const": true},
         "legacy_full_review_verified": {"const": true},
         "normalization_semantics_preserving": {"const": true},
         "policy_rebinding_compatible": {"const": true},
+        "exact_native_v8_reuse_verified": {"const": true},
+        "same_policy_identity_verified": {"const": true},
+        "no_semantic_normalization_required": {"const": true},
         "no_new_editorial_review_claimed": {"const": true}
       },
       "additionalProperties": false
     },
     "legacy": {"$ref": "#/$defs/legacyIdentity"},
     "current": {"$ref": "#/$defs/currentIdentity"},
-    "allowed_changes": {
-      "const": [
-        "relationships[*].type->relationship_type",
-        "benchmark_id",
-        "version",
-        "evaluation_id",
-        "policy_sha256",
-        "freeze",
-        "compatibility_import",
-        "benchmark_sha256"
-      ]
-    }
+    "release_transport": {"$ref": "#/$defs/releaseTransport"},
+    "allowed_changes": {"type": "array"}
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "legacyIdentity": {
       "type": "object",
-      "required": ["evaluation_id", "source_sha256", "benchmark_id", "version", "benchmark_file_sha256", "benchmark_sha256", "policy_file_sha256", "policy_sha256", "page_map_file_sha256", "page_map_sha256", "chunk_manifest_file_sha256", "chunk_manifest_sha256", "review_file_sha256", "review_inventory_file_sha256", "state_file_sha256", "artifact_freeze_commit"],
+      "required": ["evaluation_id", "source_sha256", "benchmark_id", "version", "benchmark_file_sha256", "benchmark_sha256", "policy_file_sha256", "policy_sha256", "page_map_file_sha256", "page_map_sha256", "chunk_manifest_file_sha256", "chunk_manifest_sha256", "review_file_sha256", "review_inventory_file_sha256", "state_file_sha256"],
       "properties": {
         "evaluation_id": {"type": "string", "minLength": 1},
         "source_sha256": {"$ref": "#/$defs/sha256"},
@@ -57,6 +51,8 @@
         "review_file_sha256": {"$ref": "#/$defs/sha256"},
         "review_inventory_file_sha256": {"$ref": "#/$defs/sha256"},
         "state_file_sha256": {"$ref": "#/$defs/sha256"},
+        "draft_file_sha256": {"$ref": "#/$defs/sha256"},
+        "draft_canonical_sha256": {"$ref": "#/$defs/sha256"},
         "artifact_freeze_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"}
       },
       "additionalProperties": false
@@ -79,7 +75,44 @@
         "benchmark_sha256": {"$ref": "#/$defs/sha256"}
       },
       "additionalProperties": false
+    },
+    "releaseTransport": {
+      "type": "object",
+      "required": ["kind", "checkpoint_file_sha256", "checkpoint_state_file_sha256"],
+      "properties": {
+        "kind": {"const": "portable_checkpoint"},
+        "checkpoint_file_sha256": {"$ref": "#/$defs/sha256"},
+        "checkpoint_state_file_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {"required": ["reuse_mode"], "properties": {"reuse_mode": {"const": "native_v8_exact"}}},
+      "then": {
+        "required": ["release_transport"],
+        "properties": {
+          "reviewer_attestation": {
+            "required": ["exact_native_v8_reuse_verified", "same_policy_identity_verified", "no_semantic_normalization_required"]
+          },
+          "legacy": {
+            "required": ["draft_file_sha256", "draft_canonical_sha256"],
+            "properties": {"artifact_freeze_commit": false}
+          },
+          "allowed_changes": {"const": ["benchmark_id", "version", "evaluation_id", "freeze", "compatibility_import", "benchmark_sha256"]}
+        }
+      },
+      "else": {
+        "properties": {
+          "reviewer_attestation": {"required": ["normalization_semantics_preserving", "policy_rebinding_compatible"]},
+          "legacy": {"required": ["artifact_freeze_commit"]},
+          "allowed_changes": {
+            "const": ["relationships[*].type->relationship_type", "benchmark_id", "version", "evaluation_id", "policy_sha256", "freeze", "compatibility_import", "benchmark_sha256"]
+          }
+        }
+      }
+    }
+  ],
   "additionalProperties": false
 }

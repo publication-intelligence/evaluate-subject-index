@@ -6,6 +6,7 @@
   "required": ["schema_version", "migration_id", "imported_at", "operation", "compatibility_approval", "legacy", "current", "normalization", "preserved_stable_ids"],
   "properties": {
     "schema_version": {"const": "source-benchmark-compatibility-import-provenance-v1"},
+    "reuse_mode": {"const": "native_v8_exact"},
     "migration_id": {"type": "string", "minLength": 1},
     "imported_at": {"type": "string", "minLength": 1},
     "operation": {"const": "reviewed_legacy_benchmark_compatibility_import"},
@@ -18,13 +19,19 @@
       },
       "additionalProperties": false
     },
+    "release_transport": {"type": "object"},
     "legacy": {"type": "object"},
     "current": {"type": "object"},
     "normalization": {
       "type": "object",
       "required": ["operations", "relationships_normalized", "semantic_content_preserved"],
       "properties": {
-        "operations": {"const": ["relationships[*].type->relationship_type"]},
+        "operations": {
+          "oneOf": [
+            {"const": ["relationships[*].type->relationship_type"]},
+            {"const": []}
+          ]
+        },
         "relationships_normalized": {"type": "integer", "minimum": 0},
         "semantic_content_preserved": {"const": true}
       },
