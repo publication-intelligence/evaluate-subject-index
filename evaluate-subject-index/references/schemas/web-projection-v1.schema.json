@@ -18,7 +18,7 @@
     "score_views": {
       "type": "object",
       "required": ["canonical_source_adjustment_status", "projection_adjustment_status", "total_delta", "views"],
-      "properties": {"canonical_source_adjustment_status": {"enum": ["none", "separate_evidentiary_correction"]}, "projection_adjustment_status": {"enum": ["not_applicable", "confirmed_representation_adjustment_applied"]}, "total_delta": {"type": "number"}, "views": {"type": "array", "minItems": 1}},
+      "properties": {"canonical_source_adjustment_status": {"enum": ["none", "separate_evidentiary_correction"]}, "projection_adjustment_status": {"enum": ["not_applicable", "confirmed_representation_adjustment_applied"]}, "total_delta": {"type": "number"}, "views": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/scoreView"}}},
       "additionalProperties": false
     },
     "correction_outcomes": {"oneOf": [{"$ref": "#/$defs/noCorrection"}, {"$ref": "#/$defs/correctionOutcomes"}]},
@@ -38,6 +38,39 @@
   "additionalProperties": false,
   "$defs": {
     "hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "scoreView": {
+      "type": "object",
+      "required": ["view_id", "label", "view_kind", "role", "score", "maximum", "scorecard", "dimension_denominators", "critical_gates", "readiness", "provenance_artifacts"],
+      "properties": {
+        "view_id": {"type": "string", "minLength": 1},
+        "label": {"type": "string", "minLength": 1},
+        "view_kind": {"enum": ["observed", "counterfactual"]},
+        "role": {"type": "string", "minLength": 1},
+        "score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "maximum": {"const": 100},
+        "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/scorecardRow"}},
+        "dimension_denominators": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "web-report-v10.schema.json#/$defs/dimensionDenominator"}},
+        "critical_gates": {"type": "array"},
+        "readiness": {"type": "object"},
+        "provenance_artifacts": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "scorecardRow": {
+      "type": "object",
+      "required": ["dimension_id", "dimension_percentage", "weight", "weighted_contribution", "rating", "awarded_points", "maximum_points", "formula_id"],
+      "properties": {
+        "dimension_id": {"type": "string"},
+        "dimension_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+        "weight": {"type": "number"},
+        "weighted_contribution": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+        "rating": {"type": ["number", "null"]},
+        "awarded_points": {"type": ["number", "null"]},
+        "maximum_points": {"type": "number"},
+        "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v5:"}
+      },
+      "additionalProperties": false
+    },
     "noCorrection": {
       "type": "object",
       "required": ["applicable", "overlay_included", "reason", "affected_headings", "character_replacements"],

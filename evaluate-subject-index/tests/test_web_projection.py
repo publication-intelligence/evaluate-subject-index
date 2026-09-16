@@ -70,6 +70,53 @@ def locator_assessment() -> dict:
     return value
 
 
+class PublicScoringProjectionTests(unittest.TestCase):
+    def test_scorecard_preserves_exact_values_with_adapter_aliases(self) -> None:
+        canonical = [{
+            "dimension_id": "editorial_selectivity",
+            "dimension_percentage": "63.33333333333333333333333333",
+            "weight": 15,
+            "weighted_contribution": "9.499999999999999999999999999",
+            "formula_id": "subject-index-dimension-calculation-v5:editorial_selectivity",
+        }]
+
+        projected = web_projection.scorecard_with_compatibility_aliases(canonical)
+
+        self.assertTrue(canonical[0].items() <= projected[0].items())
+        self.assertEqual(float(canonical[0]["dimension_percentage"]) / 20, projected[0]["rating"])
+        self.assertEqual(float(canonical[0]["weighted_contribution"]), projected[0]["awarded_points"])
+        self.assertEqual(canonical[0]["weight"], projected[0]["maximum_points"])
+
+    def test_dimension_denominators_preserve_optional_subject_exclusions(self) -> None:
+        denominator = {
+            "component_id": "priority_weighted_subject_access",
+            "original": 90,
+            "applicable": 4,
+            "measured": 4,
+            "excluded": 86,
+            "uninspectable": 0,
+            "not_measured": 0,
+            "exclusion_reasons": {"optional_not_frozen_as_scored": 86},
+            "measurement_coverage": "1",
+            "small_denominator_exception": False,
+            "genuinely_inapplicable": False,
+            "zero_due_to_non_attempt": False,
+            "defined_zero_rule": None,
+            "provisionally_scoreable": True,
+        }
+        calculation = {"dimensions": [{
+            "dimension_id": "meaningful_coverage",
+            "denominators": {"components": [denominator]},
+        }]}
+
+        disclosures = web_projection.dimension_denominator_disclosures(calculation)
+
+        self.assertEqual([{
+            "dimension_id": "meaningful_coverage",
+            "components": [denominator],
+        }], disclosures)
+
+
 class CrossReferenceResolverTests(unittest.TestCase):
     def test_existing_em_dash_resolution_is_preserved(self) -> None:
         destination = target("REC-001", "PATH-001", "NODE-001")

@@ -50,6 +50,7 @@ class WebDensityProjectionTests(unittest.TestCase):
         self.assertIsNone(judgment["combined"])
         self.assertEqual("uncertain", judgment["status"])
         self.assertNotIn("outside_one_or_more_acceptable_bands", judgment.values())
+        self.assertIsNone(density["fit_percentage"])
         self.assertIsNone(density["fit_rating"])
 
     @staticmethod
