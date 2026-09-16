@@ -6,6 +6,7 @@
   "required": ["schema_version", "policy_id", "source_scope", "audience", "audit_design", "deviations"],
   "properties": {
     "schema_version": {"const": "subject-index-policy-build-input-v1"},
+    "retrospective_migration": {"$ref": "retrospective-migration.schema.json"},
     "policy_id": {"type": "string", "minLength": 1},
     "source_scope": {
       "type": "object",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
@@ -49,7 +50,37 @@ def schema_errors(document: Any, schema_name: str) -> list[str]:
         ),
         key=lambda item: [str(part) for part in item.absolute_path],
     )
-    return [
+    messages = [
         f"{'.'.join(map(str, error.absolute_path)) or '<root>'}: {error.message}"
         for error in errors
     ]
+    if not messages and schema_name == "evaluation-policy-v4.schema.json":
+        messages.extend(policy_migration_errors(document))
+    return messages
+
+
+def policy_migration_errors(policy: dict[str, Any]) -> list[str]:
+    """Cross-field provenance checks shared by every policy schema consumer."""
+    migration = policy.get("retrospective_migration")
+    if migration is None:
+        return []
+    errors = []
+    original = migration["original_policy"]
+    if policy["freeze"] != {"frozen_at": migration["migrated_at"], "candidate_seen": migration["candidate_seen"]}:
+        errors.append("Migration timestamp/visibility must match the actual policy freeze.")
+    if policy["policy_id"] == original["policy_id"] or policy["policy_sha256"] == original["policy_sha256"]:
+        errors.append("Migration requires a new policy identity and hash.")
+    if original["freeze"]["candidate_seen"] is not False:
+        errors.append("Original policy must retain its candidate-blind freeze.")
+    if "targeted_migration" in policy["policy_profile"]:
+        errors.append("Use retrospective_migration instead of the targeted_migration workaround.")
+    try:
+        original_time = datetime.fromisoformat(original["freeze"]["frozen_at"].replace("Z", "+00:00"))
+        migration_time = datetime.fromisoformat(migration["migrated_at"].replace("Z", "+00:00"))
+        if original_time.utcoffset() is None or migration_time.utcoffset() is None:
+            raise ValueError("timezone required")
+        if migration_time < original_time:
+            errors.append("Migration timestamp precedes the original freeze.")
+    except ValueError:
+        errors.append("Original freeze and migration timestamps must be ISO 8601 with timezones.")
+    return errors

@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "retrospective-migration.schema.json",
+  "title": "Authorized retrospective policy migration provenance",
+  "type": "object",
+  "required": [
+    "original_policy",
+    "migrated_at",
+    "candidate_seen",
+    "authorization",
+    "change_ledger_reference",
+    "reused_stages"
+  ],
+  "properties": {
+    "original_policy": {
+      "type": "object",
+      "required": [
+        "policy_id",
+        "policy_profile_id",
+        "policy_sha256",
+        "artifact",
+        "freeze"
+      ],
+      "properties": {
+        "policy_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "policy_profile_id": {
+          "enum": [
+            "subject-index-standard-policy-v8",
+            "subject-index-standard-policy-v8.1"
+          ]
+        },
+        "policy_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "artifact": {
+          "$ref": "#/$defs/artifact"
+        },
+        "freeze": {
+          "type": "object",
+          "required": [
+            "frozen_at",
+            "candidate_seen"
+          ],
+          "properties": {
+            "frozen_at": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "candidate_seen": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "migrated_at": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "candidate_seen": {
+      "type": "boolean"
+    },
+    "authorization": {
+      "type": "object",
+      "required": [
+        "authorized_by",
+        "reference"
+      ],
+      "properties": {
+        "authorized_by": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "additionalProperties": false
+    },
+    "change_ledger_reference": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "reused_stages": {
+      "type": "object",
+      "required": [
+        "page_mapping",
+        "chunk_definition",
+        "source_subject_discovery",
+        "benchmark_synthesis",
+        "benchmark_review",
+        "benchmark_freeze",
+        "candidate_normalization"
+      ],
+      "properties": {
+        "page_mapping": {
+          "$ref": "#/$defs/reuse"
+        },
+        "chunk_definition": {
+          "$ref": "#/$defs/reuse"
+        },
+        "source_subject_discovery": {
+          "$ref": "#/$defs/reuse"
+        },
+        "benchmark_synthesis": {
+          "$ref": "#/$defs/reuse"
+        },
+        "benchmark_review": {
+          "$ref": "#/$defs/reuse"
+        },
+        "benchmark_freeze": {
+          "$ref": "#/$defs/reuse"
+        },
+        "candidate_normalization": {
+          "$ref": "#/$defs/reuse"
+        },
+        "source_chunk_preparation": {
+          "$ref": "#/$defs/reuse"
+        },
+        "locator_chunk_preparation": {
+          "$ref": "#/$defs/reuse"
+        },
+        "locator_audit": {
+          "$ref": "#/$defs/reuse"
+        },
+        "missing_access_audit": {
+          "$ref": "#/$defs/reuse"
+        },
+        "structure_audit": {
+          "$ref": "#/$defs/reuse"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reuse": {
+      "type": "object",
+      "required": [
+        "rerun",
+        "evidence"
+      ],
+      "properties": {
+        "rerun": {
+          "const": false
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
