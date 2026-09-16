@@ -149,8 +149,15 @@ class HeadingPayloadTests(unittest.TestCase):
 
     def test_punctuation_and_cross_reference_boundaries_are_unchanged(self) -> None:
         self.assertEqual(("Aachen", "171, 170"), split_heading_and_payload("Aachen, 171, 170", self.lookup))
+        self.assertEqual(("Aachen", "see Cologne"), split_heading_and_payload("Aachen see Cologne", self.lookup))
         self.assertEqual(("Aachen", "see also Cologne"), split_heading_and_payload("Aachen see also Cologne", self.lookup))
         self.assertEqual(("Aachen", "171; see also Cologne"), split_heading_and_payload("Aachen 171; see also Cologne", self.lookup))
+
+    def test_see_in_heading_precedes_locator_or_reference_boundary(self) -> None:
+        self.assertEqual(("Holy See", "136, 386"), split_heading_and_payload("Holy See, 136, 386", self.lookup))
+        self.assertEqual(("Holy See", "136"), split_heading_and_payload("Holy See 136", self.lookup))
+        self.assertEqual(("Holy See", "see Rome"), split_heading_and_payload("Holy See, see Rome", self.lookup))
+        self.assertEqual(("Holy See", "see also Rome"), split_heading_and_payload("Holy See, see also Rome", self.lookup))
 
     def test_heading_qualifiers_are_not_unmapped_locators(self) -> None:
         cases = {

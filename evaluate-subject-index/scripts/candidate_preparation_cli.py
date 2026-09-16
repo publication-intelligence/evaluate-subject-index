@@ -362,7 +362,7 @@ def looks_like_locator_payload(
 ) -> bool:
     stripped = value.strip()
     if re.match(r"(?i)^see(?:\s+also)?\b", stripped):
-        return True
+        return not require_mapped
     locator_text, references, malformed_reference = split_references(stripped)
     if malformed_reference:
         return False
