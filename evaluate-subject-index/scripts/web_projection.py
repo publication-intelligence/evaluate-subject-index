@@ -68,20 +68,24 @@ def _canonical_target(value: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip()
 
 
-def _target_lookup_keys(value: str) -> tuple[str, ...]:
+def _target_lookup_keys(value: str, *, under_context: bool = False) -> tuple[str, ...]:
     exact = _canonical_target(value)
-    under = re.match(r"(?is)^under\s+([^:]+?)\s*:\s*(.+)$", value.strip())
-    if not under:
+    hierarchy = re.match(r"(?is)^under\s+([^:]+?)\s*:\s*(.+)$", value.strip())
+    if hierarchy is None and under_context:
+        hierarchy = re.match(r"(?is)^([^:]+?)\s*:\s*(.+)$", value.strip())
+    if hierarchy is None:
         return (exact,)
-    hierarchical = _canonical_target(f"{under.group(1)}—{under.group(2)}")
+    hierarchical = _canonical_target(f"{hierarchy.group(1)}—{hierarchy.group(2)}")
     return (exact,) if hierarchical == exact else (exact, hierarchical)
 
 
 def _resolved_targets(target: str, index: Mapping[str, list[dict[str, str]]]) -> list[dict[str, str]]:
     results: list[dict[str, str]] = []
-    for part in re.split(r"\s*;\s*", target):
+    parts = re.split(r"\s*;\s*", target)
+    under_context = bool(parts and re.match(r"(?is)^under\s+[^:]+?\s*:\s*.+$", parts[0].strip()))
+    for part in parts:
         matches: list[dict[str, str]] = []
-        for key in _target_lookup_keys(part):
+        for key in _target_lookup_keys(part, under_context=under_context):
             matches = index.get(key, [])
             if matches:
                 break

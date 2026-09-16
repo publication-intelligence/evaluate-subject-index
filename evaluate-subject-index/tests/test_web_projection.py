@@ -43,9 +43,33 @@ class CrossReferenceResolverTests(unittest.TestCase):
 
     def test_bare_colon_is_not_inferred_as_hierarchy(self) -> None:
         destination = target("REC-001", "PATH-001", "NODE-001")
-        index = {web_projection._canonical_target("Parent—Child"): [destination]}
+        plain = target("REC-PLAIN", "PATH-PLAIN", "NODE-PLAIN")
+        index = {
+            web_projection._canonical_target("Parent—Child"): [destination],
+            web_projection._canonical_target("Plain"): [plain],
+        }
 
         self.assertEqual([], web_projection._resolved_targets("Parent: Child", index))
+        self.assertEqual([], web_projection._resolved_targets("Plain; Parent: Child", index))
+
+    def test_see_under_context_applies_to_the_full_semicolon_list(self) -> None:
+        first = target("REC-001", "PATH-001", "NODE-001")
+        second = target("REC-002", "PATH-002", "NODE-002")
+        third = target("REC-003", "PATH-003", "NODE-003")
+        index = {
+            web_projection._canonical_target("Parent—Child one"): [first],
+            web_projection._canonical_target("Parent—Child two: detail"): [second],
+            web_projection._canonical_target("Parent—Child three (and four)"): [third],
+        }
+
+        self.assertEqual(
+            [first, second, third],
+            web_projection._resolved_targets(
+                "under Parent: Child one; Parent: Child two: detail; "
+                "Parent: Child three (and four)",
+                index,
+            ),
+        )
 
     def test_multiple_targets_preserve_target_and_record_order(self) -> None:
         first = target("REC-001", "PATH-001", "NODE-001")
