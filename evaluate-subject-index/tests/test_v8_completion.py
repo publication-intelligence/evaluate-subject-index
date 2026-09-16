@@ -1,20 +1,24 @@
 from __future__ import annotations
 
+import argparse
+import contextlib
 import copy
 import hashlib
+import io
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import dimension_score_v8_cli as dimensions  # noqa: E402
 import policy_cli  # noqa: E402
 import scoring_core as core  # noqa: E402
 import state_cli  # noqa: E402
@@ -537,15 +541,100 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertEqual({"index_records", "source_subjects", "density"}, {row["collection_id"] for row in projection["collections"]})
         self.assertEqual({"applicable": False, "overlay_included": False, "reason": "No confirmed registered correction overlay applies.", "affected_headings": 0, "character_replacements": 0}, projection["correction_outcomes"])
         first_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
-        state["artifacts"] = [item for item in state["artifacts"] if item["stage"] != "web_report"]
-        state["stages"]["web_report"] = {"status": "not_started", "updated_at": None, "notes": []}
-        self.state_path.write_text(json.dumps(state, indent=2) + "\n")
-        (self.root / "scoring/web-report.v10.json").unlink()
-        shutil.rmtree(projection_root)
-        rebuilt = self.run_cli("build-report", "--state", str(self.state_path))
+        scoring_bytes = {self.root / item["path"]: (self.root / item["path"]).read_bytes() for item in state["artifacts"] if item["stage"] == "scoring"}
+        state_before_refusal = self.state_path.read_bytes()
+        refused = self.run_cli("build-report", "--state", str(self.state_path))
+        self.assertNotEqual(0, refused.returncode)
+        self.assertIn("stage_already_completed", refused.stdout)
+        self.assertEqual(state_before_refusal, self.state_path.read_bytes())
+
+        rebuilt = self.run_cli("build-report", "--state", str(self.state_path), "--replace-complete-bundle")
         self.assertEqual(0, rebuilt.returncode, rebuilt.stdout + rebuilt.stderr)
+        self.assertTrue(json.loads(rebuilt.stdout)["replacement"])
         second_bytes = {path.relative_to(self.root).as_posix(): path.read_bytes() for path in [self.root / "scoring/web-report.v10.json", *sorted(projection_root.rglob("*.json"))]}
         self.assertEqual(first_bytes, second_bytes)
+        self.assertEqual(scoring_bytes, {path: path.read_bytes() for path in scoring_bytes})
+        rebuilt_state = json.loads(self.state_path.read_text())
+        self.assertIn("Rebuilt and replaced", rebuilt_state["stages"]["web_report"]["notes"][0])
+
+    def test_complete_web_bundle_replacement_rolls_back_all_bytes_on_write_failure(self) -> None:
+        self.assertEqual(0, self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path)).returncode)
+        self.assertEqual(0, self.run_cli("score", "--state", str(self.state_path)).returncode)
+        self.assertEqual(0, self.run_cli("build-report", "--state", str(self.state_path)).returncode)
+        state = json.loads(self.state_path.read_text())
+        tracked = {self.root / item["path"] for item in state["artifacts"] if item["stage"] in {"scoring", "web_report"}}
+        before = {path: path.read_bytes() for path in tracked}
+        state_before = self.state_path.read_bytes()
+        original_write = dimensions._atomic_write
+        failed = False
+
+        def fail_one_write(path: Path, payload: bytes) -> None:
+            nonlocal failed
+            if not failed and path.name == "source-subjects.v1.json":
+                failed = True
+                raise OSError("synthetic replacement write failure")
+            original_write(path, payload)
+
+        output = io.StringIO()
+        args = argparse.Namespace(
+            state=str(self.state_path), output=None, bundle_output=None,
+            replace_complete_bundle=True,
+        )
+        with patch.object(dimensions, "_atomic_write", side_effect=fail_one_write), contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as raised:
+            dimensions.command_build_report_state(args)
+        self.assertEqual(1, raised.exception.code)
+        self.assertIn("web_report_registration_error", output.getvalue())
+        self.assertEqual(state_before, self.state_path.read_bytes())
+        self.assertEqual(before, {path: path.read_bytes() for path in tracked})
+
+        original_save = dimensions.save_state
+
+        def fail_after_state_replace(path: Path, value: dict) -> None:
+            original_save(path, value)
+            raise OSError("synthetic state write failure")
+
+        output = io.StringIO()
+        with patch.object(dimensions, "save_state", side_effect=fail_after_state_replace), contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as raised:
+            dimensions.command_build_report_state(args)
+        self.assertEqual(1, raised.exception.code)
+        self.assertIn("web_report_registration_error", output.getvalue())
+        self.assertEqual(state_before, self.state_path.read_bytes())
+        self.assertEqual(before, {path: path.read_bytes() for path in tracked})
+
+    def test_complete_web_bundle_replacement_rejects_partial_and_unmanaged_targets(self) -> None:
+        self.assertEqual(0, self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path)).returncode)
+        self.assertEqual(0, self.run_cli("score", "--state", str(self.state_path)).returncode)
+        self.assertEqual(0, self.run_cli("build-report", "--state", str(self.state_path)).returncode)
+        complete_state = json.loads(self.state_path.read_text())
+
+        partial = copy.deepcopy(complete_state)
+        partial["artifacts"] = [item for item in partial["artifacts"] if item.get("artifact_type") != "web_density"]
+        self.state_path.write_text(json.dumps(partial, indent=2) + "\n")
+        partial_before = self.state_path.read_bytes()
+        refused = self.run_cli("build-report", "--state", str(self.state_path), "--replace-complete-bundle")
+        self.assertNotEqual(0, refused.returncode)
+        self.assertIn("replacement_bundle_incomplete", refused.stdout)
+        self.assertEqual(partial_before, self.state_path.read_bytes())
+
+        self.state_path.write_text(json.dumps(complete_state, indent=2) + "\n")
+        report_path = self.root / "scoring/web-report.v10.json"
+        report_bytes = report_path.read_bytes()
+        report_path.write_bytes(report_bytes + b" ")
+        complete_before = self.state_path.read_bytes()
+        refused = self.run_cli("build-report", "--state", str(self.state_path), "--replace-complete-bundle")
+        self.assertNotEqual(0, refused.returncode)
+        self.assertIn("registered_artifact_hash_mismatch", refused.stdout)
+        self.assertEqual(complete_before, self.state_path.read_bytes())
+        report_path.write_bytes(report_bytes)
+
+        unmanaged = self.root / "scoring/v8-canonical-projection/data/unmanaged.json"
+        unmanaged.write_text("{}\n")
+        complete_before = self.state_path.read_bytes()
+        refused = self.run_cli("build-report", "--state", str(self.state_path), "--replace-complete-bundle")
+        self.assertNotEqual(0, refused.returncode)
+        self.assertIn("unmanaged_output_collision", refused.stdout)
+        self.assertEqual(complete_before, self.state_path.read_bytes())
+        self.assertEqual(b"{}\n", unmanaged.read_bytes())
 
     def test_build_report_selects_result_bound_calculation_from_history(self) -> None:
         registered = self.run_cli("register-structure", "--state", str(self.state_path), "--input", str(self.structure_path))
