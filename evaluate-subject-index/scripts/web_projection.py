@@ -339,6 +339,27 @@ def build_index_records(candidate: Mapping[str, Any], inventory: Mapping[str, An
     })
 
 
+def public_benchmark_requirements(value: Mapping[str, Any], *, subject: bool) -> dict[str, Any]:
+    public = _selected(value, ("access_scope_rule",)) if subject else {}
+    if "required_access_facets" in value:
+        fields = (
+            ("facet_id", "label", "meaning", "acceptable_access", "document_pages", "independently_weighted")
+            if subject else ("facet_id", "question", "required_subject_ids", "weight")
+        )
+        public["required_access_facets"] = []
+        for facet in value["required_access_facets"]:
+            projected = _selected(facet, fields)
+            if "stance" in facet:
+                projected["stance"] = "Authored facet stance narrative withheld from the public projection; no facet-level stance outcome is asserted."
+            public["required_access_facets"].append(projected)
+    if subject and "retained_source_distinctions" in value:
+        public["retained_source_distinctions"] = [
+            _selected(row, ("source_local_subject_id", "meaning", "qualification", "source_pages"))
+            for row in value["retained_source_distinctions"]
+        ]
+    return public_safe(public)
+
+
 def build_source_subjects(benchmark: Mapping[str, Any], items: Mapping[str, Any], missing_documents: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     assessments = {row["subject_id"]: row for row in items["source_subject_assessments"]}
     subject_judgments = {row["subject_id"]: row for document in missing_documents for row in document["subject_judgments"]}
@@ -373,11 +394,12 @@ def build_source_subjects(benchmark: Mapping[str, Any], items: Mapping[str, Any]
                 f"stance preservation outcome: {subject_judgments[subject['subject_id']].get('stance_preserved', 'not reported')}."
             ),
             "acceptable_access": deepcopy(subject["acceptable_access"]),
+            **public_benchmark_requirements(subject, subject=True),
             "chapter_provenance": deepcopy(subject.get("chapter_provenance", [])),
             "source_chunk_ids": deepcopy(subject.get("source_chunk_ids", subject.get("chapter_provenance", []))),
             "assessment": deepcopy(assessments[subject["subject_id"]]),
             "audit_judgment": public_subject_access(subject_judgments[subject["subject_id"]]),
-            "reader_tasks": [{"task_id": task["task_id"], "question": task["question"], "subject_ids": deepcopy(task["subject_ids"]), "task_basis": deepcopy(task.get("task_basis", task.get("source_fields", []))), "result": public_reader_task_result(task_results[task["task_id"]])} for task in tasks.get(subject["subject_id"], [])],
+            "reader_tasks": [{"task_id": task["task_id"], "question": task["question"], "subject_ids": deepcopy(task["subject_ids"]), "task_basis": deepcopy(task.get("task_basis", task.get("source_fields", []))), **public_benchmark_requirements(task, subject=False), "result": public_reader_task_result(task_results[task["task_id"]])} for task in tasks.get(subject["subject_id"], [])],
             "expected_treatments": expected_treatments,
         })
     return collection(

@@ -56,6 +56,27 @@ The coordinator derives each missing-access workset from the canonical inputs an
 computes global audit-set identities from the files selected for calculation.
 Workers do not predict or copy either global audit-set hash.
 
+Supply complete frozen parent subject and reader-task records, including any
+`required_access_facets`, nested questions and subject bindings, `access_scope_rule`,
+and `retained_source_distinctions`. Include all referenced subject records even
+when another chunk owns their judgments. Workset IDs and locator packets alone
+do not contain these requirements. Review the full frozen scope before assigning
+the existing parent coverage or task result; unweighted facets are requirements
+within that judgment, not additional scored subjects, tasks, or denominators.
+
+An optional private factual review receipt can document human-review QA. Bind it
+to the exact benchmark, candidate and audit file hashes; identify each reviewed
+facet by parent kind, parent ID and facet ID, and identify the reviewed scope rules
+and retained distinctions within their parent records. Record the actual evidence
+IDs, tested candidate paths, parent judgment and unresolved questions. Distinguish
+reviewed requirements from satisfied requirements. Do not manufacture a receipt
+from an expected-ID list or infer substantive review from schema validation.
+Study coordination may require this receipt, but it is not a new runtime schema,
+registration gate, automatic semantic pass, or scored unit. Existing validation
+checks parent and treatment accounting; it does not prove that every nested
+requirement was substantively reviewed. Keep private rationale and source text
+out of public projections.
+
 ## Recovery and collaboration
 
 Create checkpoints at useful batch boundaries, especially before handing work to another chat or when network interruption is likely. A checkpoint is a resumable snapshot; it is not a proof object and no previous checkpoint checksum is required.
