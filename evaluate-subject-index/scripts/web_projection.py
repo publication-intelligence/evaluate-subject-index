@@ -443,7 +443,7 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     binding_order = (["correction_overlay"] if "correction_overlay" in collections else []) + ["index_records", "source_subjects", "density"]
     bindings = [{"collection_id": key, "artifact_path": COLLECTION_PATHS[key], "count": collections[key].get("affected_heading_count", collections[key].get("count", 0)), "content_sha256": collections[key].get("overlay_sha256", collections[key].get("collection_sha256")), "file_sha256": _file_hash(payloads[key])} for key in binding_order]
     gates = deepcopy(result["critical_gates"])
-    readiness = {"status": "not_publication_ready" if any(row["triggered"] for row in gates) else "publication_ready", "triggered_gate_ids": [row["gate_id"] for row in gates if row["triggered"]]}
+    readiness = {"status": result.get("evaluation_validity", {}).get("status") if result.get("evaluation_validity", {}).get("status", "valid") != "valid" else "not_publication_ready" if any(row["triggered"] for row in gates) else "publication_ready", "triggered_gate_ids": [row["gate_id"] for row in gates if row["triggered"]]}
     scorecard = scorecard_with_compatibility_aliases(report["scorecard"])
     dimension_denominators = deepcopy(report["calculation_explainer"]["dimension_denominators"])
     source_records = [benchmark_record, calculation_record, items_record, candidate_record, inventory_record, structure_record, manifest_record, result_record, report_record, *missing_records]
@@ -469,6 +469,7 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     projection = {
         "schema_version": PROJECTION_SCHEMA_VERSION,
         "projection_id": "OHFR-V8-WEB-" + hashlib.sha256(json.dumps({"evaluation_id": result["evaluation_id"], "result_sha256": result_record["sha256"]}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12].upper(),
+        "review_signals": deepcopy(result.get("review_signals", [])),
         "projection_role": "deterministic_public_safe_display_projection", "evaluation_id": result["evaluation_id"],
         "view_selection": {"authoritative_view_id": "canonical_as_delivered", "primary_view_id": "canonical_as_delivered", "default_display_view_id": "canonical_as_delivered", "display_view_rationale": "The canonical as-delivered result is authoritative."},
         "score_views": {"canonical_source_adjustment_status": report["score_views"]["adjustment_status"], "projection_adjustment_status": "confirmed_representation_adjustment_applied" if overlay_applicable else "not_applicable", "total_delta": 0, "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "role": "authoritative_primary_observation", "score": result["overall_percentage"], "maximum": 100, "scorecard": scorecard, "dimension_denominators": dimension_denominators, "critical_gates": gates, "readiness": readiness, "provenance_artifacts": [_artifact_binding(result_record), _artifact_binding(report_record), _artifact_binding(calculation_record)]}]},

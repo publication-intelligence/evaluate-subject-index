@@ -79,6 +79,8 @@ def defect(
         "dimension_owner": "page_reference_reliability",
         "defect_kind": kind,
         "severity": severity,
+        "severity_basis": "fabrication" if severity == "critical" else "materially_misleading",
+        "retrieval_consequence": "misleads",
         "root_cause_family": root_cause_family,
         "affected_item_ids": [locator_id],
     }
@@ -177,13 +179,16 @@ class V8SensitivityTests(unittest.TestCase):
     def test_policy_hash_copy_in_worker_provenance_is_not_a_gate(self) -> None:
         frozen_ledgers = {
             "identity": {"policy_sha256": "a" * 64},
+            "locator_original": 0, "locators": [],
         }
         loaded = {
             "policy": {"policy_sha256": "b" * 64},
+            "structure": {},
             "config": {"audit_mode": "full"},
         }
         with mock.patch.object(v8.core, "preflight_loaded", return_value=(frozen_ledgers, [])), \
-             mock.patch.object(v8, "locator_state_requirements", return_value=[]):
+             mock.patch.object(v8, "locator_state_requirements", return_value=[]), \
+             mock.patch.object(v8, "_evaluation_validity", return_value={"status":"valid","blockers":[]}):
             ledgers, missing = v8.preflight_loaded(loaded)
         self.assertIs(ledgers, frozen_ledgers)
         self.assertEqual([], missing)
@@ -506,6 +511,7 @@ class V8AdversarialMixtureTests(unittest.TestCase):
                 "status": "scored",
                 "input_roles": ["structure_audit"],
                 "weighted_contribution": "0",
+                "cap_evaluations": [], "missing_data_bounds": {"lower":{"cap_evaluations":[]},"upper":{"cap_evaluations":[]}},
                 "unchanged_sentinel": dimension_id,
             }
 
@@ -592,6 +598,8 @@ class V8AdversarialMixtureTests(unittest.TestCase):
             },
         }
         fit_report = {"invalid_or_contradictory_state": [], "unresolved_complete_path_fit": [], "compatibility_classifications": [], "group_counts": {}, "unresolved_reason_counts": {}}
+        for dim in dimensions:
+            dim.update(cap_evaluations=[], missing_data_bounds={"lower":{"cap_evaluations":[]},"upper":{"cap_evaluations":[]}})
         patches = [
             mock.patch.object(v8, "preflight_loaded", return_value=(ledgers, [])),
             mock.patch.object(v8, "locator_fit_preflight", return_value=fit_report),

@@ -7,7 +7,7 @@
   "properties": {
     "schema_version": {"const": "subject-index-evaluation-policy-v4"},
     "policy_id": {"type": "string", "minLength": 1},
-    "policy_profile": {"type": "object", "required": ["id"], "properties": {"id": {"const": "subject-index-standard-policy-v8"}}, "additionalProperties": true},
+    "policy_profile": {"type": "object", "required": ["id"], "properties": {"id": {"const": "subject-index-standard-policy-v8.1"}}, "additionalProperties": true},
     "source_scope": {
       "type": "object",
       "required": ["source_sha256", "document_page_span", "page_map_sha256", "chunk_manifest_sha256", "included", "excluded", "availability", "mixed_page_rule", "word_count_basis"],
@@ -29,7 +29,7 @@
     "content_policies": {"type": "object", "minProperties": 10, "additionalProperties": {"type": "object"}},
     "stage_application": {"type": "object", "minProperties": 6},
     "density_profile": {"type": "object", "required": ["status", "measurement_level", "aggregation", "metrics", "rationale", "maximum_score_contribution"], "properties": {"status": {"const": "scored"}, "measurement_level": {"const": "chapter_or_approved_intellectual_unit"}, "aggregation": {"const": "indexable_source_word_weighted_mean"}, "metrics": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "object"}}, "rationale": {"type": "string"}, "maximum_score_contribution": {"const": 5}}, "additionalProperties": true},
-    "critical_gates": {"type": "array", "minItems": 13, "items": {"type": "object"}},
+    "critical_gates": {"type": "array", "minItems": 10, "items": {"type": "object"}},
     "deviations": {"type": "array", "items": {"type": "object"}},
     "freeze": {"type": "object", "required": ["frozen_at", "candidate_seen"], "properties": {"frozen_at": {"type": "string"}, "candidate_seen": {"const": false}}, "additionalProperties": false},
     "policy_sha256": {"$ref": "#/$defs/sha256"}

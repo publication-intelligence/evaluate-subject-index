@@ -36,7 +36,7 @@ class ReportingMetadataTests(unittest.TestCase):
             }
         }
         calculation = {
-            "calculation_profile": "subject-index-dimension-calculation-v5",
+            "calculation_profile": "subject-index-dimension-calculation-v6",
             "final_rounding": {"mode": "ROUND_HALF_UP", "quantum": "0.01"},
             "dimensions": [{
                 "dimension_id": "editorial_selectivity",
@@ -68,7 +68,7 @@ class ReportingMetadataTests(unittest.TestCase):
         )
         self.assertEqual(
             {
-                "profile_id": "subject-index-dimension-calculation-v5",
+                "profile_id": "subject-index-dimension-calculation-v6",
                 "density_fit_precision": "full_precision",
                 "dimension_percentage_precision": "full_precision",
                 "weighted_contribution_precision": "full_precision",

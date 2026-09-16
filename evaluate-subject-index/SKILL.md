@@ -1,16 +1,18 @@
 ---
 name: evaluate-subject-index
-description: Run a repeatable, source-grounded V8 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
+description: Run a repeatable, source-grounded V8.1 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
 ---
 
 # Evaluate Subject Index
 
-Evaluate one finished subject index against its source and a frozen policy. Use the current V8 workflow and create current-schema artifacts.
+Current methodology: **V8.1**. Read [Consequence policy and targeted migration](references/consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+
+Evaluate one finished subject index against its source and a frozen policy. Use the current V8.1 workflow and create current-schema artifacts.
 
 ## Method
 
 1. Map one-based document pages to source page labels. Store labels as strings and require the user to approve chunk boundaries.
-2. Freeze the standard V8 policy, then discover source subjects before exposing the candidate index to the discovery context.
+2. Freeze the standard V8.1 policy, then discover source subjects before exposing the candidate index to the discovery context.
 3. Synthesize, independently review, and freeze the candidate-blind benchmark.
 4. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments from the published layout contract.
 5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.

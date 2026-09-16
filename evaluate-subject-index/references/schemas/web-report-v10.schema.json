@@ -5,12 +5,14 @@
   "type": "object",
   "required": ["schema_version", "report_id", "headline", "summary", "grade", "scorecard", "calculation_explainer", "precision_diagnostics", "structure_audit", "key_metrics", "density", "gate_status", "strengths", "defects", "examples", "item_grade_index", "locator_explanations", "heading_access_causal_provenance", "score_views", "methodology", "comparability", "disclosures", "limitations", "evidence_index"],
   "properties": {
+    "review_signals": {"type": "array", "items": {"type": "object"}},
+    "evaluation_validity": {"type": "object"},
     "schema_version": {"const": "subject-index-web-report-v10"},
     "report_id": {"$ref": "web-report-v8.schema.json#/properties/report_id"},
     "headline": {"$ref": "web-report-v8.schema.json#/properties/headline"},
     "summary": {"$ref": "web-report-v8.schema.json#/properties/summary"},
     "grade": {"$ref": "web-report-v8.schema.json#/properties/grade"},
-    "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "object", "required": ["dimension_id", "dimension_percentage", "weight", "weighted_contribution", "formula_id"], "properties": {"dimension_id": {"type": "string"}, "dimension_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "weight": {"type": "number"}, "weighted_contribution": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v5:"}}, "additionalProperties": false}},
+    "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "object", "required": ["dimension_id", "dimension_percentage", "weight", "weighted_contribution", "formula_id"], "properties": {"dimension_id": {"type": "string"}, "dimension_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "weight": {"type": "number"}, "weighted_contribution": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v6:"}}, "additionalProperties": false}},
     "calculation_explainer": {"allOf": [{"$ref": "web-report-v10.schema.json#/$defs/calculationReference"}, {"required": ["item_grades_used", "gates_used", "dimension_denominators"], "properties": {"item_grades_used": {"const": false}, "gates_used": {"const": false}, "dimension_denominators": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "web-report-v10.schema.json#/$defs/dimensionDenominator"}}}}]},
     "presentation_summary": {"$ref": "presentation-summary-v1.schema.json"},
     "precision_diagnostics": {"$ref": "web-report-v8.schema.json#/properties/precision_diagnostics"},
@@ -116,7 +118,7 @@
       },
       "additionalProperties": false
     },
-    "methodology": {"type": "object", "required": ["rubric_version", "calculation_profile", "locator_utility", "diagnostic_minimum_rule", "binary_keep_rule", "keep_precision", "editorial_selectivity_separate", "long_string_review", "long_range_review", "numeric_trigger_is_automatic_defect"], "properties": {"rubric_version": {"const": "subject-index-rubric-v8"}, "calculation_profile": {"const": "subject-index-dimension-calculation-v5"}, "locator_utility": {"type": "string"}, "diagnostic_minimum_rule": {"type": "string"}, "binary_keep_rule": {"type": "string"}, "keep_precision": {"type": "string"}, "editorial_selectivity_separate": {"const": true}, "long_string_review": {"type": "string"}, "long_range_review": {"type": "string"}, "numeric_trigger_is_automatic_defect": {"const": false}}, "additionalProperties": false},
+    "methodology": {"type": "object", "required": ["rubric_version", "calculation_profile", "locator_utility", "diagnostic_minimum_rule", "binary_keep_rule", "keep_precision", "editorial_selectivity_separate", "long_string_review", "long_range_review", "numeric_trigger_is_automatic_defect"], "properties": {"rubric_version": {"const": "subject-index-rubric-v8.1"}, "calculation_profile": {"const": "subject-index-dimension-calculation-v6"}, "locator_utility": {"type": "string"}, "diagnostic_minimum_rule": {"type": "string"}, "binary_keep_rule": {"type": "string"}, "keep_precision": {"type": "string"}, "editorial_selectivity_separate": {"const": true}, "long_string_review": {"type": "string"}, "long_range_review": {"type": "string"}, "numeric_trigger_is_automatic_defect": {"const": false}}, "additionalProperties": false},
     "comparability": {"$ref": "web-report-v8.schema.json#/properties/comparability"},
     "disclosures": {"$ref": "web-report-v8.schema.json#/properties/disclosures"},
     "limitations": {"$ref": "web-report-v8.schema.json#/properties/limitations"},
@@ -131,8 +133,8 @@
         "artifact_path": {"$ref": "web-report-v8.schema.json#/$defs/portablePath"},
         "sha256": {"$ref": "web-report-v8.schema.json#/$defs/sha256"},
         "calculation_sha256": {"$ref": "web-report-v8.schema.json#/$defs/sha256"},
-        "rubric_version": {"const": "subject-index-rubric-v8"},
-        "calculation_profile": {"const": "subject-index-dimension-calculation-v5"}
+        "rubric_version": {"const": "subject-index-rubric-v8.1"},
+        "calculation_profile": {"const": "subject-index-dimension-calculation-v6"}
       },
       "additionalProperties": true
     },

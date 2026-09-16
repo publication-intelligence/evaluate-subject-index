@@ -5,6 +5,7 @@
   "type": "object",
   "required": ["schema_version", "projection_id", "projection_role", "evaluation_id", "view_selection", "score_views", "correction_outcomes", "item_summaries", "collections", "provenance", "density_denominator", "public_safety", "limitations", "projection_sha256"],
   "properties": {
+    "review_signals": {"type": "array", "items": {"type": "object"}},
     "schema_version": {"const": "ohfr-v8-canonical-web-projection-v1"},
     "projection_id": {"type": "string", "pattern": "^OHFR-V8-WEB-[A-F0-9]{12}$"},
     "projection_role": {"const": "deterministic_public_safe_display_projection"},
@@ -67,7 +68,7 @@
         "rating": {"type": ["number", "null"]},
         "awarded_points": {"type": ["number", "null"]},
         "maximum_points": {"type": "number"},
-        "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v5:"}
+        "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v6:"}
       },
       "additionalProperties": false
     },

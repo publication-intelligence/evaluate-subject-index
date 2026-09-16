@@ -1,5 +1,7 @@
 # Judgment policy — V8
 
+Current methodology: **V8.1**. Read [Consequence policy and targeted migration](consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+
 Make judgments from source evidence and the complete heading path. Do not infer a category or score from rationale prose.
 
 ## Locator decisions

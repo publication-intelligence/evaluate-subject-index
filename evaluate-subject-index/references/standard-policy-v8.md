@@ -1,5 +1,7 @@
 # Built-in standard policy — V8
 
+Current methodology: **V8.1**. Read [Consequence policy and targeted migration](consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+
 Use the current V8 schemas and commands only.
 
 ## Locator judgments and treatment

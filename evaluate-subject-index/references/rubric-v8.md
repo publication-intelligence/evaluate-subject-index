@@ -1,12 +1,14 @@
 # Subject Index Evaluation technical rubric — V8
 
+Current methodology: **V8.1**. Read [Consequence policy and targeted migration](consequence-policy-v8.1.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+
 ## Current identities
 
-- rubric: `subject-index-rubric-v8`
-- standard policy: `subject-index-standard-policy-v8`
+- rubric: `subject-index-rubric-v8.1`
+- standard policy: `subject-index-standard-policy-v8.1`
 - evaluation policy: `subject-index-evaluation-policy-v4`
 - calculation input: `subject-index-dimension-calculation-input-v2`
-- calculation profile: `subject-index-dimension-calculation-v5`
+- calculation profile: `subject-index-dimension-calculation-v6`
 - calculation artifact: `subject-index-dimension-calculations-v6`
 - structure audit: `structure-audit-v6`
 - result: `subject-index-evaluation-result-v12`
