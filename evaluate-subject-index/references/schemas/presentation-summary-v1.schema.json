@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "presentation-summary-v1.schema.json",
+  "title": "Public presentation summary derived from canonical V8 reporting inputs",
+  "type": "object",
+  "required": ["schema_version", "provenance", "coverage_by_priority", "scope", "metrics", "dimensions"],
+  "properties": {
+    "schema_version": {"const": "subject-index-presentation-summary-v1"},
+    "provenance": {
+      "type": "object",
+      "required": ["evaluation_id", "web_report_sha256"],
+      "properties": {
+        "evaluation_id": {"type": "string", "minLength": 1},
+        "web_report_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "coverage_by_priority": {
+      "type": "object",
+      "required": ["essential", "major", "optional"],
+      "properties": {
+        "essential": {"$ref": "#/$defs/coverageCounts"},
+        "major": {"$ref": "#/$defs/coverageCounts"},
+        "optional": {"$ref": "#/$defs/coverageCounts"}
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": ["displayed_locators", "expected_treatments"],
+      "properties": {
+        "displayed_locators": {"type": "integer", "minimum": 0},
+        "expected_treatments": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/metric"},
+      "allOf": [
+        {"contains": {"properties": {"metric_id": {"const": "weighted_concept_access_partial_credit"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "essential_concept_miss_rate"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "locator_recall"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "reader_task_strict_success"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "substantive_selectivity"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "strict_supported_locator_rate"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "conceptual_stance_fidelity"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "valid_entry_precision_at_least_partial"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "density_fit"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "heading_access_architecture"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "cross_reference_validity"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"metric_id": {"const": "mechanics_consistency"}}, "required": ["metric_id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {"$ref": "#/$defs/dimension"},
+      "allOf": [
+        {"contains": {"properties": {"dimension_id": {"const": "meaningful_coverage"}}, "required": ["dimension_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"dimension_id": {"const": "editorial_selectivity"}}, "required": ["dimension_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"dimension_id": {"const": "conceptual_stance_fidelity"}}, "required": ["dimension_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"dimension_id": {"const": "page_reference_reliability"}}, "required": ["dimension_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"dimension_id": {"const": "findability_navigation"}}, "required": ["dimension_id"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"dimension_id": {"const": "mechanics_consistency"}}, "required": ["dimension_id"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "decimal": {"type": "string", "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+    "decimalOrNull": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"},
+    "coverageCounts": {
+      "type": "object",
+      "required": ["complete", "partial", "missing"],
+      "properties": {
+        "complete": {"type": "integer", "minimum": 0},
+        "partial": {"type": "integer", "minimum": 0},
+        "missing": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "metric": {
+      "type": "object",
+      "required": ["metric_id", "label", "display_value", "value"],
+      "properties": {
+        "metric_id": {
+          "enum": [
+            "weighted_concept_access_partial_credit",
+            "essential_concept_miss_rate",
+            "locator_recall",
+            "reader_task_strict_success",
+            "substantive_selectivity",
+            "strict_supported_locator_rate",
+            "conceptual_stance_fidelity",
+            "valid_entry_precision_at_least_partial",
+            "density_fit",
+            "heading_access_architecture",
+            "cross_reference_validity",
+            "mechanics_consistency"
+          ]
+        },
+        "label": {"type": "string", "minLength": 1},
+        "display_value": {"type": "string", "minLength": 1},
+        "value": {"$ref": "#/$defs/decimalOrNull"},
+        "numerator": {"$ref": "#/$defs/decimalOrNull"},
+        "adjusted_numerator": {"$ref": "#/$defs/decimal"},
+        "denominator": {"$ref": "#/$defs/decimalOrNull"},
+        "complete_weight": {"$ref": "#/$defs/decimal"},
+        "partial_weight": {"$ref": "#/$defs/decimal"},
+        "denominator_weight": {"$ref": "#/$defs/decimal"},
+        "partial_credit_value": {"$ref": "#/$defs/decimalOrNull"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"metric_id": {"const": "weighted_concept_access_partial_credit"}}, "required": ["metric_id"]},
+          "then": {"required": ["complete_weight", "partial_weight", "denominator_weight"]},
+          "else": {"required": ["numerator", "denominator"]}
+        },
+        {
+          "if": {"properties": {"metric_id": {"const": "reader_task_strict_success"}}, "required": ["metric_id"]},
+          "then": {"required": ["partial_credit_value"]}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "calculationLine": {
+      "type": "object",
+      "required": ["equation", "kind", "number_scores"],
+      "properties": {
+        "equation": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["input", "step"]},
+        "number_scores": {"type": "array", "items": {"type": ["number", "null"]}},
+        "score": {"type": ["number", "null"]},
+        "tooltip": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "dimension": {
+      "type": "object",
+      "required": ["dimension_id", "label", "rationale", "calculation_basis"],
+      "properties": {
+        "dimension_id": {"enum": ["meaningful_coverage", "editorial_selectivity", "conceptual_stance_fidelity", "page_reference_reliability", "findability_navigation", "mechanics_consistency"]},
+        "label": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "calculation_basis": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/calculationLine"}}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

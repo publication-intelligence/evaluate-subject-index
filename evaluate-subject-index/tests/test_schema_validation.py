@@ -47,6 +47,11 @@ class SharedSchemaValidationTests(unittest.TestCase):
         self.assertNotIn("migration_comparison", report_schema["properties"])
         self.assertIn("heading_access_causal_provenance", result_schema["required"])
         self.assertIn("heading_access_causal_provenance", report_schema["required"])
+        self.assertNotIn("presentation_summary", report_schema["required"])
+        self.assertEqual(
+            "presentation-summary-v1.schema.json",
+            report_schema["properties"]["presentation_summary"]["$ref"],
+        )
 
     def test_projection_metadata_binds_the_canonical_causal_source(self) -> None:
         schema = json.loads(

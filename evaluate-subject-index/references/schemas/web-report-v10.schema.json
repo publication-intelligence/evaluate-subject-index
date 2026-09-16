@@ -12,6 +12,7 @@
     "grade": {"$ref": "web-report-v8.schema.json#/properties/grade"},
     "scorecard": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"type": "object", "required": ["dimension_id", "dimension_percentage", "weight", "weighted_contribution", "formula_id"], "properties": {"dimension_id": {"type": "string"}, "dimension_percentage": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "weight": {"type": "number"}, "weighted_contribution": {"type": ["string", "null"], "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"}, "formula_id": {"type": "string", "pattern": "^subject-index-dimension-calculation-v5:"}}, "additionalProperties": false}},
     "calculation_explainer": {"allOf": [{"$ref": "#/$defs/calculationReference"}, {"required": ["item_grades_used", "gates_used"], "properties": {"item_grades_used": {"const": false}, "gates_used": {"const": false}}}]},
+    "presentation_summary": {"$ref": "presentation-summary-v1.schema.json"},
     "precision_diagnostics": {"$ref": "web-report-v8.schema.json#/properties/precision_diagnostics"},
     "structure_audit": {
       "allOf": [
