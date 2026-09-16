@@ -99,6 +99,8 @@ class PublicLocatorNarrativeTests(unittest.TestCase):
         self.assertNotIn(fit_secret, public_text)
         self.assertNotIn(access_secret, public_text)
         self.assertNotIn(stance_secret, public_text)
+        self.assertNotIn(access_secret, json.dumps(report["presentation_summary"]))
+        self.assertNotIn(stance_secret, json.dumps(report["presentation_summary"]))
         self.assertEqual(3, len(collections))
         self.assertFalse((bundle / "data/correction-overlay.v1.json").exists())
 

@@ -6,6 +6,7 @@ import copy
 import hashlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -524,6 +525,44 @@ class CurrentV8CompletionTests(unittest.TestCase):
         }
         self.assertEqual(density_component["percentage"], report["density"]["density_fit_percentage"])
         self.assertEqual(expected_chapter_fits, report["density"]["chapter_fit_by_chunk"])
+        presentation = report["presentation_summary"]
+        self.assertEqual("subject-index-presentation-summary-v1", presentation["schema_version"])
+        self.assertEqual(
+            {
+                "evaluation_id": EVALUATION_ID,
+                "web_report_sha256": report["calculation_explainer"]["sha256"],
+            },
+            presentation["provenance"],
+        )
+        self.assertEqual(
+            {
+                "essential": {"complete": 1, "partial": 0, "missing": 0},
+                "major": {"complete": 0, "partial": 0, "missing": 0},
+                "optional": {"complete": 0, "partial": 0, "missing": 0},
+            },
+            presentation["coverage_by_priority"],
+        )
+        self.assertEqual({"displayed_locators": 1, "expected_treatments": 1}, presentation["scope"])
+        metric_by_id = {item["metric_id"]: item for item in presentation["metrics"]}
+        self.assertEqual({
+            "weighted_concept_access_partial_credit", "essential_concept_miss_rate", "locator_recall",
+            "reader_task_strict_success", "substantive_selectivity", "strict_supported_locator_rate",
+            "conceptual_stance_fidelity", "valid_entry_precision_at_least_partial", "density_fit",
+            "heading_access_architecture", "cross_reference_validity", "mechanics_consistency",
+        }, set(metric_by_id))
+        reliability = next(item for item in calculations["dimensions"] if item["dimension_id"] == "page_reference_reliability")["reliability_provenance"]
+        self.assertEqual(reliability["reliability_f1"], metric_by_id["valid_entry_precision_at_least_partial"]["value"])
+        self.assertEqual("Reliability F1", metric_by_id["valid_entry_precision_at_least_partial"]["label"])
+        self.assertEqual("1", metric_by_id["reader_task_strict_success"]["numerator"])
+        self.assertEqual("1", metric_by_id["reader_task_strict_success"]["denominator"])
+        self.assertIsNone(metric_by_id["cross_reference_validity"]["value"])
+        self.assertEqual("Not applicable", metric_by_id["cross_reference_validity"]["display_value"])
+        self.assertEqual(6, len(presentation["dimensions"]))
+        for dimension in presentation["dimensions"]:
+            self.assertTrue(dimension["rationale"])
+            for line in dimension["calculation_basis"]:
+                numeric_tokens = re.findall(r"-?[0-9]+(?:\.[0-9]+)?", line["equation"])
+                self.assertEqual(len(numeric_tokens), len(line["number_scores"]), line["equation"])
         self.assertEqual("mixed", items["locator_assessments"][0]["locator_utility"]["treatment_category"])
         self.assertEqual("1", items["locator_assessments"][0]["dimension_reliability_credit"])
         self.assertEqual(1, len(items["source_subject_assessments"]))
@@ -708,6 +747,97 @@ class CurrentV8CompletionTests(unittest.TestCase):
         projection = json.loads((projection_root / "projection.v1.json").read_text())
         self.assertEqual("confirmed_representation_adjustment_applied", projection["score_views"]["projection_adjustment_status"])
         self.assertEqual(overlay["correction_outcomes"], projection["correction_outcomes"])
+
+
+class PresentationCalculationBasisTests(unittest.TestCase):
+    @staticmethod
+    def component(component_id: str, value: str | None, weight: str) -> dict:
+        return {
+            "component_id": component_id,
+            "raw_numerator": None if value is None else value,
+            "raw_denominator": None if value is None else "1",
+            "normalized_value": value,
+            "weight": weight,
+            "effective_weight": weight,
+            "weight_renormalized": False,
+        }
+
+    @staticmethod
+    def denominator(component_id: str, *, not_measured: int = 0, uninspectable: int = 0, inapplicable: bool = False) -> dict:
+        return {
+            "component_id": component_id,
+            "original": 1,
+            "applicable": 0 if inapplicable else 1,
+            "measured": 0 if (not_measured or uninspectable or inapplicable) else 1,
+            "excluded": 1 if inapplicable else 0,
+            "uninspectable": uninspectable,
+            "not_measured": not_measured,
+            "exclusion_reasons": {"genuinely_inapplicable": 1} if inapplicable else {},
+            "measurement_coverage": "0" if (not_measured or uninspectable or inapplicable) else "1",
+            "small_denominator_exception": False,
+            "genuinely_inapplicable": inapplicable,
+            "zero_due_to_non_attempt": False,
+            "defined_zero_rule": None,
+            "provisionally_scoreable": not (not_measured or uninspectable),
+        }
+
+    def test_weighted_formula_and_applied_cap_are_explicit(self) -> None:
+        dimension = {
+            "dimension_id": "findability_navigation",
+            "components": [
+                self.component("coverage_conditioned_reader_tasks", "0.9", "0.60"),
+                self.component("heading_access_architecture", "0.8", "0.30"),
+                self.component("cross_reference_validity", "0.7", "0.10"),
+            ],
+            "denominators": {"components": [
+                self.denominator("coverage_conditioned_reader_tasks"),
+                self.denominator("heading_access_architecture"),
+                self.denominator("cross_reference_validity"),
+            ]},
+            "pre_cap_percentage": "85",
+            "dimension_percentage": "60",
+            "applied_cap": {"cap_id": "findability.example", "maximum_percentage": 60, "affected_evidence_ids": []},
+        }
+
+        lines = dimensions._presentation_calculation_basis(dimension)
+
+        self.assertTrue(any("Canonical weighted combination" in line["equation"] for line in lines))
+        cap = next(line for line in lines if line["equation"].startswith("Applied cap"))
+        self.assertEqual("Canonical cap: findability.example.", cap["tooltip"])
+        self.assertIn("85%", cap["equation"])
+        self.assertIn("60%", cap["equation"])
+        for line in lines:
+            self.assertEqual(
+                len(re.findall(r"-?[0-9]+(?:\.[0-9]+)?", line["equation"])),
+                len(line["number_scores"]),
+                line["equation"],
+            )
+
+    def test_unavailable_components_keep_distinct_states(self) -> None:
+        dimension = {
+            "dimension_id": "findability_navigation",
+            "components": [
+                self.component("coverage_conditioned_reader_tasks", None, "0.60"),
+                self.component("heading_access_architecture", None, "0.30"),
+                self.component("cross_reference_validity", None, "0.10"),
+            ],
+            "denominators": {"components": [
+                self.denominator("coverage_conditioned_reader_tasks", not_measured=1),
+                self.denominator("heading_access_architecture", uninspectable=1),
+                self.denominator("cross_reference_validity", inapplicable=True),
+            ]},
+            "pre_cap_percentage": None,
+            "dimension_percentage": None,
+            "applied_cap": None,
+        }
+
+        equations = [line["equation"] for line in dimensions._presentation_calculation_basis(dimension)]
+
+        self.assertEqual([
+            "Coverage-conditioned reader-task credit is not measured",
+            "Heading-access architecture is uninspectable",
+            "Cross-reference validity is not applicable",
+        ], equations)
 
 
 class WebProjectionJoinTests(unittest.TestCase):

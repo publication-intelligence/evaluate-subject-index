@@ -15,7 +15,7 @@ import json
 import os
 from collections import Counter
 from copy import deepcopy
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -1611,6 +1611,305 @@ def _public_density(structure: Mapping[str, Any], calculation: Mapping[str, Any]
     }
 
 
+PRESENTATION_DIMENSIONS = {
+    "meaningful_coverage": (
+        "Meaningful coverage",
+        "Measures priority-weighted access to frozen source subjects; complete access receives full credit, partial access receives half credit, and missing access receives none.",
+    ),
+    "editorial_selectivity": (
+        "Editorial selectivity",
+        "Combines substantive locator selectivity and source-word-weighted density fit using the canonical component weights.",
+    ),
+    "conceptual_stance_fidelity": (
+        "Conceptual and stance fidelity",
+        "Measures source-grounded conceptual and stance fidelity across the audited heading-node denominator.",
+    ),
+    "page_reference_reliability": (
+        "Page-reference reliability",
+        "Combines binary locator keep precision and expected-treatment recall with the canonical harmonic mean and caps.",
+    ),
+    "findability_navigation": (
+        "Findability and navigation",
+        "Combines coverage-conditioned reader tasks, heading-access architecture, and cross-reference validity with the canonical weights and caps.",
+    ),
+    "mechanics_consistency": (
+        "Mechanics and consistency",
+        "Measures mechanical consistency across the audited heading-node denominator using the canonical status credits.",
+    ),
+}
+
+PRESENTATION_COMPONENT_LABELS = {
+    "priority_weighted_subject_access": "Priority-weighted subject access",
+    "substantive_selectivity": "Substantive selectivity",
+    "density_fit": "Density fit",
+    "conceptual_stance_nodes": "Conceptual and stance node credit",
+    "keep_precision": "Locator keep precision",
+    "page_treatment_axis_diagnostic": "Page-treatment diagnostic",
+    "complete_path_fit_axis_diagnostic": "Complete-path-fit diagnostic",
+    "diagnostic_locator_credit_mean": "Diagnostic locator credit",
+    "expected_treatment_recall": "Expected-treatment recall",
+    "reliability_f1": "Reliability harmonic mean",
+    "high_value_treatment_recall_safeguard": "High-value treatment recall",
+    "coverage_conditioned_reader_tasks": "Coverage-conditioned reader-task credit",
+    "heading_access_architecture": "Heading-access architecture",
+    "cross_reference_validity": "Cross-reference validity",
+    "mechanics_nodes": "Mechanics node credit",
+}
+
+
+def _presentation_decimal(value: Any) -> Decimal | None:
+    return None if value is None else Decimal(str(value))
+
+
+def _presentation_display(value: Any, *, complement: bool = False, unavailable: str = "Not measured") -> str:
+    decimal = _presentation_decimal(value)
+    if decimal is None:
+        return unavailable
+    displayed = (ONE - decimal if complement else decimal) * Decimal(100)
+    return f"{displayed.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP):.2f}%"
+
+
+def _presentation_score(value: Any) -> float | None:
+    decimal = _presentation_decimal(value)
+    return None if decimal is None else float(decimal * Decimal(100))
+
+
+def _presentation_component(dimension: Mapping[str, Any], component_id: str) -> Mapping[str, Any]:
+    matches = [item for item in dimension["components"] if item["component_id"] == component_id]
+    core.require(len(matches) == 1, "presentation_component_mismatch", f"Expected one canonical {component_id} component.")
+    return matches[0]
+
+
+def _presentation_component_state(dimension: Mapping[str, Any], component_id: str) -> str:
+    denominator = next((item for item in dimension["denominators"]["components"] if item["component_id"] == component_id), None)
+    if denominator is None:
+        return "not_measured"
+    if denominator["genuinely_inapplicable"]:
+        return "not_applicable"
+    if denominator["uninspectable"] and not denominator["measured"]:
+        return "uninspectable"
+    if denominator["not_measured"] and not denominator["measured"]:
+        return "not_measured"
+    return "not_measured"
+
+
+def _presentation_unavailable_label(state: str) -> str:
+    return {"not_applicable": "Not applicable", "uninspectable": "Uninspectable", "not_measured": "Not measured"}[state]
+
+
+def _presentation_ratio_metric(metric_id: str, label: str, dimension: Mapping[str, Any], component_id: str) -> dict[str, Any]:
+    component = _presentation_component(dimension, component_id)
+    value = component["normalized_value"]
+    return {
+        "metric_id": metric_id,
+        "label": label,
+        "display_value": _presentation_display(value, unavailable=_presentation_unavailable_label(_presentation_component_state(dimension, component_id))),
+        "value": value,
+        "numerator": component["raw_numerator"],
+        "denominator": component["raw_denominator"],
+    }
+
+
+def _presentation_calculation_basis(dimension: Mapping[str, Any]) -> list[dict[str, Any]]:
+    lines = []
+    for component in dimension["components"]:
+        label = PRESENTATION_COMPONENT_LABELS.get(component["component_id"], component["component_id"].replace("_", " ").capitalize())
+        value = component["normalized_value"]
+        if value is None:
+            state = _presentation_component_state(dimension, component["component_id"])
+            lines.append({"equation": f"{label} is {state.replace('_', ' ')}", "kind": "input", "number_scores": []})
+            continue
+        percentage = core.decimal_text(Decimal(str(value)) * Decimal(100))
+        line = {
+            "equation": f"{label} = {component['raw_numerator']} / {component['raw_denominator']} = {percentage}%",
+            "kind": "input",
+            "number_scores": [None, None, _presentation_score(value)],
+            "score": _presentation_score(value),
+        }
+        if component["effective_weight"] in {"reported_diagnostic_only", "not_used_independently_in_dimension_arithmetic", "not_used_in_dimension_arithmetic", "cap_only"}:
+            line["tooltip"] = "Reported diagnostic or safeguard only; excluded as an independent weighted score component."
+        lines.append(line)
+
+    if dimension["dimension_id"] == "page_reference_reliability":
+        keep = _presentation_component(dimension, "keep_precision")["normalized_value"]
+        recall = _presentation_component(dimension, "expected_treatment_recall")["normalized_value"]
+        if keep is not None and recall is not None:
+            keep_percentage = core.decimal_text(Decimal(keep) * Decimal(100))
+            recall_percentage = core.decimal_text(Decimal(recall) * Decimal(100))
+            base = dimension["pre_cap_percentage"]
+            lines.append({
+                "equation": f"Canonical harmonic mean = 2 * {keep_percentage}% * {recall_percentage}% / ({keep_percentage}% + {recall_percentage}%) = {base}%",
+                "kind": "step",
+                "number_scores": [None, float(Decimal(keep_percentage)), float(Decimal(recall_percentage)), float(Decimal(keep_percentage)), float(Decimal(recall_percentage)), float(Decimal(base))],
+                "score": float(Decimal(base)),
+            })
+    elif dimension["dimension_id"] in {"editorial_selectivity", "findability_navigation"}:
+        weighted = []
+        for component in dimension["components"]:
+            value = _presentation_decimal(component["normalized_value"])
+            weight_text = component["effective_weight"]
+            numerator, denominator = weight_text.split("/", 1) if "/" in weight_text else (weight_text, "1")
+            weight = Decimal(numerator) / Decimal(denominator)
+            if value is not None and weight:
+                weighted.append((value * Decimal(100), weight))
+        if weighted:
+            base = Decimal(str(dimension["pre_cap_percentage"]))
+            equation = "Canonical weighted combination = " + " + ".join(
+                f"{core.decimal_text(value)}% * {core.decimal_text(weight)}" for value, weight in weighted
+            ) + f" = {core.decimal_text(base)}%"
+            number_scores = [item for value, _ in weighted for item in (float(value), None)] + [float(base)]
+            lines.append({"equation": equation, "kind": "step", "number_scores": number_scores, "score": float(base)})
+    elif dimension["pre_cap_percentage"] is not None:
+        value = Decimal(str(dimension["pre_cap_percentage"]))
+        lines.append({"equation": f"Canonical pre-cap percentage = {core.decimal_text(value)}%", "kind": "step", "number_scores": [float(value)], "score": float(value)})
+
+    applied_cap = dimension["applied_cap"]
+    if applied_cap is not None:
+        pre_cap = Decimal(str(dimension["pre_cap_percentage"]))
+        ceiling = Decimal(str(applied_cap["maximum_percentage"]))
+        final = Decimal(str(dimension["dimension_percentage"]))
+        lines.append({
+            "equation": f"Applied cap = min({core.decimal_text(pre_cap)}%, {core.decimal_text(ceiling)}%) = {core.decimal_text(final)}%",
+            "kind": "step",
+            "number_scores": [float(pre_cap), None, float(final)],
+            "score": float(final),
+            "tooltip": f"Canonical cap: {applied_cap['cap_id']}.",
+        })
+    elif dimension["dimension_percentage"] is not None:
+        final = Decimal(str(dimension["dimension_percentage"]))
+        lines.append({
+            "equation": f"No canonical cap reduced the {core.decimal_text(final)}% result",
+            "kind": "step",
+            "number_scores": [float(final)],
+            "score": float(final),
+        })
+    return lines
+
+
+def _presentation_summary(
+    *,
+    calculation: Mapping[str, Any],
+    calculation_record: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    structure: Mapping[str, Any],
+    missing_documents: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    dimensions = {item["dimension_id"]: item for item in calculation["dimensions"]}
+    subject_rows = [row for document in missing_documents for row in document["subject_judgments"]]
+    task_rows = [row for document in missing_documents for row in document["reader_task_results"]]
+    treatment_rows = [row for document in missing_documents for row in document["treatment_judgments"]]
+    coverage = {
+        priority: {status: sum(row["priority"] == priority and row["coverage"] == status for row in subject_rows) for status in ("complete", "partial", "missing")}
+        for priority in ("essential", "major", "optional")
+    }
+
+    optional_scored = {row["subject_id"]: row["scored"] for row in structure["scoring_context"].get("optional_subject_scoring", [])}
+    measured_subjects = [
+        row for row in subject_rows
+        if row["coverage"] in core.COVERAGE_CREDIT and (row["priority"] != "optional" or optional_scored.get(row["subject_id"], True))
+    ]
+    complete_weight = sum((core.PRIORITY_CREDIT[row["priority"]] for row in measured_subjects if row["coverage"] == "complete"), ZERO)
+    partial_weight = sum((core.PRIORITY_CREDIT[row["priority"]] for row in measured_subjects if row["coverage"] == "partial"), ZERO)
+    missing_weight = sum((core.PRIORITY_CREDIT[row["priority"]] for row in measured_subjects if row["coverage"] == "missing"), ZERO)
+    denominator_weight = complete_weight + partial_weight + missing_weight
+    coverage_component = _presentation_component(dimensions["meaningful_coverage"], "priority_weighted_subject_access")
+    core.require(
+        Decimal(coverage_component["raw_numerator"]) == complete_weight + partial_weight * Decimal("0.5")
+        and Decimal(coverage_component["raw_denominator"]) == denominator_weight,
+        "presentation_metric_binding_mismatch",
+        "Presentation coverage weights differ from the canonical calculation.",
+    )
+    essential_cap = next(item for item in dimensions["meaningful_coverage"]["cap_evaluations"] if item["cap_id"] == "coverage.essential_miss_rate")
+
+    coverage_by_subject = {row["subject_id"]: row["coverage"] for row in subject_rows}
+    eligible_tasks = [
+        row for row in task_rows
+        if all(coverage_by_subject.get(subject_id) in core.COVERAGE_CREDIT and coverage_by_subject[subject_id] != "missing" for subject_id in row["subject_ids"])
+        and row["result"] in core.TASK_CREDIT
+    ]
+    task_component = _presentation_component(dimensions["findability_navigation"], "coverage_conditioned_reader_tasks")
+    task_credit = sum((core.TASK_CREDIT[row["result"]] for row in eligible_tasks), ZERO)
+    core.require(
+        Decimal(task_component["raw_numerator"]) == task_credit
+        and Decimal(task_component["raw_denominator"]) == len(eligible_tasks),
+        "presentation_metric_binding_mismatch",
+        "Presentation reader-task operands differ from the canonical calculation.",
+    )
+    strict_task_successes = sum(row["result"] == "succeeds" for row in eligible_tasks)
+    strict_task_value = None if task_component["normalized_value"] is None else core.decimal_text(core.rate(strict_task_successes, len(eligible_tasks)))
+
+    reliability = dimensions["page_reference_reliability"]["reliability_provenance"]
+    metrics = [
+        {
+            "metric_id": "weighted_concept_access_partial_credit",
+            "label": "Meaningful coverage",
+            "display_value": _presentation_display(coverage_component["normalized_value"]),
+            "value": coverage_component["normalized_value"],
+            "complete_weight": core.decimal_text(complete_weight),
+            "partial_weight": core.decimal_text(partial_weight),
+            "denominator_weight": core.decimal_text(denominator_weight),
+        },
+        {
+            "metric_id": "essential_concept_miss_rate",
+            "label": "Essential subjects covered",
+            "display_value": _presentation_display(essential_cap["observed"]["rate"], complement=True),
+            "value": essential_cap["observed"]["rate"],
+            "numerator": str(essential_cap["observed"]["missing"]),
+            "denominator": str(essential_cap["observed"]["essential_denominator"]),
+        },
+        _presentation_ratio_metric("locator_recall", "Expected-treatment recall", dimensions["page_reference_reliability"], "expected_treatment_recall"),
+        {
+            "metric_id": "reader_task_strict_success",
+            "label": "Coverage-conditioned research-question access",
+            "display_value": _presentation_display(
+                strict_task_value,
+                unavailable=_presentation_unavailable_label(_presentation_component_state(dimensions["findability_navigation"], "coverage_conditioned_reader_tasks")),
+            ),
+            "value": strict_task_value,
+            "partial_credit_value": task_component["normalized_value"],
+            "numerator": str(strict_task_successes),
+            "denominator": str(len(eligible_tasks)),
+        },
+        _presentation_ratio_metric("substantive_selectivity", "Substantive selectivity", dimensions["editorial_selectivity"], "substantive_selectivity"),
+        {
+            "metric_id": "strict_supported_locator_rate",
+            "label": "Locator keep precision",
+            "display_value": _presentation_display(reliability["keep_precision"]),
+            "value": reliability["keep_precision"],
+            "numerator": str(reliability["keep_precision_numerator"]),
+            "denominator": str(reliability["keep_precision_denominator"]),
+        },
+        _presentation_ratio_metric("conceptual_stance_fidelity", "Conceptual and stance fidelity", dimensions["conceptual_stance_fidelity"], "conceptual_stance_nodes"),
+        _presentation_ratio_metric("valid_entry_precision_at_least_partial", "Reliability F1", dimensions["page_reference_reliability"], "reliability_f1"),
+        _presentation_ratio_metric("density_fit", "Density fit", dimensions["editorial_selectivity"], "density_fit"),
+        _presentation_ratio_metric("heading_access_architecture", "Heading-access architecture", dimensions["findability_navigation"], "heading_access_architecture"),
+        _presentation_ratio_metric("cross_reference_validity", "Cross-reference validity", dimensions["findability_navigation"], "cross_reference_validity"),
+        _presentation_ratio_metric("mechanics_consistency", "Mechanics and consistency", dimensions["mechanics_consistency"], "mechanics_nodes"),
+    ]
+    return {
+        "schema_version": "subject-index-presentation-summary-v1",
+        "provenance": {
+            "evaluation_id": calculation["evaluation_id"],
+            "web_report_sha256": calculation_record["sha256"],
+        },
+        "coverage_by_priority": coverage,
+        "scope": {
+            "displayed_locators": sum(len(row["locator_displays"]) for row in candidate["records"]),
+            "expected_treatments": len(treatment_rows),
+        },
+        "metrics": metrics,
+        "dimensions": [
+            {
+                "dimension_id": dimension_id,
+                "label": PRESENTATION_DIMENSIONS[dimension_id][0],
+                "rationale": PRESENTATION_DIMENSIONS[dimension_id][1],
+                "calculation_basis": _presentation_calculation_basis(dimensions[dimension_id]),
+            }
+            for dimension_id in PRESENTATION_DIMENSIONS
+        ],
+    }
+
+
 def _critical_gate_outcomes(
     policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
@@ -1764,6 +2063,8 @@ def _web_report(
     structure: Mapping[str, Any],
     structure_record: Mapping[str, Any],
     metadata: Mapping[str, Any],
+    candidate: Mapping[str, Any],
+    missing_documents: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     calculation_ref = _calculation_reference(calculation_record, calculation)
     structure_ref = _structure_reference(structure_record)
@@ -1776,6 +2077,13 @@ def _web_report(
         "grade": {"score": calculation["overall_percentage"], "maximum": 100, "label": _grade_label(calculation["overall_percentage"])},
         "scorecard": _scorecard(calculation),
         "calculation_explainer": {**calculation_ref, "item_grades_used": False, "gates_used": False},
+        "presentation_summary": _presentation_summary(
+            calculation=calculation,
+            calculation_record=calculation_record,
+            candidate=candidate,
+            structure=structure,
+            missing_documents=missing_documents,
+        ),
         "precision_diagnostics": precision,
         "structure_audit": {**deepcopy(calculation["structure_audit"]), **structure_ref},
         "key_metrics": [{"metric_id": key, "value": value} for key, value in precision.items()],
@@ -2013,7 +2321,18 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / "v8-canonical-projection"))
             if not replacing:
                 core.require(not output.exists() and not bundle_output.exists(), "output_exists", "Refusing to overwrite web report or canonical web projection bundle.", [str(output), str(bundle_output)])
-            report = _web_report(result=result, calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure=structure, structure_record=structure_record, metadata=metadata)
+            report = _web_report(
+                result=result,
+                calculation=calculation,
+                calculation_record=calculation_record,
+                items=items,
+                items_record=items_record,
+                structure=structure,
+                structure_record=structure_record,
+                metadata=metadata,
+                candidate=candidate,
+                missing_documents=[item[0] for item in missing_entries],
+            )
             payload = _json_bytes(report)
             stamp = now()
             record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version="subject-index-web-report-v10", stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
