@@ -122,8 +122,7 @@
                     "properties": {
                       "path": {
                         "type": "string",
-                        "minLength": 1,
-                        "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+                        "minLength": 1
                       },
                       "sha256": {
                         "type": "string",
@@ -131,7 +130,58 @@
                       }
                     },
                     "additionalProperties": false
-                  }
+                  },
+                  "description": "Private transport provenance only; paths and archive hashes are omitted from public comparison identities."
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind",
+                "source_only_state_sha256",
+                "draft_file_sha256",
+                "review_file_sha256",
+                "checkpoint_artifacts"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "current_source_freeze"
+                },
+                "source_only_state_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "draft_file_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "review_file_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "checkpoint_artifacts": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "path",
+                      "sha256"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "sha256": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "description": "Private transport provenance only; paths and archive hashes are omitted from public comparison identities."
                 }
               },
               "additionalProperties": false

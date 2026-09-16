@@ -2,7 +2,8 @@
 from copy import deepcopy
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
+import tempfile
 
 from schema_validation import schema_errors
 
@@ -65,6 +66,8 @@ def validate_lock(lock):
     require(lock['density_basis']['measurement_sha256'] == digest(chunks), 'Density basis digest mismatch')
     span = lock['source_scope']['document_page_span']
     require(span[0] <= span[1], 'Invalid study scope')
+    for label in (lock['release']['release_id'], lock['release']['benchmark_id'], lock['density_basis']['basis_id']):
+        public_label(label)
 
 
 def validate_release(lock, benchmark, benchmark_bytes_sha, descriptor=None, descriptor_bytes_sha=None):
@@ -87,7 +90,30 @@ def validate_release(lock, benchmark, benchmark_bytes_sha, descriptor=None, desc
         require(benchmark[key] == lock['source_scope'][key], f'Release {key} mismatch')
 
 
+def public_label(value):
+    label = value.strip()
+    require(not label.lower().startswith('file:') and not PurePosixPath(label).is_absolute() and not PureWindowsPath(label).drive and not PureWindowsPath(label).is_absolute(), 'Public identity label must not be an absolute path')
+    return value
+
+
+def public_release_identity(release):
+    # Private transport locations never participate in a public comparison.
+    fields = ('release_id', 'benchmark_id', 'version', 'benchmark_sha256', 'benchmark_file_sha256', 'release_descriptor_sha256')
+    value = {key: deepcopy(release[key]) for key in fields if key in release}
+    for key in ('release_id', 'benchmark_id'):
+        public_label(value[key])
+    lineage_fields = ('kind', 'artifact_freeze_commit', 'source_only_state_sha256', 'draft_file_sha256', 'review_file_sha256', 'review_inventory_file_sha256')
+    value['lineage'] = {key: release['lineage'][key] for key in lineage_fields if key in release['lineage']}
+    return value
+
+
+def public_density_identity(density):
+    rows = [{'chunk_id': public_label(row['chunk_id']), 'indexable_source_words': row['indexable_source_words'], 'source_artifact': {'sha256': row['source_artifact']['sha256']}} for row in density['chunks']]
+    return {'basis_id': public_label(density['basis_id']), 'chunks': rows, 'measurement_sha256': digest(rows)}
+
+
 def benchmark_identity(benchmark):
+    public_label(benchmark['benchmark_id'])
     return {'benchmark_id': benchmark['benchmark_id'], 'version': benchmark['version'],
             'benchmark_sha256': benchmark['benchmark_sha256'],
             'benchmark_semantic_sha256': benchmark_semantic_hash(benchmark)}
@@ -112,8 +138,8 @@ def evaluation_identity(*, benchmark, policy, structure, manifest, audit_mode, r
             require(identity[key] == lock[key], f'Study comparison mismatch: {key}')
         expected = [{k: r[k] for k in ('chunk_id', 'indexable_source_words')} for r in lock['density_basis']['chunks']]
         require(measurements == expected, 'Study comparison mismatch: exact density measurement map')
-        identity['release'] = deepcopy(lock['release'])
-        identity['density_basis'] = deepcopy(lock['density_basis'])
+        identity['release'] = public_release_identity(lock['release'])
+        identity['density_basis'] = public_density_identity(lock['density_basis'])
     identity['identity_sha256'] = digest(identity)
     return identity
 
@@ -217,12 +243,17 @@ def load_study_binding(state, state_path):
     release = bound_document(root, binding['release_benchmark'])
     descriptor = bound_document(root, binding['release_descriptor']) if 'release_descriptor' in binding else None
     validate_release(lock, release, binding['release_benchmark']['sha256'], descriptor, binding.get('release_descriptor',{}).get('sha256'))
-    for name in ('release_review','release_review_inventory'):
-        bound_document(root,binding[name])
-    if lock['release']['lineage']['kind']=='native_source_freeze':
+    bound_document(root,binding['release_review'])
+    inventory_path = None
+    if lock['release']['lineage']['kind'] != 'current_source_freeze':
+        bound_document(root,binding['release_review_inventory'])
+        inventory_path = root/binding['release_review_inventory']['path']
+    else:
+        require('release_review_inventory' not in binding, 'Current screening inventory must remain temporary')
+    if lock['release']['lineage']['kind'] in ('native_source_freeze', 'current_source_freeze'):
         for name in ('release_state','release_draft'):
             bound_document(root,binding[name])
-        validate_native_lineage(lock,release,*[(root/binding[name]['path']) for name in ('release_state','release_draft','release_review','release_review_inventory')])
+        validate_native_lineage(lock,release,*[(root/binding[name]['path']) for name in ('release_state','release_draft','release_review')],inventory_path)
     else:
         from study_cli import validate_release_review
         validate_release_review(release,descriptor,root/binding['release_benchmark']['path'],root/binding['release_review']['path'],root/binding['release_review_inventory']['path'],root/binding['release_draft']['path'] if 'release_draft' in binding else None)
@@ -297,11 +328,17 @@ def preflight_state(state, state_path, *, require_density=False):
     return lock
 
 
-def validate_native_lineage(lock, release, state_path, draft_path, review_path, inventory_path):
-    from benchmark_review_cli import legacy_registered_hash, native_v8_review_errors
+def validate_native_lineage(lock, release, state_path, draft_path, review_path, inventory_path=None):
+    from benchmark_review_cli import build_inventory, json_bytes, legacy_registered_hash, native_v8_review_errors, validate_final_data
     lineage=lock['release']['lineage']
-    require(lineage['kind']=='native_source_freeze','Expected native source-only lineage')
-    for path,key in ((state_path,'source_only_state_sha256'),(draft_path,'draft_file_sha256'),(review_path,'review_file_sha256'),(inventory_path,'review_inventory_file_sha256')):
+    require(lineage['kind'] in ('native_source_freeze', 'current_source_freeze'),'Expected native source-only lineage')
+    current = lineage['kind'] == 'current_source_freeze'
+    proofs = [(state_path,'source_only_state_sha256'),(draft_path,'draft_file_sha256'),(review_path,'review_file_sha256')]
+    if not current:
+        proofs.append((inventory_path,'review_inventory_file_sha256'))
+    else:
+        require(inventory_path is None, 'Current screening inventory must remain temporary; omit --release-review-inventory')
+    for path,key in proofs:
         require(path is not None and file_digest(path)==lineage[key],f'Native release {key} mismatch')
     state=read(state_path)
     require(state.get('candidate') is None and not any(r.get('stage')=='candidate_normalization' for r in state['artifacts']), 'Native historical state contains candidate exposure')
@@ -309,8 +346,27 @@ def validate_native_lineage(lock, release, state_path, draft_path, review_path, 
         require(state['stages'][stage]['status']=='not_started',f'Native historical candidate-era stage is active: {stage}')
     require(state['source']['sha256']==release['source_sha256'],'Native historical source differs')
     require(state['evaluation_id']==release['evaluation_id'],'Native historical evaluation identity differs')
-    for stage,sha in (('benchmark_synthesis',file_digest(draft_path)),('benchmark_review',file_digest(review_path)),('benchmark_review',file_digest(inventory_path)),('benchmark_freeze',lock['release']['benchmark_file_sha256'])):
+    registrations = [('benchmark_synthesis',file_digest(draft_path)),('benchmark_review',file_digest(review_path)),('benchmark_freeze',lock['release']['benchmark_file_sha256'])]
+    if not current:
+        registrations.append(('benchmark_review',file_digest(inventory_path)))
+    for stage,sha in registrations:
         require(state['stages'][stage]['status']=='completed' and legacy_registered_hash(state,stage,sha),f'Native historical registration mismatch: {stage}')
-    errors=native_v8_review_errors(draft_path,read(draft_path),release,read(inventory_path),read(review_path))
+    if current:
+        from state_cli import validate_state
+        state_errors, _ = validate_state(state, check_files=False)
+        require(not state_errors, f'Current source freeze state is invalid: {state_errors}')
+        require(not any(r.get('schema_version')=='source-benchmark-review-inventory-v1' for r in state['artifacts']), 'Current screening inventory must not be registered')
+        for (stage, sha), schema in zip(registrations, ('source-subject-benchmark-draft-v1','source-benchmark-review-v1','source-subject-benchmark-v2')):
+            require(any(r['stage']==stage and r['sha256']==sha and r.get('schema_version')==schema for r in state['artifacts']), f'Current typed freeze registration mismatch: {stage}')
+        # Recompute standard screening diagnostics for validation only. This is
+        # neither a preserved historical inventory nor a new editorial review.
+        with tempfile.TemporaryDirectory(prefix='study-freeze-review-') as directory:
+            inventory = Path(directory)/'inventory.json'
+            final = Path(directory)/'final.json'
+            inventory.write_bytes(json_bytes(build_inventory(draft_path, 0.93)))
+            final.write_bytes(json_bytes(release))
+            errors, _, _ = validate_final_data(draft_path, inventory, review_path, final)
+    else:
+        errors=native_v8_review_errors(draft_path,read(draft_path),release,read(inventory_path),read(review_path))
     require(not errors,f'Native historical review chain invalid: {errors}')
     # Checkpoint checksums are retained transport provenance, not resume/import gates.

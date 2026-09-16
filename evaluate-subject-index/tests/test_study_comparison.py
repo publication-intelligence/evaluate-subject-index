@@ -90,6 +90,58 @@ class StudyFixture:
         self.f.write('release/approval.json',approval)
         self.args=argparse.Namespace(state=str(self.state_path),study_lock=str(self.root/'release/study-benchmark-lock.v1.json'),release_benchmark=str(self.root/'release/benchmark.json'),release_descriptor=str(self.root/'release/descriptor.json'),release_review=str(self.root/'release/review.json'),release_review_inventory=str(self.root/'release/inventory.json'),approval=str(self.root/'release/approval.json'),output_dir='migration',study_policy=str(template_path) if template_path else None,release_draft=None,release_state=None)
 
+    def current_source_release(self, *, revised=False):
+        from test_benchmark_freeze import run_cli
+        import benchmark_review_cli as review_cli
+        root=self.root/'current-source-freeze';root.mkdir()
+        state=study.read(self.state_path);state['candidate']=None
+        state['evaluation_id']=self.release['evaluation_id']
+        order=list(completion.state_cli.STAGES);first=order.index('benchmark_synthesis')
+        source_stages=set(order[:first])
+        state['artifacts']=[r for r in state['artifacts'] if r['stage'] in source_stages]
+        for row in state['artifacts']:
+            target=root/row['path'];target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_bytes((self.root/row['path']).read_bytes())
+        for stage in order[first:]:
+            state['stages'][stage]={'status':'not_started','updated_at':None,'notes':[]}
+        source_state=root/'evaluation-state.json';source_state.write_bytes(study_cli.payload(state))
+        draft=deepcopy(self.release);draft.pop('freeze');draft.pop('benchmark_sha256')
+        draft['schema_version']='source-subject-benchmark-draft-v1'
+        draft['synthesis']={'whole_source_pass_complete':True,'all_chunk_artifacts_reconciled':True,'candidate_unseen':True}
+        draft_path=root/'draft.json';draft_path.write_bytes(study_cli.payload(draft))
+        run_cli('state_cli.py','set-stage','--state',source_state,'--stage','benchmark_synthesis','--status','completed','--artifact-path',draft_path)
+        inventory_path=root/'temporary-screen.json'
+        run_cli('benchmark_review_cli.py','screen','--draft',draft_path,'--output',inventory_path)
+        inventory=study.read(inventory_path)
+        final=deepcopy(self.release)
+        if revised:
+            final['subjects'][0]['meaning']='A source-reviewed successor meaning.'
+            final['version']+=1
+        self_hash(final,'benchmark_sha256')
+        final_path=root/'final.json';final_path.write_bytes(study_cli.payload(final))
+        review=study.read(self.args.release_review);review.pop('proposed_final')
+        review['draft']=inventory['draft'];review['approved_changes']=review_cli.approved_changes(draft,final)
+        review['remaining_issues']=[];review['recommendation']='approve_revised' if revised else 'retain_draft'
+        review_path=root/'review.json';review_path.write_bytes(study_cli.payload(review))
+        run_cli('benchmark_review_cli.py','freeze','--state',source_state,'--draft',draft_path,'--inventory',inventory_path,'--review',review_path,'--final',final_path)
+        frozen=study.read(source_state)
+        self.case.assertFalse(any(r.get('schema_version')=='source-benchmark-review-inventory-v1' for r in frozen['artifacts']))
+        # A successful current freeze does not depend on retaining its temporary screen.
+        inventory_path.unlink()
+        self.release=final
+        self.lock['release']={'release_id':'CURRENT-REVIEWED-SUCCESSOR','benchmark_id':final['benchmark_id'],'version':final['version'],
+            'benchmark_sha256':final['benchmark_sha256'],'benchmark_file_sha256':study.file_digest(final_path),
+            'lineage':{'kind':'current_source_freeze','source_only_state_sha256':study.file_digest(source_state),
+                'draft_file_sha256':study.file_digest(draft_path),'review_file_sha256':study.file_digest(review_path),'checkpoint_artifacts':[]}}
+        self.lock['benchmark_semantic_sha256']=study.benchmark_semantic_hash(final)
+        self_hash(self.lock,'lock_sha256');Path(self.args.study_lock).write_bytes(study_cli.payload(self.lock))
+        approval=study.read(self.args.approval);approval.update(study_lock_sha256=self.lock['lock_sha256'],target_benchmark_sha256=final['benchmark_sha256'])
+        Path(self.args.approval).write_bytes(study_cli.payload(approval))
+        self.args.release_state=str(source_state);self.args.release_draft=str(draft_path)
+        self.args.release_review=str(review_path);self.args.release_benchmark=str(final_path)
+        self.args.release_descriptor=None;self.args.release_review_inventory=None
+        return source_state
+
     def close(self):self.f.tearDown()
 
 
@@ -344,3 +396,78 @@ class StudyComparisonTests(unittest.TestCase):
         state=study.read(f.state_path);study.preflight_state(state,f.state_path)
         self.assertEqual(original_bytes,(f.root/record['path']).read_bytes())
         self.assertEqual('not_started',state['stages']['structure_audit']['status'])
+
+    def test_current_typed_freeze_migrates_successor_without_registering_temporary_screen(self):
+        f=self.fixture();source_state=f.current_source_release(revised=True)
+        historical=source_state.read_bytes()
+        result=study_cli.migrate(f.args)
+        self.assertTrue(result['semantic_change'])
+        self.assertEqual(historical,source_state.read_bytes())
+        state=study.read(f.state_path);study.preflight_state(state,f.state_path)
+        self.assertNotIn('release_review_inventory',state['study_comparison'])
+        self.assertFalse(any(r.get('schema_version')=='source-benchmark-review-inventory-v1' for r in state['artifacts']))
+        self.assertFalse((f.root/'migration/release-review-inventory.json').exists())
+        self.assertTrue(study.read(f.root/'migration/release-review.json')['approved_changes'])
+        self.assertNotIn('changes',study.read(f.root/'migration/release-review.json'))
+        self.assertEqual('not_started',state['stages']['missing_access_audit']['status'])
+        archive=f.root/'current-portable.zip';output=f.root/'current-resumed'
+        from test_benchmark_freeze import run_cli
+        run_cli('bundle_cli.py','checkpoint','--state',f.state_path,'--output',archive)
+        run_cli('bundle_cli.py','import-bundle','--input',archive,'--output-dir',output)
+        study.preflight_state(study.read(output/'evaluation-state.json'),output/'evaluation-state.json')
+
+    def test_current_freeze_rejects_unapproved_changes_and_missing_typed_registration(self):
+        f=self.fixture();source_state=f.current_source_release(revised=True)
+        review=study.read(f.args.release_review);review['approved_changes']=[]
+        Path(f.args.release_review).write_bytes(study_cli.payload(review))
+        state=study.read(source_state)
+        for record in state['artifacts']:
+            if record['stage']=='benchmark_review':
+                record['sha256']=study.file_digest(f.args.release_review)
+        source_state.write_bytes(study_cli.payload(state))
+        lineage=f.lock['release']['lineage'];lineage['source_only_state_sha256']=study.file_digest(source_state);lineage['review_file_sha256']=study.file_digest(f.args.release_review)
+        with self.assertRaisesRegex(ValueError,'approved_changes'):
+            study.validate_native_lineage(f.lock,f.release,source_state,Path(f.args.release_draft),Path(f.args.release_review))
+        state['artifacts']=[r for r in state['artifacts'] if r['stage']!='benchmark_review']
+        source_state.write_bytes(study_cli.payload(state));lineage['source_only_state_sha256']=study.file_digest(source_state)
+        with self.assertRaisesRegex(ValueError,'registration mismatch'):
+            study.validate_native_lineage(f.lock,f.release,source_state,Path(f.args.release_draft),Path(f.args.release_review))
+
+    def test_source_freeze_public_outputs_omit_private_transport_and_density_paths(self):
+        a=self.fixture();a.current_source_release()
+        private_paths=['/Users/private/native-freeze.zip',r'C:\Private\native-freeze.zip',r'\\server\restricted\native-freeze.zip','file:///Users/private/native-freeze.zip']
+        a.lock['release']['lineage']['checkpoint_artifacts']=[{'path':path,'sha256':str(i+1)*64} for i,path in enumerate(private_paths)]
+        self_hash(a.lock,'lock_sha256');Path(a.args.study_lock).write_bytes(study_cli.payload(a.lock))
+        approval=study.read(a.args.approval);approval['study_lock_sha256']=a.lock['lock_sha256'];Path(a.args.approval).write_bytes(study_cli.payload(approval))
+        b=self.fixture(evaluation_id='EVAL-CURRENT-SECOND')
+        for name in ('study_lock','release_benchmark','release_review','release_review_inventory','release_descriptor','release_state','release_draft'):
+            setattr(b.args,name,getattr(a.args,name))
+        approval=study.read(b.args.approval);approval.update(study_lock_sha256=a.lock['lock_sha256'],target_benchmark_sha256=a.release['benchmark_sha256'])
+        Path(b.args.approval).write_bytes(study_cli.payload(approval))
+        for f in (a,b):
+            study_cli.migrate(f.args)
+            for command in ('score','build-report'):
+                result=f.f.run_cli(command,'--state',str(f.state_path));self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+            state=study.read(f.state_path)
+            self.assertEqual(private_paths,[r['path'] for r in study.read(f.root/'migration/study-benchmark-lock.v1.json')['release']['lineage']['checkpoint_artifacts']])
+            for record in state['artifacts']:
+                if record['visibility']=='public':
+                    encoded=(f.root/record['path']).read_text()
+                    self.assertNotIn('checkpoint_artifacts',encoded)
+                    for path in private_paths:self.assertNotIn(json.dumps(path)[1:-1],encoded)
+            identity=study.preflight_state(state,f.state_path,require_density=True)
+            self.assertNotIn('checkpoint_artifacts',identity['release']['lineage'])
+            self.assertTrue(all('path' not in r['source_artifact'] for r in identity['density_basis']['chunks']))
+        output=a.root/'public-comparison'
+        study_cli.assemble(argparse.Namespace(state=[str(a.state_path),str(b.state_path)],output_dir=str(output)))
+        for path in output.rglob('*.json'):
+            encoded=path.read_text();self.assertNotIn('checkpoint_artifacts',encoded)
+            for private in private_paths:self.assertNotIn(json.dumps(private)[1:-1],encoded)
+        for kind in ('current_source_freeze','native_source_freeze'):
+            release=deepcopy(a.lock['release']);release['lineage']['kind']=kind
+            self.assertNotIn('checkpoint_artifacts',study.public_release_identity(release)['lineage'])
+            relocated=deepcopy(release);relocated['lineage']['checkpoint_artifacts']=[]
+            self.assertEqual(study.public_release_identity(release),study.public_release_identity(relocated))
+        for private in private_paths:
+            changed=deepcopy(a.lock);changed['release']['release_id']=private;self_hash(changed,'lock_sha256')
+            with self.assertRaisesRegex(ValueError,'absolute path'):study.validate_lock(changed)

@@ -13,8 +13,7 @@
     "lock",
     "release_benchmark",
     "approval",
-    "release_review",
-    "release_review_inventory"
+    "release_review"
   ],
   "properties": {
     "candidate_seen": {

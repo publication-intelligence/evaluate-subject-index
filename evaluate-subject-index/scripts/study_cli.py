@@ -66,12 +66,14 @@ def migrate(args):
         study.require(approval['previous_state_sha256'] == study.file_digest(state_path), 'Approval does not bind the current state bytes')
         study.require(approval['previous_benchmark_sha256'] == previous['benchmark_sha256'], 'Approval does not bind the prior benchmark')
         study.require(approval['study_lock_sha256'] == lock['lock_sha256'] and approval['target_benchmark_sha256'] == release['benchmark_sha256'], 'Approval does not bind the target study release')
-        review_path, inventory_path = Path(args.release_review), Path(args.release_review_inventory)
+        review_path = Path(args.release_review)
+        inventory_path = Path(args.release_review_inventory) if args.release_review_inventory else None
         draft_path = Path(args.release_draft) if args.release_draft else None
         release_state_path = Path(args.release_state) if args.release_state else None
-        if lock['release']['lineage']['kind']=='native_source_freeze':
+        if lock['release']['lineage']['kind'] in ('native_source_freeze', 'current_source_freeze'):
             study.validate_native_lineage(lock,release,release_state_path,draft_path,review_path,inventory_path)
         else:
+            study.require(inventory_path is not None, 'Git release requires --release-review-inventory')
             validate_release_review(release, descriptor, release_path, review_path, inventory_path, draft_path)
         study.require(release.get('candidate_blindness') == 'preserved', 'Selected historical release does not preserve candidate blindness')
         study.require(policy['policy_sha256'] == study.digest({k: v for k, v in policy.items() if k != 'policy_sha256'}), 'Current policy self-hash mismatch')
@@ -141,7 +143,7 @@ def migrate(args):
         # Keep historical proof in portable checkpoints without selecting it as
         # current policy/benchmark or retaining invalidated candidate ledgers.
         active_paths = {r['path'] for r in updated['artifacts']}
-        history_kinds = {'study_preserved_history','study_comparison_evidence','historical_release_benchmark','historical_release_review','evaluation_policy','source_benchmark'}
+        history_kinds = {'study_preserved_history','study_comparison_evidence','historical_release_benchmark','historical_release_review','historical_source_freeze_state','evaluation_policy','source_benchmark'}
         for old in state['artifacts']:
             if old['path'] not in active_paths and old.get('artifact_type') in history_kinds:
                 archived = deepcopy(old)
@@ -153,8 +155,9 @@ def migrate(args):
                 'notes': ['Retrospective study binding invalidated downstream registration; prior files remain preserved. Audit reuse requires its own evidence validation/authorization.']}
         writes = {output/'study-benchmark-lock.v1.json': lock_path.read_bytes(),
                   output/'release-benchmark.json': release_path.read_bytes(),
-                  output/'approval.json': approval_path.read_bytes(), output/'release-review.json': review_path.read_bytes(),
-                  output/'release-review-inventory.json': inventory_path.read_bytes()}
+                  output/'approval.json': approval_path.read_bytes(), output/'release-review.json': review_path.read_bytes()}
+        if inventory_path is not None:
+            writes[output/'release-review-inventory.json'] = inventory_path.read_bytes()
         if descriptor_path is not None:
             writes[output/'release-descriptor.json'] = descriptor_path.read_bytes()
         if release_state_path is not None:
@@ -185,8 +188,8 @@ def migrate(args):
         binding = {'candidate_seen': True, 'migrated_at': stamp, 'semantic_change': not same_content, 'policy_semantic_change': policy_changed,
                    'audit_transfer_authorized': False, 'historical_freeze': deepcopy(release['freeze']),
                    'prior_state': {'path': backup.name, 'sha256': study.file_digest(state_path)}}
-        names = {'lock':'study-benchmark-lock.v1.json', 'release_benchmark':'release-benchmark.json', 'approval':'approval.json', 'release_review':'release-review.json', 'release_review_inventory':'release-review-inventory.json'}
-        for name in ('release-descriptor','release-draft','release-state'):
+        names = {'lock':'study-benchmark-lock.v1.json', 'release_benchmark':'release-benchmark.json', 'approval':'approval.json', 'release_review':'release-review.json'}
+        for name in ('release-descriptor','release-draft','release-state','release-review-inventory'):
             if output/(name+'.json') in writes:
                 names[name.replace('-','_')] = name+'.json'
         for name, filename in names.items():
@@ -203,6 +206,8 @@ def migrate(args):
                 stage, kind = 'benchmark_synthesis', 'historical_release_benchmark'
             elif path.name == 'release-review.json': stage, kind = 'benchmark_review', 'historical_release_review'
             elif path.name == 'release-review-inventory.json': stage = 'source_subject_discovery'
+            elif path.name == 'release-state.json':
+                stage, kind = 'source_subject_discovery', 'historical_source_freeze_state'
             updated['artifacts'].append(record(root,path,content,stage,kind))
         updated['updated_at'] = stamp
         updated['artifacts'].sort(key=lambda r:r['path'])
@@ -278,7 +283,8 @@ def main():
     fingerprint=sub.add_parser('fingerprint');fingerprint.add_argument('--benchmark',required=True);fingerprint.add_argument('--policy',required=True)
     check=sub.add_parser('preflight');check.add_argument('--state',action='append',required=True);check.add_argument('--require-density',action='store_true')
     migration=sub.add_parser('migrate-benchmark')
-    for flag in ('state','study-lock','release-benchmark','release-review','release-review-inventory','approval','output-dir'):migration.add_argument('--'+flag,required=True)
+    for flag in ('state','study-lock','release-benchmark','release-review','approval','output-dir'):migration.add_argument('--'+flag,required=True)
+    migration.add_argument('--release-review-inventory', help='Preserved Git/historical native inventory; omit for current_source_freeze')
     migration.add_argument('--release-descriptor', help='Required for a Git-bound reviewed release')
     migration.add_argument('--release-state', help='Required preserved source-only state for native release lineage')
     migration.add_argument('--release-draft', help='Required preserved draft for native V8 reviewed releases')

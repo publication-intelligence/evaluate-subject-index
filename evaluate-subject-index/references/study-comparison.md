@@ -52,7 +52,7 @@ merely to make comparison pass.
 
 ## Historical release lineage
 
-The lock's `release.lineage` is one of:
+The lock's `release.lineage` explicitly selects one review contract:
 
 - `git_freeze`: the actual `artifact_freeze_commit`, plus the release's exact
   `release_descriptor_sha256`. Supply `--release-descriptor`. Its self-hash,
@@ -64,8 +64,19 @@ The lock's `release.lineage` is one of:
   candidate-era stages. The native draft-to-review-to-final chain is validated.
   `checkpoint_artifacts` records available transport provenance (it may be empty).
   A ZIP checksum is not a Git commit or a checkpoint-import gate.
+- `current_source_freeze`: exact `source_only_state_sha256`, `draft_file_sha256`,
+  and `review_file_sha256` from the current typed `benchmark_review_cli.py freeze`
+  workflow. Supply `--release-state` and `--release-draft`; omit
+  `--release-review-inventory`. The source-only state must register the actual
+  typed draft, review, and final and preserve candidate blindness. Validation
+  recomputes a temporary standard screening inventory (near-duplicate threshold
+  0.93) and runs `validate_final_data`, including the current `approved_changes`
+  contract. The inventory is neither copied nor registered. The preserved
+  source-only state provides imported discovery provenance; this migration does
+  not claim new discovery or review. Optional available transport provenance is
+  recorded in `checkpoint_artifacts` (an empty array is valid).
 
-Both variants bind the exact original benchmark bytes, its self-hash, ID/version,
+All variants bind the exact original benchmark bytes, its self-hash, ID/version,
 semantic fingerprint, source/map/manifest, and reviewed historical evidence. Do
 not manufacture a descriptor or Git identity for a native checkpoint lineage.
 
@@ -101,13 +112,13 @@ python scripts/study_cli.py migrate-benchmark \
   --study-lock reviewed/study-benchmark-lock.v1.json \
   --release-benchmark reviewed/benchmark.json \
   --release-review reviewed/review.json \
-  --release-review-inventory reviewed/inventory.json \
   --approval reviewed/this-candidate-approval.json \
   --output-dir migration/shared-study
 ```
 
-Add the lineage-specific arguments above and `--study-policy` when an explicitly
-approved shared policy is needed. The output directory must be new and inside the
+For Git or historical native lineage, also pass the preserved
+`--release-review-inventory`. Add the other lineage-specific arguments above and
+`--study-policy` when an explicitly approved shared policy is needed. The output directory must be new and inside the
 evaluation. The command locks state mutation and validates the complete proposed
 binding before committing the new canonical state. A failure leaves the prior
 state unchanged.
@@ -157,3 +168,11 @@ Generated reports and projection metadata carry `methodology.benchmark` beside
 the methodology, including ID/version, wrapper and semantic identities, and the
 selected release when present. Website consumers must display benchmark identity
 next to methodology; a label such as “V8.2” alone does not establish comparability.
+
+Public comparison identities contain only allowlisted release identity fields.
+Checkpoint transport paths and archive hashes remain private provenance and are
+omitted entirely. Density evidence is identified by content hashes, without
+private paths; its public measurement digest hashes that path-free ordered map.
+Source-only state documents are never embedded in public outputs. Public release,
+benchmark, density-basis, and chunk labels cannot be absolute POSIX or Windows
+paths. The private lock retains the complete original transport metadata.
