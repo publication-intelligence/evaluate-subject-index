@@ -27,6 +27,10 @@ PROHIBITED_KEYS = {
 }
 PROHIBITED_TEXT = ("/home/", "storage-provider", "storage_provider", ".pdf", "s3://", "gs://")
 SECRET_KEYS = ("secret", "password", "access_token", "api_key", "private_key")
+DISPLAY_CAUTIONS = (
+    "Aggregate scores come from the authoritative V8 calculation, not reconstructed item grades.",
+    "Source excerpts and private layout evidence are excluded.",
+)
 
 
 def _self_hash(value: Mapping[str, Any], field: str) -> str:
@@ -47,6 +51,10 @@ def public_safe(value: Any) -> Any:
     if isinstance(value, list):
         return [public_safe(item) for item in value]
     return value
+
+
+def _projection_limitations(result: Mapping[str, Any]) -> list[str]:
+    return list(dict.fromkeys([*public_safe(deepcopy(result["limitations"])), *DISPLAY_CAUTIONS]))
 
 
 def collection(kind: str, items: list[dict[str, Any]], source_order: str, **extra: Any) -> dict[str, Any]:
@@ -306,7 +314,7 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
         "provenance": {"source_artifacts": [_artifact_binding(row) for row in sorted(source_records, key=lambda row: row["path"])], "source_sha256": result["provenance"]["source_sha256"], "benchmark_sha256": result["provenance"]["benchmark_sha256"], "judgment_policy_sha256": result["provenance"]["judgment_policy_sha256"], "rubric_version": result["provenance"]["rubric_version"], "dimension_calculation_profile": result["provenance"]["dimension_calculation_profile"], "projection_metadata_sha256": result["projection_metadata"]["projection_metadata_sha256"], "calculation_sha256": result["dimension_calculations"]["calculation_sha256"], "missing_access_audit_set_sha256": items["evidence_identity"]["missing_access_audit_set_sha256"], "correction_overlay_sha256": overlay.get("overlay_sha256") if overlay_applicable else None},
         "density_denominator": {"indexable_source_words": sum(row["indexable_source_words"] for row in structure["density"]["chapter_measurements"]), "unit": "words"},
         "public_safety": {"source_excerpts_included": False, "restricted_files_included": False, "private_layout_evidence_included": False, "absolute_paths_included": False, "source_subject_summaries_are_synthesized_not_quoted": True},
-        "limitations": ["Aggregate scores come from the authoritative V8 calculation, not reconstructed item grades.", "Source excerpts and private layout evidence are excluded."],
+        "limitations": _projection_limitations(result),
     }
     projection["projection_sha256"] = _self_hash(projection, "projection_sha256")
     return projection, collections

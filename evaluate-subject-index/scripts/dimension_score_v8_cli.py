@@ -1585,8 +1585,27 @@ def _public_density(structure: Mapping[str, Any], calculation: Mapping[str, Any]
         "density_projection_chunk_mismatch",
         "Public density fit values must cover every and only canonical structure density chunk.",
     )
+    density = deepcopy(structure["density"])
+    historical_rounding = density.get("rounding")
+    density["rounding"] = "none"
+    density["current_calculation_profile"] = {
+        "profile_id": calculation["calculation_profile"],
+        "density_fit_precision": "full_precision",
+        "dimension_percentage_precision": "full_precision",
+        "weighted_contribution_precision": "full_precision",
+        "overall_percentage_rounding": {
+            key: calculation["final_rounding"][key]
+            for key in ("mode", "quantum")
+        },
+    }
+    if historical_rounding is not None:
+        density["historical_rounding"] = {
+            "value": historical_rounding,
+            "source": "frozen_density_policy_and_structure",
+            "applied_to_current_calculation": False,
+        }
     return {
-        **deepcopy(structure["density"]),
+        **density,
         "density_fit_percentage": component["percentage"],
         "chapter_fit_by_chunk": chapter_fits,
     }
