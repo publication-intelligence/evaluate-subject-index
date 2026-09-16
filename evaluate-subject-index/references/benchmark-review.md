@@ -18,6 +18,8 @@ The compatibility reviewer must remain candidate-blind, inspect the exact old an
 
 The typed import recomputes all self-hashes, exact coverage, native registered benchmark/review bindings, file identities, stable subject/relationship/task/evidence ID sets, and the planned output benchmark identity. The compatibility approval separately binds the exact artifact-freeze commit; later release-housekeeping fields are not required in the legacy state. The only mechanical schema normalization is `relationships[*].type` to `relationship_type`. All semantic fields remain byte-for-byte JSON values, while benchmark/evaluation/policy/freeze/import/self-hash metadata is rebound exactly as enumerated by the approval. The generated provenance is `source-benchmark-compatibility-import-provenance-v1`.
 
+An exact native V8 freeze may use the same command with `--legacy-draft` and a compatibility approval whose `reuse_mode` is `native_v8_exact`. This variant requires an unchanged byte-identical V4 policy, already-normalized `relationship_type`, a source-only registered V6 state, the exact historical draft/inventory/review/final chain, full candidate-blind coverage, and no blocking review issues. It performs no semantic normalization or policy rebind. When the freeze was checkpoint-bound rather than Git-bound, the approval binds the exact source-only state and records portable-checkpoint hashes as transport provenance; the archive hash is not a resume or import gate and no artifact-freeze commit may be invented.
+
 Keep all imported evidence inside the target evaluation directory so canonical state can register portable relative paths. Any failure writes neither output and does not change state.
 
 ## Full and pilot review

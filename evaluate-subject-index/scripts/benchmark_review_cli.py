@@ -33,6 +33,7 @@ COMPATIBILITY_APPROVAL_SCHEMA = "source-benchmark-compatibility-approval-v1"
 COMPATIBILITY_PROVENANCE_SCHEMA = "source-benchmark-compatibility-import-provenance-v1"
 COMPATIBILITY_OPERATION = "reviewed_legacy_benchmark_compatibility_import"
 MECHANICAL_NORMALIZATION = "relationships[*].type->relationship_type"
+NATIVE_V8_REUSE_MODE = "native_v8_exact"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -63,6 +64,19 @@ def file_sha256(path: Path) -> str:
 def canonical_hash(value: dict[str, Any]) -> str:
     clone = dict(value)
     clone.pop("benchmark_sha256", None)
+    encoded = json.dumps(clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def benchmark_content_hash(value: dict[str, Any]) -> str:
+    """Hash editorial content while ignoring draft/freeze wrapper fields."""
+    clone = dict(value)
+    for field in (
+        "schema_version", "benchmark_sha256", "synthesis", "freeze", "version",
+        "benchmark_id", "evaluation_id", "source_sha256", "policy_sha256",
+        "page_map_sha256", "chunk_manifest_sha256", "candidate_blindness",
+    ):
+        clone.pop(field, None)
     encoded = json.dumps(clone, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -514,6 +528,7 @@ def normalized_legacy_benchmark(
 ) -> tuple[dict[str, Any], list[str]]:
     errors: list[str] = []
     normalized = deepcopy(legacy)
+    native_v8 = approval.get("reuse_mode") == NATIVE_V8_REUSE_MODE
     relationships = normalized.get("relationships")
     if not isinstance(relationships, list):
         return normalized, ["Legacy benchmark relationships must be an array."]
@@ -523,17 +538,46 @@ def normalized_legacy_benchmark(
             continue
         has_old = "type" in relationship
         has_new = "relationship_type" in relationship
-        if not has_old or has_new:
+        if native_v8 and (has_old or not has_new):
+            errors.append(
+                f"Native V8 relationship {relationship.get('relationship_id')} must contain relationship_type and no legacy type key."
+            )
+            continue
+        if not native_v8 and (not has_old or has_new):
             errors.append(
                 f"Relationship {relationship.get('relationship_id')} must contain exactly one legacy type key and no relationship_type key."
             )
             continue
-        relationship["relationship_type"] = relationship.pop("type")
+        if not native_v8:
+            relationship["relationship_type"] = relationship.pop("type")
     if errors:
         return normalized, errors
 
     current = approval["current"]
     legacy_identity = approval["legacy"]
+    compatibility_import = {
+        "operation": COMPATIBILITY_OPERATION,
+        "approval_id": approval["approval_id"],
+        "legacy_benchmark_file_sha256": legacy_identity["benchmark_file_sha256"],
+        "legacy_benchmark_sha256": legacy_identity["benchmark_sha256"],
+        "normalization": [] if native_v8 else [MECHANICAL_NORMALIZATION],
+        "no_discovery_or_editorial_review_rerun": True,
+    }
+    if native_v8:
+        compatibility_import.update({
+            "reuse_mode": NATIVE_V8_REUSE_MODE,
+            "legacy_state_file_sha256": legacy_identity["state_file_sha256"],
+            "policy_identity": current["policy_sha256"],
+            "release_transport": deepcopy(approval["release_transport"]),
+        })
+    else:
+        compatibility_import.update({
+            "legacy_artifact_freeze_commit": legacy_identity["artifact_freeze_commit"],
+            "policy_rebinding": {
+                "from": legacy_identity["policy_sha256"],
+                "to": current["policy_sha256"],
+            },
+        })
     normalized.update({
         "benchmark_id": current["benchmark_id"],
         "version": current["version"],
@@ -544,19 +588,7 @@ def normalized_legacy_benchmark(
             "synthesis_pass_complete": True,
             "page_coverage_complete": True,
         },
-        "compatibility_import": {
-            "operation": COMPATIBILITY_OPERATION,
-            "approval_id": approval["approval_id"],
-            "legacy_benchmark_file_sha256": legacy_identity["benchmark_file_sha256"],
-            "legacy_benchmark_sha256": legacy_identity["benchmark_sha256"],
-            "legacy_artifact_freeze_commit": legacy_identity["artifact_freeze_commit"],
-            "normalization": [MECHANICAL_NORMALIZATION],
-            "policy_rebinding": {
-                "from": legacy_identity["policy_sha256"],
-                "to": current["policy_sha256"],
-            },
-            "no_discovery_or_editorial_review_rerun": True,
-        },
+        "compatibility_import": compatibility_import,
     })
     normalized["benchmark_sha256"] = canonical_hash(normalized)
     return normalized, errors
@@ -625,6 +657,144 @@ def legacy_review_errors(
         errors.append("Legacy review proposed-final file hash does not match the benchmark.")
     if proposed.get("canonical_sha256") != benchmark.get("benchmark_sha256"):
         errors.append("Legacy review proposed-final canonical hash does not match the benchmark.")
+    return errors
+
+
+def set_of_strings(value: Any, field: str, errors: list[str]) -> set[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        errors.append(f"{field} must be an array of strings.")
+        return set()
+    if len(value) != len(set(value)):
+        errors.append(f"{field} contains duplicate identifiers.")
+    return set(value)
+
+
+def native_v8_review_errors(
+    draft_path: Path,
+    draft: dict[str, Any],
+    benchmark: dict[str, Any],
+    inventory: dict[str, Any],
+    review: dict[str, Any],
+) -> list[str]:
+    """Validate the exact historical V8 review contract used by native freezes."""
+    errors = [
+        *(f"Native V8 draft: {error}" for error in draft_benchmark_structure_errors(draft)),
+        *(f"Native V8 benchmark: {error}" for error in final_benchmark_structure_errors(benchmark)),
+    ]
+    if inventory.get("schema_version") != INVENTORY_SCHEMA:
+        errors.append("Native V8 review inventory has an unsupported schema_version.")
+    if review.get("schema_version") != REVIEW_SCHEMA:
+        errors.append("Native V8 review ledger has an unsupported schema_version.")
+    for value, label in ((inventory, "inventory"), (review, "review")):
+        if value.get("evaluation_id") != draft.get("evaluation_id"):
+            errors.append(f"Native V8 {label} evaluation_id does not match the draft.")
+
+    draft_file_sha256 = file_sha256(draft_path)
+    draft_canonical_sha256 = canonical_hash(draft)
+    inventory_draft = inventory.get("draft", {})
+    review_draft = review.get("draft", {})
+    expected_draft = {
+        "version": draft.get("version"),
+        "file_sha256": draft_file_sha256,
+        "canonical_sha256": draft_canonical_sha256,
+    }
+    for field, expected in expected_draft.items():
+        if inventory_draft.get(field) != expected or review_draft.get(field) != expected:
+            errors.append(f"Native V8 inventory/review draft {field} does not identify the supplied draft.")
+    if inventory_draft.get("candidate_blindness") != "preserved" or draft.get("candidate_blindness") != "preserved":
+        errors.append("Native V8 draft candidate blindness must be preserved.")
+
+    threshold = inventory.get("diagnostics", {}).get("near_duplicate_threshold")
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool) or not 0.0 < threshold <= 1.0:
+        errors.append("Native V8 inventory near-duplicate threshold is invalid.")
+    else:
+        recomputed = build_inventory(draft_path, float(threshold))
+        recomputed["draft"] = {
+            "path": inventory_draft.get("path"),
+            **expected_draft,
+            "candidate_blindness": draft.get("candidate_blindness"),
+        }
+        if recomputed != inventory:
+            errors.append("Native V8 review inventory does not exactly match deterministic recomputation from the draft.")
+
+    if review.get("review_mode") != "full" or review.get("candidate_blindness") != "preserved":
+        errors.append("Native V8 benchmark review must be full and candidate-blind.")
+    independence = review.get("reviewer_independence", {})
+    if independence.get("fresh_context") is not True or independence.get("candidate_unseen") is not True:
+        errors.append("Native V8 review must attest a fresh context with the candidate unseen.")
+    if independence.get("source_reconnected_sha256") != draft.get("source_sha256"):
+        errors.append("Native V8 review source identity does not match the draft.")
+    for field in (
+        "structural_validation_passed", "editorial_review_complete",
+        "source_first_omission_review_complete", "candidate_blindness_preserved",
+        "no_unreviewed_required_items", "public_claims_allowed",
+    ):
+        if review.get("completion", {}).get(field) is not True:
+            errors.append(f"Native V8 full review completion.{field} must be true.")
+
+    comparisons = (
+        ("subject_ids_reviewed", "subject_ids"),
+        ("relationship_ids_reviewed", "relationship_ids"),
+        ("reader_task_ids_reviewed", "reader_task_ids"),
+        ("cross_chapter_subject_ids_reviewed", "cross_chapter_subject_ids"),
+        ("unresolved_relationship_ids_dispositioned", "unresolved_relationship_ids"),
+        ("fallback_reader_task_ids_reviewed", "fallback_reader_task_ids"),
+    )
+    coverage = review.get("coverage", {})
+    queues = inventory.get("queues", {})
+    for reviewed_field, expected_field in comparisons:
+        reviewed = set_of_strings(coverage.get(reviewed_field), f"coverage.{reviewed_field}", errors)
+        expected = set_of_strings(queues.get(expected_field), f"inventory.queues.{expected_field}", errors)
+        if reviewed != expected:
+            errors.append(f"Native V8 full review has incomplete coverage for {reviewed_field}.")
+
+    changes = review.get("changes")
+    required_change_fields = (
+        "merges", "splits", "priority_changes", "relationship_changes",
+        "reader_task_changes", "subjects_added", "subjects_removed", "terminology_changes",
+    )
+    if not isinstance(changes, dict):
+        errors.append("Native V8 review changes must be an object.")
+    elif any(not isinstance(changes.get(field), list) for field in required_change_fields):
+        errors.append("Native V8 review changes ledger is incomplete.")
+    remaining_issues = review.get("remaining_issues")
+    if not isinstance(remaining_issues, list):
+        errors.append("Native V8 review remaining_issues must be an array.")
+    elif any(issue.get("blocking") is True for issue in remaining_issues if isinstance(issue, dict)):
+        errors.append("Native V8 review retains a blocking issue.")
+
+    for field in (
+        "benchmark_id", "evaluation_id", "source_sha256", "policy_sha256",
+        "page_map_sha256", "chunk_manifest_sha256",
+    ):
+        if benchmark.get(field) != draft.get(field):
+            errors.append(f"Native V8 final benchmark changed frozen identity field: {field}.")
+    if benchmark.get("candidate_blindness") != "preserved":
+        errors.append("Native V8 final benchmark candidate blindness must be preserved.")
+    if benchmark.get("benchmark_sha256") != canonical_hash(benchmark):
+        errors.append("Native V8 final benchmark canonical hash does not recompute.")
+    recommendation = review.get("recommendation")
+    freeze = benchmark.get("freeze", {})
+    for field, expected in (
+        ("synthesis_pass_complete", True), ("page_coverage_complete", True),
+        ("review_mode", "full"), ("review_recommendation", recommendation),
+        ("candidate_blindness", "preserved"),
+        ("source_reconnected_sha256", draft.get("source_sha256")),
+    ):
+        if freeze.get(field) != expected:
+            errors.append(f"Native V8 final freeze.{field} does not match the reviewed release.")
+    if recommendation == "retain_draft":
+        if benchmark_content_hash(draft) != benchmark_content_hash(benchmark):
+            errors.append("Native V8 retain_draft review changed canonical benchmark content.")
+        if benchmark.get("version") != draft.get("version"):
+            errors.append("Native V8 retain_draft review changed the benchmark version.")
+    elif recommendation == "approve_revised":
+        if benchmark_content_hash(draft) == benchmark_content_hash(benchmark):
+            errors.append("Native V8 approve_revised review requires substantively different editorial content.")
+        if not isinstance(benchmark.get("version"), int) or benchmark.get("version", 0) <= draft.get("version", 0):
+            errors.append("Native V8 revised benchmark must increment the version.")
+    else:
+        errors.append("Native V8 review recommendation does not authorize the frozen benchmark.")
     return errors
 
 
@@ -811,6 +981,8 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         "output": Path(args.output).resolve(),
         "provenance_output": Path(args.provenance_output).resolve(),
     }
+    if args.legacy_draft:
+        paths["legacy_draft"] = Path(args.legacy_draft).resolve()
     documents = {
         name: load_json(path)
         for name, path in paths.items()
@@ -841,6 +1013,14 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
     if errors:
         emit({"command": "import-reviewed-legacy", "ok": False, "errors": errors, "warnings": warnings}, 1)
 
+    native_v8 = approval.get("reuse_mode") == NATIVE_V8_REUSE_MODE
+    if native_v8 and "legacy_draft" not in paths:
+        emit({
+            "command": "import-reviewed-legacy", "ok": False,
+            "errors": ["Native V8 exact reuse requires --legacy-draft."],
+            "warnings": warnings,
+        }, 1)
+
     current_page_map = documents["page_map"]
     current_manifest = documents["chunk_manifest"]
     current_policy = documents["policy"]
@@ -851,6 +1031,7 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
     legacy_benchmark = documents["legacy_benchmark"]
     legacy_inventory = documents["legacy_review_inventory"]
     legacy_review = documents["legacy_review"]
+    legacy_draft = documents.get("legacy_draft")
     digests = {name: file_sha256(path) for name, path in paths.items() if path.is_file()}
 
     for document, schema_name, label in (
@@ -861,6 +1042,8 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         (current_policy, "evaluation-policy-v4.schema.json", "Current policy"),
     ):
         errors.extend(f"{label}: {error}" for error in schema_errors(document, schema_name))
+    if native_v8:
+        errors.extend(f"Legacy policy: {error}" for error in schema_errors(legacy_policy, "evaluation-policy-v4.schema.json"))
     for document, field, label in (
         (current_page_map, "page_map_sha256", "Current page map"),
         (legacy_page_map, "page_map_sha256", "Legacy page map"),
@@ -881,6 +1064,8 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         errors.append("Legacy and current page-map canonical identities differ.")
     if current_manifest.get("chunk_manifest_sha256") != legacy_manifest.get("chunk_manifest_sha256"):
         errors.append("Legacy and current chunk-manifest canonical identities differ.")
+    if native_v8 and digests["policy"] != digests["legacy_policy"]:
+        errors.append("Native V8 reuse requires byte-identical legacy and current policies.")
 
     source_sha256 = state.get("source", {}).get("sha256")
     for document, label in (
@@ -893,6 +1078,8 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
             errors.append(f"The {label} source identity does not match canonical state.")
         if label == "legacy state" and document.get("sha256") != source_sha256:
             errors.append("The legacy state source identity does not match canonical state.")
+    if native_v8 and legacy_draft.get("source_sha256") != source_sha256:
+        errors.append("The native V8 draft source identity does not match canonical state.")
     for policy, label in ((current_policy, "Current"), (legacy_policy, "Legacy")):
         scope = policy.get("source_scope", {})
         if scope.get("page_map_sha256") != current_page_map.get("page_map_sha256"):
@@ -930,7 +1117,6 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
     if not registered_file_matches(state, state_path, "define_policy", paths["policy"]):
         errors.append("Current policy is not the exact registered define_policy artifact.")
 
-    legacy_workflow = legacy_state.get("benchmark_workflow", {})
     if legacy_state.get("evaluation_id") != legacy_benchmark.get("evaluation_id"):
         errors.append("Legacy state evaluation_id does not match the benchmark.")
     for stage in ("source_subject_discovery", "benchmark_synthesis", "benchmark_review", "benchmark_freeze"):
@@ -938,7 +1124,6 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
             errors.append(f"Legacy state does not complete {stage}.")
     if (
         legacy_state.get("candidate") is not None
-        or legacy_workflow.get("candidate_blindness") != "preserved"
         or legacy_benchmark.get("candidate_blindness") != "preserved"
     ):
         errors.append("Legacy benchmark state does not preserve candidate blindness.")
@@ -947,17 +1132,51 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         for item in legacy_state.get("artifacts", []) if isinstance(item, dict)
     ):
         errors.append("Legacy release evidence contains candidate-normalization artifacts.")
-    final_identity = legacy_workflow.get("final_benchmark", {})
-    if final_identity.get("file_sha256") != digests["legacy_benchmark"] or final_identity.get("canonical_sha256") != legacy_benchmark.get("benchmark_sha256"):
-        errors.append("Legacy state final-benchmark identity does not match the supplied frozen artifact.")
-    for stage, name in (
-        ("define_policy", "legacy_policy"), ("page_mapping", "legacy_page_map"),
-        ("chunk_definition", "legacy_chunk_manifest"), ("benchmark_review", "legacy_review_inventory"),
-        ("benchmark_review", "legacy_review"), ("benchmark_freeze", "legacy_benchmark"),
-    ):
-        if not legacy_registered_hash(legacy_state, stage, digests[name]):
-            errors.append(f"Legacy state does not register the exact {name} artifact at {stage}.")
-    errors.extend(legacy_review_errors(legacy_benchmark, digests["legacy_benchmark"], legacy_inventory, legacy_review))
+    if native_v8:
+        native_state_for_validation = deepcopy(legacy_state)
+        historical_profile = native_state_for_validation.get("configuration", {}).get("scoring_identity", {}).get("dimension_calculation_profile")
+        if historical_profile == "subject-index-dimension-calculation-v4":
+            if legacy_state.get("stages", {}).get("scoring", {}).get("status") != "not_started":
+                errors.append("Native V8 historical calculation profile is allowed only before scoring.")
+            native_state_for_validation["configuration"]["scoring_identity"]["dimension_calculation_profile"] = "subject-index-dimension-calculation-v5"
+        elif historical_profile != "subject-index-dimension-calculation-v5":
+            errors.append("Native V8 source-only state has an unsupported calculation-profile identity.")
+        native_state_errors, _ = validate_state(native_state_for_validation, state_path=paths["legacy_state"], check_files=False)
+        errors.extend(f"Native V8 state: {error}" for error in native_state_errors)
+        for stage in (
+            "candidate_normalization", "locator_chunk_preparation", "locator_audit",
+            "missing_access_audit", "structure_audit", "scoring", "web_report",
+        ):
+            if legacy_state.get("stages", {}).get(stage, {}).get("status") != "not_started":
+                errors.append(f"Native V8 source-only state shows candidate-era activity at {stage}.")
+        registrations = (
+            ("define_policy", "legacy_policy"), ("page_mapping", "legacy_page_map"),
+            ("chunk_definition", "legacy_chunk_manifest"), ("benchmark_synthesis", "legacy_draft"),
+            ("benchmark_review", "legacy_review_inventory"), ("benchmark_review", "legacy_review"),
+            ("benchmark_freeze", "legacy_benchmark"),
+        )
+        for stage, name in registrations:
+            if not legacy_registered_hash(legacy_state, stage, digests[name]):
+                errors.append(f"Native V8 state does not register the exact {name} artifact at {stage}.")
+        errors.extend(native_v8_review_errors(
+            paths["legacy_draft"], legacy_draft, legacy_benchmark,
+            legacy_inventory, legacy_review,
+        ))
+    else:
+        legacy_workflow = legacy_state.get("benchmark_workflow", {})
+        if legacy_workflow.get("candidate_blindness") != "preserved":
+            errors.append("Legacy benchmark workflow does not preserve candidate blindness.")
+        final_identity = legacy_workflow.get("final_benchmark", {})
+        if final_identity.get("file_sha256") != digests["legacy_benchmark"] or final_identity.get("canonical_sha256") != legacy_benchmark.get("benchmark_sha256"):
+            errors.append("Legacy state final-benchmark identity does not match the supplied frozen artifact.")
+        for stage, name in (
+            ("define_policy", "legacy_policy"), ("page_mapping", "legacy_page_map"),
+            ("chunk_definition", "legacy_chunk_manifest"), ("benchmark_review", "legacy_review_inventory"),
+            ("benchmark_review", "legacy_review"), ("benchmark_freeze", "legacy_benchmark"),
+        ):
+            if not legacy_registered_hash(legacy_state, stage, digests[name]):
+                errors.append(f"Legacy state does not register the exact {name} artifact at {stage}.")
+        errors.extend(legacy_review_errors(legacy_benchmark, digests["legacy_benchmark"], legacy_inventory, legacy_review))
 
     expected_legacy = {
         "evaluation_id": legacy_benchmark.get("evaluation_id"),
@@ -975,8 +1194,16 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         "review_file_sha256": digests["legacy_review"],
         "review_inventory_file_sha256": digests["legacy_review_inventory"],
         "state_file_sha256": digests["legacy_state"],
-        "artifact_freeze_commit": approval["legacy"]["artifact_freeze_commit"],
     }
+    if native_v8:
+        expected_legacy.update({
+            "draft_file_sha256": digests["legacy_draft"],
+            "draft_canonical_sha256": canonical_hash(legacy_draft),
+        })
+        if approval["release_transport"]["checkpoint_state_file_sha256"] != digests["legacy_state"]:
+            errors.append("Native V8 release transport does not identify the supplied source-only state.")
+    else:
+        expected_legacy["artifact_freeze_commit"] = approval["legacy"]["artifact_freeze_commit"]
     if approval.get("legacy") != expected_legacy:
         errors.append("Compatibility approval legacy identity does not exactly match the supplied release evidence.")
     expected_current = {
@@ -997,8 +1224,10 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         errors.append("Compatibility approval current identity does not exactly match canonical V8 inputs.")
     if approval["current"]["benchmark_id"] == legacy_benchmark.get("benchmark_id"):
         errors.append("Compatibility import must issue a distinct V8-bound benchmark_id.")
-    if approval["current"]["policy_sha256"] == legacy_benchmark.get("policy_sha256"):
+    if not native_v8 and approval["current"]["policy_sha256"] == legacy_benchmark.get("policy_sha256"):
         errors.append("Compatibility import requires an actual policy identity rebind.")
+    if native_v8 and approval["current"]["policy_sha256"] != legacy_benchmark.get("policy_sha256"):
+        errors.append("Native V8 reuse requires the unchanged frozen policy identity.")
 
     normalized, normalization_errors = normalized_legacy_benchmark(legacy_benchmark, approval)
     errors.extend(normalization_errors)
@@ -1010,8 +1239,9 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         for field in ("benchmark_id", "version", "evaluation_id", "policy_sha256", "freeze", "benchmark_sha256"):
             restored[field] = deepcopy(legacy_benchmark[field])
         restored.pop("compatibility_import", None)
-        for relationship in restored.get("relationships", []):
-            relationship["type"] = relationship.pop("relationship_type")
+        if not native_v8:
+            for relationship in restored.get("relationships", []):
+                relationship["type"] = relationship.pop("relationship_type")
         if restored != legacy_benchmark:
             errors.append("Normalization is not lossless outside the explicitly approved fields.")
     stable_ids, stable_id_errors = stable_id_summary(normalized)
@@ -1043,12 +1273,17 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         "legacy": expected_legacy,
         "current": {**expected_current, "benchmark_file_sha256": benchmark_file_sha256},
         "normalization": {
-            "operations": [MECHANICAL_NORMALIZATION],
-            "relationships_normalized": len(normalized["relationships"]),
+            "operations": [] if native_v8 else [MECHANICAL_NORMALIZATION],
+            "relationships_normalized": 0 if native_v8 else len(normalized["relationships"]),
             "semantic_content_preserved": True,
         },
         "preserved_stable_ids": stable_ids,
     }
+    if native_v8:
+        provenance.update({
+            "reuse_mode": NATIVE_V8_REUSE_MODE,
+            "release_transport": deepcopy(approval["release_transport"]),
+        })
     provenance_errors = schema_errors(provenance, "benchmark-compatibility-import-provenance.schema.json")
     if provenance_errors:
         fail("generated_provenance_invalid", "Generated migration provenance is invalid.", provenance_errors)
@@ -1057,18 +1292,23 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
 
     updated = deepcopy(state)
     records: list[dict[str, Any]] = []
-    registrations = (
-        (paths["legacy_state"], "source_subject_discovery", "reviewed_legacy_discovery_release_evidence", legacy_state.get("schema_version")),
-        (paths["legacy_page_map"], "source_subject_discovery", "reviewed_legacy_page_map_evidence", legacy_page_map.get("schema_version")),
-        (paths["legacy_chunk_manifest"], "source_subject_discovery", "reviewed_legacy_chunk_manifest_evidence", legacy_manifest.get("schema_version")),
-        (paths["legacy_policy"], "source_subject_discovery", "reviewed_legacy_policy_evidence", legacy_policy.get("schema_version")),
-        (paths["legacy_benchmark"], "benchmark_synthesis", "imported_reviewed_legacy_benchmark", legacy_benchmark.get("schema_version")),
+    evidence_kind = "native_v8" if native_v8 else "legacy"
+    registrations = [
+        (paths["legacy_state"], "source_subject_discovery", f"reviewed_{evidence_kind}_discovery_release_evidence", legacy_state.get("schema_version")),
+        (paths["legacy_page_map"], "source_subject_discovery", f"reviewed_{evidence_kind}_page_map_evidence", legacy_page_map.get("schema_version")),
+        (paths["legacy_chunk_manifest"], "source_subject_discovery", f"reviewed_{evidence_kind}_chunk_manifest_evidence", legacy_manifest.get("schema_version")),
+        (paths["legacy_policy"], "source_subject_discovery", f"reviewed_{evidence_kind}_policy_evidence", legacy_policy.get("schema_version")),
+        (paths["legacy_benchmark"], "benchmark_synthesis", f"imported_reviewed_{evidence_kind}_benchmark", legacy_benchmark.get("schema_version")),
         (paths["legacy_review_inventory"], "benchmark_review", "legacy_full_review_inventory_evidence", legacy_inventory.get("schema_version")),
         (paths["legacy_review"], "benchmark_review", "legacy_full_review_evidence", legacy_review.get("schema_version")),
         (paths["compatibility_approval"], "benchmark_review", "benchmark_compatibility_approval", COMPATIBILITY_APPROVAL_SCHEMA),
         (output_path, "benchmark_freeze", "source_benchmark", normalized.get("schema_version")),
         (provenance_path, "benchmark_freeze", "benchmark_compatibility_import_provenance", COMPATIBILITY_PROVENANCE_SCHEMA),
-    )
+    ]
+    if native_v8:
+        registrations.insert(4, (
+            paths["legacy_draft"], "benchmark_synthesis", "imported_reviewed_native_v8_draft", legacy_draft.get("schema_version")
+        ))
     planned_digests = {output_path: benchmark_file_sha256, provenance_path: provenance_file_sha256}
     for path, stage, artifact_type, schema_version in registrations:
         relative = portable_relative_path(path, root)
@@ -1083,6 +1323,11 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
     updated["artifacts"].extend(records)
     updated["artifacts"].sort(key=lambda item: item["path"])
     notes = {
+        "source_subject_discovery": "Imported exact candidate-blind native V8 release evidence; discovery was not rerun.",
+        "benchmark_synthesis": "Imported the exact independently reviewed native V8 draft and frozen benchmark; synthesis was not rerun.",
+        "benchmark_review": "Validated the historical full review and a separate candidate-blind exact-reuse approval; editorial review was not rerun.",
+        "benchmark_freeze": "Rebound only evaluation wrapper metadata under the unchanged V8 policy; the full freeze workflow was not rerun.",
+    } if native_v8 else {
         "source_subject_discovery": "Imported exact candidate-blind legacy discovery release evidence; discovery was not rerun.",
         "benchmark_synthesis": "Imported the exact independently reviewed legacy frozen benchmark as synthesis evidence; synthesis was not rerun.",
         "benchmark_review": "Validated the legacy full review and a separate candidate-blind V8 compatibility approval; editorial review was not rerun.",
@@ -1125,18 +1370,22 @@ def command_import_reviewed_legacy(args: argparse.Namespace) -> None:
         fail("atomic_write_failed", f"Compatibility import did not commit: {exc}")
 
     action = next_stage(updated)
-    emit({
+    result = {
         "command": "import-reviewed-legacy", "ok": True,
         "evaluation_id": updated["evaluation_id"],
         "benchmark_id": normalized["benchmark_id"],
         "benchmark_sha256": normalized["benchmark_sha256"],
-        "legacy_artifact_freeze_commit": expected_legacy["artifact_freeze_commit"],
         "stages_completed": list(notes),
         "artifacts_registered": [record["path"] for record in records],
         "artifacts_written": [str(output_path), str(provenance_path), str(state_path)],
         "next_actions": [] if action is None else [action],
         "warnings": [*warnings, *updated_warnings],
-    })
+    }
+    if native_v8:
+        result["legacy_state_file_sha256"] = expected_legacy["state_file_sha256"]
+    else:
+        result["legacy_artifact_freeze_commit"] = expected_legacy["artifact_freeze_commit"]
+    emit(result)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1171,6 +1420,7 @@ def build_parser() -> argparse.ArgumentParser:
     migration.add_argument("--legacy-page-map", required=True)
     migration.add_argument("--legacy-chunk-manifest", required=True)
     migration.add_argument("--legacy-policy", required=True)
+    migration.add_argument("--legacy-draft")
     migration.add_argument("--legacy-benchmark", required=True)
     migration.add_argument("--legacy-review-inventory", required=True)
     migration.add_argument("--legacy-review", required=True)
