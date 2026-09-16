@@ -1190,6 +1190,169 @@ def _add_records_and_complete(
     return updated
 
 
+def _replace_records_and_complete(
+    state: dict[str, Any],
+    state_path: Path,
+    stage: str,
+    records: Sequence[dict[str, Any]],
+    note: str,
+) -> dict[str, Any]:
+    """Replace one complete stage without changing any other stage records."""
+    updated = deepcopy(state)
+    updated["artifacts"] = [item for item in updated["artifacts"] if item.get("stage") != stage]
+    updated["artifacts"].extend(records)
+    updated["artifacts"].sort(key=lambda item: item["path"])
+    stamp = records[0]["recorded_at"]
+    updated["stages"][stage] = {"status": "completed", "updated_at": stamp, "notes": [note]}
+    updated["updated_at"] = stamp
+    errors, _ = validate_state(updated, state_path=state_path, check_files=False)
+    core.require(not errors, "canonical_state_invalid", f"Replacing {stage} would leave invalid canonical state.", errors)
+    return updated
+
+
+def _validate_complete_web_bundle(
+    state: Mapping[str, Any],
+    state_path: Path,
+    expected_records: Sequence[Mapping[str, Any]],
+    output: Path,
+    bundle_output: Path,
+    current_inputs: Sequence[Mapping[str, Any]],
+) -> None:
+    """Validate the registered web bundle and require an exact managed target set."""
+    registered = [deepcopy(item) for item in state["artifacts"] if item.get("stage") == "web_report"]
+    expected_by_path = {item["path"]: item for item in expected_records}
+    registered_by_path = {item["path"]: item for item in registered}
+    core.require(
+        len(registered_by_path) == len(registered) and set(registered_by_path) == set(expected_by_path),
+        "replacement_bundle_incomplete",
+        "The completed registered web-report bundle is partial or uses unexpected paths.",
+        {"expected": sorted(expected_by_path), "registered": sorted(registered_by_path)},
+    )
+
+    schema_names = {
+        "web_report": "web-report-v10.schema.json",
+        "web_projection": "web-projection-v1.schema.json",
+        "web_index_records": "web-collection-v1.schema.json",
+        "web_source_subjects": "web-collection-v1.schema.json",
+        "web_density": "web-collection-v1.schema.json",
+        "correction_overlay": "correction-overlay-v1.schema.json",
+    }
+    documents: dict[str, dict[str, Any]] = {}
+    for relative, expected in expected_by_path.items():
+        record = registered_by_path[relative]
+        core.require(
+            (record.get("artifact_type"), record.get("schema_version"))
+            == (expected.get("artifact_type"), expected.get("schema_version")),
+            "replacement_bundle_identity_mismatch",
+            f"Registered web artifact identity is unexpected: {relative}",
+        )
+        path = resolve_artifact_path(state_path, relative).resolve()
+        core.require(path.is_file(), "registered_artifact_missing", f"Registered artifact is unavailable: {relative}")
+        actual = core.sha256_file(path)
+        core.require(actual == record["sha256"], "registered_artifact_hash_mismatch", f"Registered artifact bytes changed: {relative}", {"expected_sha256": record["sha256"], "actual_sha256": actual})
+        artifact_type = record["artifact_type"]
+        document = core.load_json(path, record["schema_version"])
+        core.validate_schema_document(document, schema_names[artifact_type], record["schema_version"])
+        documents[artifact_type] = document
+
+    report = documents["web_report"]
+    projection = documents["web_projection"]
+    registered_by_type = {item["artifact_type"]: item for item in registered}
+    input_by_type = {item["artifact_type"]: item for item in current_inputs}
+    core.require(
+        report["report_id"] == f"{state['evaluation_id']}-v8"
+        and report["calculation_explainer"]["sha256"] == input_by_type["dimension_calculations"]["sha256"]
+        and report["item_grade_index"]["sha256"] == input_by_type["item_assessments"]["sha256"]
+        and report["structure_audit"]["sha256"] == input_by_type["structure_audit"]["sha256"],
+        "replacement_bundle_identity_mismatch",
+        "Registered web report is not bound to the current scoring artifacts.",
+    )
+    collection_types = {
+        "index_records": "web_index_records",
+        "source_subjects": "web_source_subjects",
+        "density": "web_density",
+        "correction_overlay": "correction_overlay",
+    }
+    collection_ids = [row["collection_id"] for row in projection["collections"]]
+    core.require(
+        len(collection_ids) == len(set(collection_ids)) and all(key in collection_types for key in collection_ids),
+        "replacement_bundle_identity_mismatch",
+        "Registered web projection has duplicate or unexpected collection identities.",
+    )
+    projection_parent = Path(registered_by_type["web_projection"]["path"]).parent
+    core.require(
+        all(
+            (projection_parent / row["artifact_path"]).as_posix()
+            == registered_by_type[collection_types[row["collection_id"]]]["path"]
+            for row in projection["collections"]
+        ),
+        "replacement_bundle_identity_mismatch",
+        "Registered web projection collection paths do not identify the registered collection files.",
+    )
+    collections = {
+        row["collection_id"]: documents[collection_types[row["collection_id"]]]
+        for row in projection["collections"]
+    }
+    core.require(projection["evaluation_id"] == state["evaluation_id"], "replacement_bundle_identity_mismatch", "Registered web projection evaluation identity differs from canonical state.")
+    web_projection.validate_bundle(projection, collections)
+    provenance = {item["artifact_path"]: item["sha256"] for item in projection["provenance"]["source_artifacts"]}
+    required_bindings = [*current_inputs, registered_by_path[portable_relative_path(output, state_path.parent)]]
+    core.require(
+        all(provenance.get(item["path"]) == item["sha256"] for item in required_bindings),
+        "replacement_bundle_identity_mismatch",
+        "Registered web projection is not bound to the current scoring and report artifacts.",
+    )
+
+    expected_files = {resolve_artifact_path(state_path, path).resolve() for path in expected_by_path}
+    allowed_directories = {bundle_output.resolve(), *(path.parent for path in expected_files if path != output.resolve())}
+    actual_entries = {Path(os.path.abspath(path)) for path in bundle_output.rglob("*")} if bundle_output.is_dir() else set()
+    unmanaged = sorted(str(path) for path in actual_entries - expected_files - allowed_directories)
+    core.require(not unmanaged, "unmanaged_output_collision", "The registered bundle directory contains unmanaged paths.", unmanaged)
+
+
+def _write_web_bundle_transaction(
+    state_path: Path,
+    writes: Sequence[tuple[Path, bytes]],
+    updated: dict[str, Any],
+    *,
+    bundle_output: Path,
+) -> None:
+    """Write all web outputs and restore exact prior bytes if any write fails."""
+    state_before = state_path.read_bytes()
+    snapshots = {path: path.read_bytes() if path.is_file() else None for path, _ in writes}
+    written: list[Path] = []
+    try:
+        for path, payload in writes:
+            _atomic_write(path, payload)
+            written.append(path)
+        save_state(state_path, updated)
+    except Exception as original:
+        rollback_errors = []
+        for path in reversed(written):
+            try:
+                prior = snapshots[path]
+                if prior is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    _atomic_write(path, prior)
+            except Exception as exc:
+                rollback_errors.append(f"{path}: {exc}")
+        try:
+            if not state_path.is_file() or state_path.read_bytes() != state_before:
+                _atomic_write(state_path, state_before)
+        except Exception as exc:
+            rollback_errors.append(f"{state_path}: {exc}")
+        for directory in sorted({path.parent for path, prior in snapshots.items() if prior is None}, key=lambda path: len(path.parts), reverse=True):
+            if directory == bundle_output or bundle_output in directory.parents:
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
+        if rollback_errors:
+            raise core.CalculationError("web_report_rollback_failed", "Web-report replacement failed and prior bytes could not be fully restored.", rollback_errors) from original
+        raise
+
+
 def _completeness(records: Sequence[Mapping[str, Any]], field: str) -> dict[str, Any]:
     identities = [str(item[field]) for item in records]
     core.require(len(identities) == len(set(identities)), "duplicate_item_identity", f"Duplicate {field} in item-assessment denominator.")
@@ -1801,7 +1964,12 @@ def command_build_report_state(args: argparse.Namespace) -> None:
     state_path = Path(args.state).resolve()
     try:
         with evaluation_mutation_lock(state_path):
-            state, warnings = _transition_state(state_path, "web_report")
+            state = load_state(state_path)
+            errors, warnings = validate_state(state, state_path=state_path)
+            core.require(not errors, "canonical_state_invalid", "Canonical evaluation state is invalid.", errors)
+            replacing = bool(getattr(args, "replace_complete_bundle", False) and state["stages"]["web_report"]["status"] == "completed")
+            if not replacing:
+                state, warnings = _transition_state(state_path, "web_report")
             result, result_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-evaluation-result-v12", schema_name="evaluation-result-v12.schema.json")[0]
             calculation, calculation_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-dimension-calculations-v6", schema_name="dimension-calculations-v6.schema.json", sha256=result["dimension_calculations"]["sha256"])[0]
             items, items_record, _ = _registered_documents(state, state_path, stage="scoring", schema_version="subject-index-item-assessments-v7", schema_name="item-assessments-v7.schema.json")[0]
@@ -1818,7 +1986,8 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
             output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / "web-report.v10.json"))
             bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / "v8-canonical-projection"))
-            core.require(not output.exists() and not bundle_output.exists(), "output_exists", "Refusing to overwrite web report or canonical web projection bundle.", [str(output), str(bundle_output)])
+            if not replacing:
+                core.require(not output.exists() and not bundle_output.exists(), "output_exists", "Refusing to overwrite web report or canonical web projection bundle.", [str(output), str(bundle_output)])
             report = _web_report(result=result, calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure=structure, structure_record=structure_record, metadata=metadata)
             payload = _json_bytes(report)
             stamp = now()
@@ -1846,23 +2015,17 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             generated.extend((bundle_output / web_projection.COLLECTION_PATHS[key], web_projection.json_bytes(value), "correction_overlay" if key == "correction_overlay" else f"web_{key}", value["schema_version"]) for key, value in collections.items())
             bundle_records = [_artifact_record(state_path.parent, path, data, stage="web_report", artifact_type=artifact_type, schema_version=schema_version, stamp=stamp, visibility="public", input_sha256=(record["sha256"], result_record["sha256"])) for path, data, artifact_type, schema_version in generated]
             records = [record, *bundle_records]
-            updated = _add_records_and_complete(state, state_path, "web_report", records, "Built and registered web-report.v10 and the complete canonical public web projection bundle atomically.")
-            written: list[Path] = []
-            try:
-                for path, data in [(output, payload), *[(row[0], row[1]) for row in generated]]:
-                    _atomic_write(path, data)
-                    written.append(path)
-                save_state(state_path, updated)
-            except Exception:
-                for path in reversed(written):
-                    path.unlink(missing_ok=True)
-                for directory in (bundle_output / "data", bundle_output):
-                    try:
-                        directory.rmdir()
-                    except OSError:
-                        pass
-                raise
-        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "report_id": report["report_id"], "projection_id": projection["projection_id"], "artifacts_registered": [item["path"] for item in records], "artifacts_written": [str(output), *[str(row[0]) for row in generated], str(state_path)], "next_actions": [], "warnings": warnings})
+            if replacing:
+                current_inputs = [result_record, calculation_record, items_record, structure_record, candidate_record, inventory_record, benchmark_record, manifest_record, *[item[1] for item in missing_entries]]
+                if overlay_record is not None:
+                    current_inputs.append(overlay_record)
+                _validate_complete_web_bundle(state, state_path, records, output, bundle_output, current_inputs)
+                updated = _replace_records_and_complete(state, state_path, "web_report", records, "Rebuilt and replaced the complete canonical public web projection bundle atomically.")
+            else:
+                updated = _add_records_and_complete(state, state_path, "web_report", records, "Built and registered web-report.v10 and the complete canonical public web projection bundle atomically.")
+            writes = [(output, payload), *[(row[0], row[1]) for row in generated]]
+            _write_web_bundle_transaction(state_path, writes, updated, bundle_output=bundle_output)
+        core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "report_id": report["report_id"], "projection_id": projection["projection_id"], "replacement": replacing, "artifacts_registered": [item["path"] for item in records], "artifacts_written": [str(output), *[str(row[0]) for row in generated], str(state_path)], "next_actions": [], "warnings": warnings})
     except (OSError, core.CalculationError, StructureAuditError, HeadingAccessProvenanceError, KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, (core.CalculationError, StructureAuditError, HeadingAccessProvenanceError)):
             error = {"code": exc.code, "message": exc.message, "details": exc.details}
@@ -1894,6 +2057,7 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--state", required=True)
     report.add_argument("--output", help="Output path inside the evaluation directory (default: beside the registered result).")
     report.add_argument("--bundle-output", help="Bundle directory inside the evaluation directory (default: v8-canonical-projection beside the result).")
+    report.add_argument("--replace-complete-bundle", action="store_true", help="Validate and atomically replace the complete registered web-report bundle without changing scoring artifacts.")
     report.set_defaults(func=command_build_report_state)
     return parser
 
