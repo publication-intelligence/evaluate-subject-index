@@ -1,5 +1,6 @@
 """Study locking, retrospective visibility, and comparison fail at real boundaries."""
 import argparse
+import hashlib
 from copy import deepcopy
 import json
 import shutil
@@ -12,6 +13,7 @@ from unittest.mock import patch
 import test_v8_completion as completion
 import study_cli
 import study_comparison as study
+import web_projection
 from schema_validation import schema_errors
 
 
@@ -257,6 +259,13 @@ class StudyComparisonTests(unittest.TestCase):
         self.assertEqual(2,result['evaluations']);self.assertEqual(2,len(study.read(output/'comparison.json')['members']))
         for member in study.read(output/'comparison.json')['members']:
             projection_path=output/member['projection_path'];projection=study.read(projection_path)
+            source=next(f for f in (a,b) if study.read(f.state_path)['evaluation_id']==member['evaluation_id'])
+            _,report_record=study.registered_document(study.read(source.state_path),source.state_path,'web_report','subject-index-web-report-v10')
+            report_path=output/member['web_report_path']
+            self.assertRegex(member['web_report_path'],r'^[12]/web-report\.v10\.json$')
+            self.assertEqual(report_record['sha256'],member['web_report_file_sha256'])
+            self.assertEqual(report_record['sha256'],study.file_digest(report_path))
+            self.assertEqual((source.root/report_record['path']).read_bytes(),report_path.read_bytes())
             for collection in projection['collections']:
                 self.assertEqual(collection['file_sha256'],study.file_digest(projection_path.parent/collection['artifact_path']))
         state=study.read(b.state_path);benchmark,record=study.registered_document(state,b.state_path,'benchmark_freeze','source-subject-benchmark-v2')
@@ -471,3 +480,67 @@ class StudyComparisonTests(unittest.TestCase):
         for private in private_paths:
             changed=deepcopy(a.lock);changed['release']['release_id']=private;self_hash(changed,'lock_sha256')
             with self.assertRaisesRegex(ValueError,'absolute path'):study.validate_lock(changed)
+
+    def test_assembly_preserves_exact_report_bytes_and_rejects_stale_report_without_output(self):
+        a=self.fixture();b=self.fixture(evaluation_id='EVAL-REPORT-SECOND')
+        approval=study.read(b.args.approval)
+        shutil.copytree(a.root/'release',b.root/'release',dirs_exist_ok=True)
+        approval.update(study_lock_sha256=a.lock['lock_sha256'],target_benchmark_sha256=a.release['benchmark_sha256'])
+        Path(b.args.approval).write_bytes(study_cli.payload(approval))
+        for f in (a,b):
+            study_cli.migrate(f.args)
+            for command in ('score','build-report'):
+                result=f.f.run_cli(command,'--state',str(f.state_path));self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+        state=study.read(b.state_path)
+        report,report_record=study.registered_document(state,b.state_path,'web_report','subject-index-web-report-v10')
+        projection,projection_record=study.registered_document(state,b.state_path,'web_report',web_projection.PROJECTION_SCHEMA_VERSION)
+        report_path=b.root/report_record['path'];projection_path=b.root/projection_record['path']
+        def bind_report(report_bytes, current_report_record, current_projection):
+            current_report_record['sha256']=hashlib.sha256(report_bytes).hexdigest()
+            current_report_record['artifact_id']=completion.state_cli.artifact_id(current_report_record['path'],current_report_record['sha256'])
+            for refs in [current_projection['provenance']['source_artifacts'],current_projection['score_views']['views'][0]['provenance_artifacts']]:
+                for ref in refs:
+                    if ref.get('schema_version')=='subject-index-web-report-v10':ref['sha256']=current_report_record['sha256']
+        # Keep deliberately noncanonical whitespace: assembly must copy, not serialize.
+        exact=b'\n \n'+report_path.read_bytes()+b'\n'
+        bind_report(exact,report_record,projection);report_path.write_bytes(exact)
+        self_hash(projection,'projection_sha256');projection_path.write_bytes(study_cli.payload(projection))
+        projection_record['sha256']=study.file_digest(projection_path)
+        b.f.write('evaluation-state.json',state)
+        output=a.root/'with-reports'
+        study_cli.assemble(argparse.Namespace(state=[str(a.state_path),str(b.state_path)],output_dir=str(output)))
+        member=study.read(output/'comparison.json')['members'][1]
+        self.assertEqual(exact,(output/member['web_report_path']).read_bytes())
+        self.assertEqual(study.file_digest(report_path),member['web_report_file_sha256'])
+        baseline={path:path.read_bytes() for path in (b.state_path,report_path,projection_path)}
+        cases=('bytes','stale_projection_binding','authoritative_binding','study_identity','benchmark_identity','comparability_wrapper','projection_provenance','methodology','private','missing')
+        for case in cases:
+            with self.subTest(case=case):
+                for path,content in baseline.items():path.write_bytes(content)
+                current=study.read(b.state_path)
+                current_report=study.read(report_path);current_projection=study.read(projection_path)
+                record=next(r for r in current['artifacts'] if r['path']==report_record['path'])
+                if case=='bytes':report_path.write_bytes(exact+b'\n')
+                elif case=='private':record['visibility']='private'
+                elif case=='missing':current['artifacts'].remove(record)
+                elif case=='projection_provenance':current_projection['provenance']['judgment_policy_sha256']='0'*64
+                elif case=='authoritative_binding':
+                    for ref in current_projection['score_views']['views'][0]['provenance_artifacts']:
+                        if ref.get('schema_version')=='subject-index-web-report-v10':ref['sha256']='0'*64
+                else:
+                    if case=='stale_projection_binding':current_report['summary']='A later report not bound by this projection.'
+                    elif case=='study_identity':current_report['comparability']['study_identity']['audit_mode']='pilot'
+                    elif case=='comparability_wrapper':current_report['comparability']['benchmark_sha256']='0'*64
+                    elif case=='benchmark_identity':current_report['methodology']['benchmark']['version']+=1
+                    elif case=='methodology':current_report['methodology']['rubric_version']='stale-rubric'
+                    content=study_cli.payload(current_report);report_path.write_bytes(content)
+                    if case=='stale_projection_binding':record['sha256']=study.file_digest(report_path)
+                    else:bind_report(content,record,current_projection)
+                self_hash(current_projection,'projection_sha256');projection_path.write_bytes(study_cli.payload(current_projection))
+                next(r for r in current['artifacts'] if r['path']==projection_record['path'])['sha256']=study.file_digest(projection_path)
+                b.f.write('evaluation-state.json',current)
+                rejected=a.root/f'rejected-report-{case}'
+                with self.assertRaises(ValueError):
+                    study_cli.assemble(argparse.Namespace(state=[str(a.state_path),str(b.state_path)],output_dir=str(rejected)))
+                self.assertFalse(rejected.exists())
+                self.assertEqual([],list(a.root.glob('.study-comparison-*')))

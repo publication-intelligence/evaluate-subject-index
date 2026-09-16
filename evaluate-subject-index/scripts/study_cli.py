@@ -240,14 +240,14 @@ def assemble(args):
     import web_projection
     paths = [Path(p).resolve() for p in args.state]
     identities, bundles = [], []
-    for path in paths:
-        state = study.read(path)
-        identity = study.preflight_state(state,path,require_density=True)
+    for state_path in paths:
+        state = study.read(state_path)
+        identity = study.preflight_state(state,state_path,require_density=True)
         study.require(identity is not None, 'Comparison requires a bound study lock')
-        projection, _ = study.registered_document(state,path,'web_report',web_projection.PROJECTION_SCHEMA_VERSION)
+        projection, projection_record = study.registered_document(state,state_path,'web_report',web_projection.PROJECTION_SCHEMA_VERSION)
         study.require(projection.get('comparison_identity') == identity, 'Public bundle comparison identity is stale or absent')
-        projection_record = next(r for r in state['artifacts'] if r.get('schema_version') == web_projection.PROJECTION_SCHEMA_VERSION)
-        base = (path.parent / projection_record['path']).parent
+        study.require(projection['evaluation_id'] == state['evaluation_id'], 'Projection evaluation identity differs from canonical state')
+        base = (state_path.parent / projection_record['path']).parent
         collections = {}
         for r in projection['collections']:
             study.require(r['artifact_path'] == web_projection.COLLECTION_PATHS.get(r['collection_id']), 'Unexpected public collection path')
@@ -255,8 +255,31 @@ def assemble(args):
             study.require(study.file_digest(path) == r['file_sha256'], 'Public collection bytes changed')
             collections[r['collection_id']] = study.read(path)
         web_projection.validate_bundle(projection,collections)
-        identities.append(identity);bundles.append((projection,collections))
-    study.require(len({p['evaluation_id'] for p,_ in bundles}) == len(bundles), 'Duplicate evaluation in study comparison')
+        report, report_record = study.registered_document(state,state_path,'web_report','subject-index-web-report-v10')
+        study.require(report_record['visibility'] == 'public', 'Comparison requires a registered public web report')
+        report_bytes = (state_path.parent/report_record['path']).read_bytes()
+        study.require(hashlib.sha256(report_bytes).hexdigest() == report_record['sha256'], 'Registered web report bytes changed')
+        study.require(not schema_errors(report,'web-report-v10.schema.json'), 'Invalid registered web report')
+        observed = [view for view in projection['score_views']['views'] if view['view_id']=='canonical_as_delivered']
+        study.require(len(observed)==1, 'Projection requires one authoritative canonical view')
+        expected_binding = web_projection._artifact_binding(report_record)
+        for references in (projection['provenance']['source_artifacts'], observed[0]['provenance_artifacts']):
+            bindings = [row for row in references if str(row.get('schema_version','')).startswith('subject-index-web-report-') or row.get('artifact_path')==report_record['path']]
+            study.require(bindings == [expected_binding], 'Projection web report binding differs from registered current report')
+        benchmark, _ = study.registered_document(state,state_path,'benchmark_freeze','source-subject-benchmark-v2')
+        expected_benchmark = {**study.benchmark_identity(benchmark), 'release': identity['release']}
+        study.require(report.get('comparability',{}).get('study_identity') == identity, 'Web report study identity is stale or absent')
+        expected_comparability = {key: identity['source_scope'][key] for key in ('source_sha256','page_map_sha256','chunk_manifest_sha256')}
+        expected_comparability.update(benchmark_sha256=benchmark['benchmark_sha256'], judgment_policy_sha256=benchmark['policy_sha256'],
+                                      audit_mode=identity['audit_mode'], rubric_version=identity['rubric_version'], dimension_calculation_profile=identity['calculation_profile'])
+        study.require(all(report['comparability'].get(key)==value for key,value in expected_comparability.items()), 'Web report comparability differs from current registered inputs')
+        study.require(all(projection['provenance'].get(key)==expected_comparability[key] for key in ('source_sha256','benchmark_sha256','judgment_policy_sha256','rubric_version','dimension_calculation_profile')), 'Projection provenance differs from current registered inputs')
+        for document in (report, projection):
+            methodology = document.get('methodology',{})
+            study.require(methodology.get('benchmark') == expected_benchmark, 'Web report/projection benchmark identity differs from current benchmark')
+            study.require(methodology.get('rubric_version') == identity['rubric_version'] and methodology.get('calculation_profile') == identity['calculation_profile'], 'Web report/projection methodology identity differs from current study')
+        identities.append(identity);bundles.append((projection,collections,report_bytes,report_record['sha256']))
+    study.require(len({bundle[0]['evaluation_id'] for bundle in bundles}) == len(bundles), 'Duplicate evaluation in study comparison')
     common = study.compare_identities(identities)
     output = Path(args.output_dir).resolve()
     study.require(not output.exists(), 'Comparison output directory already exists')
@@ -264,12 +287,14 @@ def assemble(args):
     temporary = Path(tempfile.mkdtemp(prefix='.study-comparison-',dir=output.parent))
     try:
         members=[]
-        for i,(projection,collections) in enumerate(bundles):
+        for i,(projection,collections,report_bytes,report_sha) in enumerate(bundles):
             directory=temporary/str(i+1);directory.mkdir()
             (directory/'projection.v1.json').write_bytes(payload(projection))
+            (directory/'web-report.v10.json').write_bytes(report_bytes)
             for name,value in collections.items():
                 target=directory/web_projection.COLLECTION_PATHS[name];target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(web_projection.json_bytes(value))
-            members.append({'evaluation_id':projection['evaluation_id'],'projection_path':f'{i+1}/projection.v1.json','projection_sha256':projection['projection_sha256']})
+            members.append({'evaluation_id':projection['evaluation_id'],'projection_path':f'{i+1}/projection.v1.json','projection_sha256':projection['projection_sha256'],
+                            'web_report_path':f'{i+1}/web-report.v10.json','web_report_file_sha256':report_sha})
         manifest={'schema_version':'subject-index-study-comparison-v1','comparison_identity':common,'members':members}
         (temporary/'comparison.json').write_bytes(payload(manifest));temporary.rename(output)
     finally:

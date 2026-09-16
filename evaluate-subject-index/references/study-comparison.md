@@ -162,7 +162,21 @@ for a comparison: identical source/scope/map/chunks, semantic benchmark, verifie
 release lineage, semantic policy/profile, audit mode, rubric/calculation profile,
 and density basis/map. Unlocked or stale projections cannot enter a comparison.
 Assembly validates public collection bytes and schemas and writes a new directory
-atomically. It does not publish or deploy a website.
+atomically. Each member also includes the exact registered current public
+`web-report.v10.json`, copied byte-for-byte without recomputing its presentation.
+Before writing, assembly verifies its schema and state SHA, the projection's
+source-artifact and authoritative-view report bindings, and agreement between
+report/projection/current benchmark, methodology, and comparison identities.
+Missing, private, stale, or mismatched reports reject the entire assembly.
+
+Each `comparison.json` member contains `evaluation_id`, `projection_path`,
+`projection_sha256`, `web_report_path`, and `web_report_file_sha256`. Both paths are
+relative to `comparison.json`: for example `1/projection.v1.json` and
+`1/web-report.v10.json`. The report checksum identifies the exact copied bytes;
+projection provenance retains the original registered artifact path as historical
+identity, so consumers locate the packaged report through `web_report_path`.
+Single-evaluation reporting is unchanged. Assembly does not publish or deploy a
+website.
 
 Generated reports and projection metadata carry `methodology.benchmark` beside
 the methodology, including ID/version, wrapper and semantic identities, and the
