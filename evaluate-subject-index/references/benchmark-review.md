@@ -6,7 +6,7 @@ The source benchmark has three distinct states: synthesized draft, independently
 
 1. `synthesize-source-benchmark` reconciles every validated chunk into `source-benchmark.draft.vN.json` while the candidate remains unseen.
 2. Review opens the draft in a fresh, candidate-blind context, reconnects the exact source by SHA-256, uses a deterministic `source-benchmark-review-inventory.json` as a temporary queue, and records an item-complete editorial ledger in `source-benchmark-review.vN.json`.
-3. `benchmark_review_cli.py freeze` validates the exact registered draft, recomputed inventory, review ledger, and approved final benchmark, then atomically registers the review and final benchmark while completing both state stages.
+3. `scripts/v10_cli.py benchmark freeze` validates the exact registered draft, recomputed inventory, review ledger, and approved final benchmark, then atomically registers the review and final benchmark while completing both state stages.
 
 Candidate evaluation and canonical registration cannot begin until all three stages are complete. An isolated worker may mechanically prepare a candidate after the frozen source-level identities exist, but no candidate material may enter this review context or influence benchmark review. Read [candidate-preparation.md](candidate-preparation.md).
 
@@ -14,11 +14,11 @@ Candidate evaluation and canonical registration cannot begin until all three sta
 
 Use `import-reviewed-legacy` only when an exact legacy benchmark was already frozen after a complete independent candidate-blind review and the current run has the same source, page map, and chunk manifest. This is compatibility approval, not a new discovery, synthesis, editorial review, or ordinary freeze. The current state must end at completed source-chunk preparation with no candidate registered or exposed.
 
-The compatibility reviewer must remain candidate-blind, inspect the exact old and new identities, verify the legacy full-review and release chain, and attest that the one allowed key rename is lossless and that rebinding to the current V8 policy is semantically compatible. Record that decision in `source-benchmark-compatibility-approval-v1`; do not reshape it into `source-benchmark-review-v1` or claim that all content was reviewed again.
+The compatibility reviewer must remain candidate-blind, inspect the exact old and new identities, verify the historical full-review and release chain, and attest that the one allowed key rename is lossless and that rebinding to the current V10 policy is semantically compatible. Record that decision in `source-benchmark-compatibility-approval-v1`; do not reshape it into `source-benchmark-review-v1` or claim that all content was reviewed again.
 
 The typed import recomputes all self-hashes, exact coverage, native registered benchmark/review bindings, file identities, stable subject/relationship/task/evidence ID sets, and the planned output benchmark identity. The compatibility approval separately binds the exact artifact-freeze commit; later release-housekeeping fields are not required in the legacy state. The only mechanical schema normalization is `relationships[*].type` to `relationship_type`. All semantic fields remain byte-for-byte JSON values, while benchmark/evaluation/policy/freeze/import/self-hash metadata is rebound exactly as enumerated by the approval. The generated provenance is `source-benchmark-compatibility-import-provenance-v1`.
 
-An exact native V8 freeze may use the same command with `--legacy-draft` and a compatibility approval whose `reuse_mode` is `native_v8_exact`. This variant requires an unchanged byte-identical V4 policy, already-normalized `relationship_type`, a source-only registered V6 state, the exact historical draft/inventory/review/final chain, full candidate-blind coverage, and no blocking review issues. It performs no semantic normalization or policy rebind. When the freeze was checkpoint-bound rather than Git-bound, the approval binds the exact source-only state and records portable-checkpoint hashes as transport provenance; the archive hash is not a resume or import gate and no artifact-freeze commit may be invented.
+An exact historical freeze may supply `--legacy-draft` with the matching compatibility approval. This import-only path verifies the unchanged historical draft/inventory/review/final chain, full candidate-blind coverage, and absence of blocking review issues before creating the V10-bound successor. It does not make the historical runtime callable. When the freeze was checkpoint-bound rather than Git-bound, the approval binds the exact source-only state and records portable-checkpoint hashes as transport provenance; the archive hash is not a resume or import gate and no artifact-freeze commit may be invented.
 
 Keep all imported evidence inside the target evaluation directory so canonical state can register portable relative paths. Any failure writes neither output and does not change state.
 
@@ -62,6 +62,6 @@ python scripts/v10_cli.py benchmark freeze \
   --final source/source-benchmark.v1.json
 ```
 
-Do not complete `benchmark_review` or `benchmark_freeze` with `state_cli.py set-stage`; the typed freeze command is the canonical transition. Any validation failure leaves state and the supplied artifacts unchanged.
+Do not complete `benchmark_review` or `benchmark_freeze` with generic state mutation; `scripts/v10_cli.py benchmark freeze` is the canonical transition. Any validation failure leaves state and the supplied artifacts unchanged.
 
 For candidate-visible cross-evaluation migration and comparison, see [Retrospective study binding and comparison](study-comparison.md), including historical release proof, semantic policy, density evidence, and import/bundle preflight.

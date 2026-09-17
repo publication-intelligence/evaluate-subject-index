@@ -1,17 +1,21 @@
 # Evaluate Subject Index
 
-Default entrypoints retain **V8.2**, including direct wrong-locator and broken-reference publication gates. An additive **V9 percentage runtime** is available through `v9_cli.py`; see [the explicit cutover contract](evaluate-subject-index/references/percentage-runtime-v9.md). Frozen evaluations retain their original meaning and require explicit migration.
+Evaluate Subject Index runs source-grounded **V10** evaluations of finished
+subject indexes. The only public command entry point is
+`evaluate-subject-index/scripts/v10_cli.py`.
 
-A source-grounded, current-V8 workflow for evaluating a finished subject index.
+Historical V8 and V9 artifacts remain readable only as frozen evidence during a
+typed V10 migration. They are not runnable methodologies, and low-level modules
+reject direct execution.
 
-The repository separates four questions:
+The framework separates four questions:
 
 1. What subjects and reader tasks does the source require?
 2. Are the candidate's paths and locators supported by the cited pages?
 3. Can readers reach every required subject?
 4. Does the whole index form a coherent navigation system?
 
-Validated ledgers feed deterministic V8 scoring and report projection.
+Validated ledgers feed deterministic V10 scoring and report projection.
 
 ## Setup
 
@@ -19,88 +23,79 @@ Validated ledgers feed deterministic V8 scoring and report projection.
 python -m pip install -r requirements.txt
 ```
 
-## Current workflow
+## Canonical workflow
 
-The canonical run is `evaluation-state.json` (state schema V6). It is the only control inventory; there is no artifact manifest.
+One `evaluation-state.json` controls the run:
 
 ```text
 initialize → page map → chunks → policy
-  → source discovery → benchmark synthesis/review/freeze
+  → benchmark discovery/confirmation → synthesis/review/freeze
   → candidate normalization → locator packets
   → locator audit → missing-access audit → structure audit
-  → V8 scoring → web report
+  → V10 scoring → report and public projection
 ```
 
-Important helpers:
-
-- `state_cli.py` — initialize, validate, inspect, and advance state.
-- `bundle_cli.py` — optional recovery checkpoints and imports.
-- `candidate_preparation_cli.py` — normalize, validate, and register a contract-valid candidate.
-- `page_chunk_cli.py` — prepare the complete registered-state locator-packet batch after candidate registration.
-- `parallel_candidate_audit_cli.py` — validate/register audit chunks returned by separate chats.
-- `dimension_score_v8_cli.py` — register the native structure audit, then assemble, score, and report from canonical state. It also exposes low-level preflight and calculation checks.
-- `item_grade_v8_cli.py` — low-level current V8 item-projection validation.
-
-The final three state transitions are typed and atomic:
+Run every operation through the V10 dispatcher:
 
 ```bash
-python evaluate-subject-index/scripts/dimension_score_v8_cli.py register-structure \
+python evaluate-subject-index/scripts/v10_cli.py --help
+python evaluate-subject-index/scripts/v10_cli.py state --help
+python evaluate-subject-index/scripts/v10_cli.py benchmark --help
+python evaluate-subject-index/scripts/v10_cli.py score --help
+python evaluate-subject-index/scripts/v10_cli.py study --help
+```
+
+The dispatcher exposes state, policy, page/chunk, source discovery, benchmark,
+candidate preparation/audit, access review, scoring, grading, study, checkpoint,
+and release-decision tools under the selected V10 runtime. The underlying files
+are implementation modules even when an old version remains in a filename.
+
+The final transitions are typed and atomic:
+
+```bash
+python evaluate-subject-index/scripts/v10_cli.py score register-structure \
   --state /path/to/evaluation/evaluation-state.json \
-  --input /path/to/evaluation/structure-audit.v6.json
-python evaluate-subject-index/scripts/dimension_score_v8_cli.py score \
+  --input /path/to/evaluation/structure-audit.json
+python evaluate-subject-index/scripts/v10_cli.py score score \
   --state /path/to/evaluation/evaluation-state.json
-python evaluate-subject-index/scripts/dimension_score_v8_cli.py build-report \
+python evaluate-subject-index/scripts/v10_cli.py score build-report \
   --state /path/to/evaluation/evaluation-state.json
 ```
 
-Each command resolves the exact registered current-schema inputs, validates their bytes and cross-artifact identities before writing, registers its outputs, and advances the one canonical state. Failed validation leaves state unchanged.
-
-See [SKILL.md](evaluate-subject-index/SKILL.md) and [workflow.md](evaluate-subject-index/references/workflow.md) for the operating contract.
+See [the skill contract](evaluate-subject-index/SKILL.md) and
+[workflow](evaluate-subject-index/references/workflow.md).
 
 ## Optional input converter
 
-The evaluation skill is format-agnostic. Its input boundary is the published [`candidate-layout-extraction-v1` schema](evaluate-subject-index/references/schemas/candidate-layout-extraction.schema.json).
-
-[`subject_index_converter.py`](utilities/subject_index_converter.py) is a separate convenience utility for the PDF, Markdown, plain-text, and Indexia HTML exports currently in use. It emits that contract without making those formats part of the skill:
+The skill accepts the format-neutral
+[`candidate-layout-extraction-v1`](evaluate-subject-index/references/schemas/candidate-layout-extraction.schema.json)
+contract. [`subject_index_converter.py`](utilities/subject_index_converter.py) is
+a separate convenience utility for supported PDF, Markdown, text, and HTML
+inputs:
 
 ```bash
 python utilities/subject_index_converter.py \
   --candidate-id example \
   --input /path/to/index.pdf \
   --output /path/to/candidate-layout-extraction.v1.json
-
-python utilities/subject_index_converter.py \
-  --candidate-id example \
-  --url https://www.indexia.tech/public/example \
-  --snapshot /path/to/indexia-snapshot.html \
-  --output /path/to/candidate-layout-extraction.v1.json
 ```
 
-The converter snapshots URL input so the JSON hash remains tied to exact bytes. It performs mechanical extraction only; evaluation and editorial judgment remain in the skill.
+The converter performs mechanical extraction only. Evaluation and editorial
+judgment remain in the V10 skill.
 
 ## Checkpoints
 
-Checkpoints are recovery snapshots, not integrity proofs or mandatory stage gates.
+Checkpoints are recovery snapshots rather than evaluation stages:
 
 ```bash
-python evaluate-subject-index/scripts/bundle_cli.py checkpoint \
+python evaluate-subject-index/scripts/v10_cli.py bundle checkpoint \
   --state /path/to/evaluation/evaluation-state.json \
   --output /path/to/checkpoint.zip
 
-python evaluate-subject-index/scripts/bundle_cli.py import-bundle \
+python evaluate-subject-index/scripts/v10_cli.py bundle import-bundle \
   --input /path/to/checkpoint.zip \
   --output-dir /path/to/resumed-evaluation
 ```
-
-Import validates archive safety, inventory, and current state structure. It does not require a previously advertised archive or member checksum. Registered artifact hashes remain useful content identities, but changed or unavailable local bytes are resume warnings rather than tamper failures.
-
-## Parallel chats
-
-Chunk workers return current-schema JSON artifacts. The coordinator validates and registers selected files directly in state. Branches and pull requests are optional review/transport tools; GitHub receipts, blob proofs, merge evidence, recovery receipts, and matching checkpoint hashes are not required.
-
-## Current contract
-
-Only the current V8 workflow is exposed. Start each evaluation with the current V8 policy and schemas.
 
 ## Test
 
@@ -109,22 +104,14 @@ python -m unittest discover -s evaluate-subject-index/tests -p 'test_*.py' -v
 python -m unittest discover -s utilities/tests -p 'test_*.py' -v
 ```
 
-The GitHub workflow parses schemas and fixtures, compiles helpers, and runs the unit suite without duplicating those tests in long inline shell scripts.
-
 ## License
 
 Copyright (c) 2026 John Camden.
 
-This project is licensed under the GNU Affero General Public License, version 3 only (`AGPL-3.0-only`). See [LICENSE](LICENSE). Third-party components remain subject to their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+This project is licensed under the GNU Affero General Public License, version 3
+only (`AGPL-3.0-only`). See [LICENSE](LICENSE). Third-party components remain
+subject to their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-PyMuPDF and MuPDF are available under the GNU AGPL v3 or a separate commercial license from Artifex. This repository uses them under the GNU AGPL v3 and does not grant an Artifex commercial license.
-
-V10 is available for coordinated implementation review through `v10_cli.py`.
-See [the V10 runtime contract](evaluate-subject-index/references/runtime-v10.md)
-for its independently reviewed benchmark-access amendment, separate quality and
-validity outcomes, and execution hold. Default V8.2 and explicit V9 remain intact.
-
-The separately selected [V10 semantic correction](evaluate-subject-index/references/runtime-v10-semantic.md)
-is available for coordinated review through `v10_semantic_cli.py`. It preserves
-known evidence axes and binds successor execution explicitly; it does not change
-the default or baseline V10 runtime.
+PyMuPDF and MuPDF are available under the GNU AGPL v3 or a separate commercial
+license from Artifex. This repository uses them under the GNU AGPL v3 and does
+not grant an Artifex commercial license.

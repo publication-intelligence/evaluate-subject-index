@@ -1,25 +1,25 @@
 # Workflow and state machine
 
-The current V8 evaluation uses one linear 16-stage state machine and one control file, `evaluation-state.json`.
+The current V10 evaluation uses one linear 16-stage state machine and one control file, `evaluation-state.json`.
 
 | Stage | Typical completion artifact |
 | --- | --- |
 | initialize | state and source identity |
 | page_mapping | expanded page map |
 | chunk_definition | approved chunk manifest |
-| define_policy | run-specific standard V8 policy |
+| define_policy | run-specific standard V10 policy |
 | source_chunk_preparation | chunk PDFs and sidecars |
 | source_subject_discovery | all source-subject chunks, or exact reviewed-legacy release evidence |
 | benchmark_synthesis | benchmark draft, or exact imported legacy frozen benchmark |
-| benchmark_review | independently validated review ledger, or separate V8 compatibility approval |
-| benchmark_freeze | approved frozen benchmark, or V8-bound compatibility import with provenance |
+| benchmark_review | independently validated review ledger, or separate historical-compatibility approval |
+| benchmark_freeze | approved frozen V10 benchmark, or V10-bound historical import with provenance |
 | candidate_normalization | normalized candidate, fidelity layout, inventory, and optional issues |
 | locator_chunk_preparation | all locator packets |
-| locator_audit | all locator-audit V2 chunks |
+| locator_audit | all current V10 locator-audit chunks |
 | missing_access_audit | all missing-access chunks |
-| structure_audit | global structure-audit V6 with causal provenance |
-| scoring | V8 calculation V6, item assessments V7, result V12 |
-| web_report | web report V10 plus canonical public web projection V1 collections |
+| structure_audit | global current-contract structure audit with causal provenance |
+| scoring | current V10 calculation, item assessments, and result |
+| web_report | current V10 report plus canonical public projection collections |
 
 Each stage is `not_started`, `in_progress`, `completed`, or `blocked`. A stage completes only after every prior stage is complete and at least one current artifact for that stage is registered. Audit stages require complete frozen-denominator coverage, not merely one artifact.
 
@@ -46,7 +46,7 @@ The global structure pass then judges whether individually defensible records fo
 
 ### Reviewed-legacy compatibility import
 
-Do not repeat source discovery or fabricate a new full review merely to move an already frozen, fully reviewed benchmark onto the current policy identity. `benchmark_review_cli.py import-reviewed-legacy` is the sole exception path. It requires the exact legacy state, page map, chunk manifest, policy, frozen benchmark, full-review inventory and ledger, plus a separately authored candidate-blind compatibility approval. The legacy and current page map and chunk manifest must be byte-identical and canonically identical.
+Do not repeat source discovery or fabricate a new full review merely to move an already frozen, fully reviewed benchmark onto the current policy identity. `scripts/v10_cli.py benchmark import-reviewed-legacy` is the sole historical-evidence import path. It requires the exact historical state, page map, chunk manifest, policy, frozen benchmark, full-review inventory and ledger, plus a separately authored candidate-blind compatibility approval. The historical and current page map and chunk manifest must be byte-identical and canonically identical. The import produces V10-bound state and does not expose the historical runtime as an operational workflow.
 
 The command generates the current benchmark rather than accepting a caller-authored final. It permits only `relationships[*].type` to `relationship_type` plus the approval's benchmark, evaluation, policy, freeze, compatibility-import, and self-hash metadata. It registers explicit imported-evidence artifact types and completes source discovery, synthesis, review, and freeze in one state replacement; every stage note states that the substantive stage was not rerun. Any validation failure writes no output and leaves state unchanged.
 
@@ -58,7 +58,7 @@ python scripts/v10_cli.py score score --state evaluation-state.json
 python scripts/v10_cli.py score build-report --state evaluation-state.json
 ```
 
-These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. The final command writes and registers `web-report.v10.json` and the complete `v8-canonical-projection/` bundle in one transaction. Generic stage completion is disabled for these three stages.
+These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. The final command writes and registers the current V10 report and canonical projection bundle in one transaction. Generic stage completion is disabled for these three stages.
 
 ## Chunk ownership
 
@@ -72,7 +72,7 @@ Candidate preparation is mechanical and may run separately, provided it does not
 
 ## Locator-packet preparation
 
-Run `page_chunk_cli.py prepare-locator-chunks` directly after local candidate registration. The command validates the canonical state and the exact registered normalized candidate, page map, chunk manifest, and frozen benchmark; no repository, publication, commit, pull-request, blob, or preparation-receipt evidence participates in this transition.
+Run `scripts/v10_cli.py page-chunks prepare-locator-chunks` after local candidate registration. The command validates the canonical state and the exact registered normalized candidate, page map, chunk manifest, and frozen benchmark; no repository, publication, commit, pull-request, blob, or preparation-receipt evidence participates in this transition.
 
 Preparation recomputes chunk identity and page ownership, creates one `candidate-locator-chunk-v1` packet for every frozen chunk, and routes each resolved locator assignment exactly once. With complete routing, it writes and registers the packet batch and completes `locator_chunk_preparation`. An unresolved or ownerless assignment writes only an unregistered `candidate-locator-routing-exceptions-v1` diagnostic; other validation failures write nothing. Neither failure advances state. The next canonical action after success is `audit-locators`.
 
@@ -102,4 +102,4 @@ registrations are removed.
 
 ## Current contract
 
-Runtime commands accept the current V8 artifacts listed in `json-contracts-v8.md`.
+Runtime commands accept only the current V10 operational contracts. Historical contracts remain import-only evidence and frozen regression fixtures.
