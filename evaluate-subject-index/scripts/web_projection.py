@@ -544,9 +544,6 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
         "public_safety": {"source_excerpts_included": False, "restricted_files_included": False, "private_layout_evidence_included": False, "absolute_paths_included": False, "source_subject_summaries_are_synthesized_not_quoted": True},
         "limitations": _projection_limitations(result),
     }
-    if "overall_score_ceiling" in result:
-        projection["overall_score_ceiling"] = deepcopy(result["overall_score_ceiling"])
-        projection["score_views"]["views"][0]["overall_score_ceiling"] = deepcopy(result["overall_score_ceiling"])
     projection["methodology"] = {"rubric_version": calculation["rubric_version"], "calculation_profile": calculation["calculation_profile"], "benchmark": study_comparison.benchmark_identity(benchmark)}
     if comparison_identity is not None:
         projection["comparison_identity"] = deepcopy(comparison_identity)

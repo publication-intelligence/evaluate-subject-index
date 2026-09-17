@@ -1,22 +1,10 @@
 """Cross-field checks for V10; V9 validators retain their historical meaning."""
 from copy import deepcopy
-from decimal import Decimal, ROUND_HALF_UP
 from v10_migration import GATE_IDS
 
 
 def contract_errors(document):
     errors = candidate_defect_errors(document)
-    if 'overall_score_ceiling' in document:
-        ceiling=document['overall_score_ceiling'];triggered=[r for r in ceiling['cap_evaluations'] if r['triggered']]
-        expected=min(triggered,key=lambda r:Decimal(r['maximum_percentage'])) if triggered else None
-        if ceiling['applied_cap'] != (None if expected is None else {k:expected[k] for k in ('cap_id','maximum_percentage')}):
-            errors.append('Applied overall ceiling is not the lowest triggered ceiling')
-        pre=None if ceiling['pre_cap_overall_percentage'] is None else Decimal(ceiling['pre_cap_overall_percentage'])
-        post=None if ceiling['post_cap_overall_percentage'] is None else Decimal(ceiling['post_cap_overall_percentage'])
-        expected_post=None if pre is None else min(pre,Decimal(expected['maximum_percentage'])) if expected else pre
-        if post!=expected_post:errors.append('Post-cap overall percentage does not reconstruct')
-        if document.get('overall_percentage') is not None and post is not None and Decimal(str(document['overall_percentage']))!=post.quantize(Decimal('.01'),rounding=ROUND_HALF_UP):
-            errors.append('Displayed overall percentage differs from exact post-cap score')
     if document.get('schema_version') == 'subject-index-evaluation-policy-v6':
         if tuple(row['gate_id'] for row in document['critical_gates']) != GATE_IDS:
             errors.append('V10 requires exactly its twelve ordered core quality gates')
