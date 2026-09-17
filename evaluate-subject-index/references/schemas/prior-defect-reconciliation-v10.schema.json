@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "prior-defect-reconciliation-v10.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "evaluation_id", "candidate_sha256", "prior_structure_file_sha256", "findings", "reviewed_by", "reviewed_at", "reconciliation_sha256"],
+  "properties": {
+    "schema_version": {"const": "subject-index-prior-defect-reconciliation-v10-v1"},
+    "evaluation_id": {"type": "string", "minLength": 1},
+    "candidate_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "prior_structure_file_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["prior_defect_id", "disposition", "successor_finding_ids", "evidence_ids", "rationale"],
+        "properties": {
+          "prior_defect_id": {"type": "string", "pattern": "^DEFECT-"},
+          "disposition": {"enum": ["retained", "evidence_rebutted", "superseded"]},
+          "successor_finding_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "evidence_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "rationale": {"type": "string"}
+        }
+      }
+    },
+    "reviewed_by": {"type": "string", "minLength": 1},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "reconciliation_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

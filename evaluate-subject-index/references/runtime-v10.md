@@ -1,8 +1,10 @@
 # V10 evaluation runtime
 
-V10 is the only operational evaluation runtime. The adopted boundary is the
-[decision contract](consequence-policy-v10.md), SHA-256
-`f812eae0d09b60a4c1e74b1b6b9e6dd5850e088f9f9bb583152e9559f6ee07a9`.
+V10 is the only operational evaluation runtime. The active boundary is the
+[V10.1 decision contract](consequence-policy-v10.1.md), identity
+`subject-index-evaluation-v10-decision-v2`, SHA-256
+`058399c34c0a6997965b39fb5906bde3634c2cdd74d3192bdfd6b4e55452512f`.
+The earlier [V10 decision v1](consequence-policy-v10.md) remains historical.
 Use `scripts/v10_cli.py TOOL ...` for new source discovery, policy creation,
 benchmark review, candidate audit, scoring, reporting, and study comparison.
 New evaluations start directly with V10-native state and policy. Historical
@@ -24,7 +26,8 @@ alternative workflow.
 
 Artifact version suffixes are sequential schema versions, not rubric names.
 V10 inherits V9's exact decimal strings, percentages, operation order, weights,
-formulas, caps, density bands and rounding. No five-point aliases are accepted.
+formulas, dimension caps, density bands and rounding. V10.1 adds deterministic
+overall ceilings after ordinary dimension arithmetic. No five-point aliases are accepted.
 Diagnostic representation overlays remain separate from benchmark access amendments;
 they cannot create an adjusted score or erase a quality gate.
 
@@ -66,7 +69,9 @@ unweighted; task facets name only their parent's required subjects. Facet identi
 parts of one original task under different parents. IDs cannot repeat within
 a parent. Amendment delta IDs remain globally unique.
 
-Populations record each subject ID/priority and each task ID/unit weight. Source
+Populations record each subject ID/priority, task ID/unit weight, deterministically
+derived expected treatment, and weighted access obligation. Their before/after
+reconciliation is exact; reductions greater than 15% require reviewed explanation. Source
 pages, measured words, scope and page map remain fixed. Source scope changes,
 new discovery or unsupported evidence require the ordinary earlier-stage path.
 
@@ -75,6 +80,19 @@ never copies old benchmark-dependent ledgers. The coordinated four-candidate
 successor migration requires fresh benchmark-dependent review. Any later reuse
 of locator audits needs separately documented validation and authorization;
 this CLI provides no automatic audit-transfer shortcut.
+
+Migration from a completed V10 evaluation requires a new execution-compatibility
+adoption. Preserve the previous state and structure bytes. If the candidate hash
+is unchanged and the prior structure contains major or critical findings, pass a
+reviewed `subject-index-prior-defect-reconciliation-v10-v1` artifact to `adopt`
+with `--defect-reconciliation`. Rebuild the access amendment with the four-family
+denominator ledger, rerun affected missing-access and structure judgments, then
+rescore and rebuild reports; existing scores are not relabeled.
+
+Coherent first-lookup access, prior-finding dispositions, destructive node-to-path
+bindings, stance/relationship findings, and dominant-route concept support require
+human re-adjudication. After those facts are frozen, ceiling application and public
+projection are mechanical.
 
 ## Required factual candidate review
 

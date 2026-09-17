@@ -198,7 +198,7 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
         "policy_id": source.get("policy_id") or "subject-index-policy",
         "policy_profile": {
             "id": POLICY_PROFILE,
-            "consequence_policy_reference": "consequence-policy-v10.md",
+            "consequence_policy_reference": "consequence-policy-v10.1.md",
         },
         "source_scope": {
             "source_sha256": scope["source_sha256"],
@@ -248,9 +248,9 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
     }
     if is_v10():
         policy["v10_contract"] = {
-            "contract_id": "subject-index-evaluation-v10-decision-v1",
-            "contract_sha256": "f812eae0d09b60a4c1e74b1b6b9e6dd5850e088f9f9bb583152e9559f6ee07a9",
-            "consequence_policy": "consequence-policy-v10.md",
+            "contract_id": "subject-index-evaluation-v10-decision-v2",
+            "contract_sha256": "058399c34c0a6997965b39fb5906bde3634c2cdd74d3192bdfd6b4e55452512f",
+            "consequence_policy": "consequence-policy-v10.1.md",
             "benchmark_access_profile": "subject-index-benchmark-access-v10",
         }
     migration = source.get("retrospective_migration")

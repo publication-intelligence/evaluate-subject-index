@@ -110,6 +110,7 @@ def validate_review(document, *, state, state_path, benchmark, lock, structure_p
     nodes={row['node_id']:row for row in bound_structure['node_judgments']}
     finding_ids={row['defect_id'] for row in bound_structure['defects']} | {row['node_id'] for row in bound_structure['node_judgments']}
     unresolved=[]
+    rows_by_parent={}
     for row in rows:
         study.require(row['requirement_sha256']==expected[key(row)],'Access review requirement content is stale')
         parent=(subjects if row['parent_kind']=='subject' else tasks).get(row['parent_id'])
@@ -118,6 +119,7 @@ def validate_review(document, *, state, state_path, benchmark, lock, structure_p
         study.require(set(row['structure_finding_ids'])<=finding_ids,'Access review cites foreign structure judgments')
         study.require(set(row['evidence_ids'])<=known_evidence,'Access review cites evidence outside the bound source/audit/structure universe')
         fields=set(row['judgment_fields'])
+        rows_by_parent.setdefault((row['parent_kind'],row['parent_id']),[]).append(row)
         allowed={'coverage','stance_preserved','realistic_first_lookup_success'} if row['parent_kind']=='subject' else {'result'}
         study.require(fields<=allowed,'Access review declares an incompatible parent judgment aspect')
         unresolved_row=row['disposition']=='unresolved' or row['factual_status']=='uninspectable'
@@ -139,6 +141,23 @@ def validate_review(document, *, state, state_path, benchmark, lock, structure_p
                     affected.update(p['path_id'] for p in inventory['paths'] if fid in p.get('node_ids',[]))
             unresolved.append({'blocker_id':'GATE-ASSESSMENT-ACCESS-REVIEW','affected_item_ids':sorted(affected),
                                'reason':f"Unresolved factual review of {row['requirement_kind']} {row['requirement_id']} under {row['parent_id']}; private review rationale retained in the bound receipt."})
+    benchmark_subjects={row['subject_id']:row for row in benchmark['subjects']}
+    for (kind,parent_id),parent_rows in rows_by_parent.items():
+        if kind!='subject' or len(parent_rows)<2 or benchmark_subjects[parent_id].get('priority')!='essential':
+            continue
+        parent=subjects[parent_id]
+        if parent.get('coverage')!='complete':
+            continue
+        if any(row['disposition']=='unresolved' or row['factual_status']=='uninspectable' for row in parent_rows):
+            continue
+        study.require(parent.get('realistic_first_lookup_success')=='yes',
+                      'Complete essential multi-facet access requires realistic first-lookup success')
+        study.require(all(row['disposition']=='reviewed' and row['factual_status']=='satisfied' for row in parent_rows),
+                      'Distributed fragments cannot establish complete essential multi-facet access')
+        coherent=set(parent_rows[0]['tested_path_ids'])
+        for row in parent_rows[1:]:coherent &= set(row['tested_path_ids'])
+        study.require(bool(coherent),
+                      'Complete essential multi-facet access requires one coherent tested first-lookup route')
     stamp=datetime.fromisoformat(document['reviewed_at'].replace('Z','+00:00'))
     freeze=datetime.fromisoformat(lock['benchmark_access']['frozen_at'].replace('Z','+00:00'))
     study.require(stamp.utcoffset() is not None and freeze<=stamp<=datetime.now(timezone.utc),'Access review must follow the frozen amendment and not be in the future')

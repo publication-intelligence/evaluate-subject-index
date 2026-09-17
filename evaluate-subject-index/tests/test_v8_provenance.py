@@ -295,7 +295,7 @@ class LedgerIdentityTests(unittest.TestCase):
                 "subject_ids": [],
                 "result": "succeeds",
                 "access_mode": "direct",
-                "matched_path_ids": [],
+                "matched_path_ids": ["PATH-001"],
                 "severity": "none",
                 "confidence": "high",
                 "evidence_ids": ["EVID-001"],
@@ -313,7 +313,7 @@ class LedgerIdentityTests(unittest.TestCase):
             },
             "candidate_sha256": SHA["candidate"],
             "candidate": {"records": []},
-            "inventory": {"paths": []},
+            "inventory": {"paths": [{"path_id": "PATH-001"}]},
         }
         workset = {"subject_ids": [], "reader_task_ids": ["TASK-001"], "treatment_ids": [], "treatments": []}
 

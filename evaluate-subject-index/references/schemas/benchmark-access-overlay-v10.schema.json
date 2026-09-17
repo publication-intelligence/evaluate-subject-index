@@ -151,11 +151,15 @@
               "weight"
             ]
           }
-        }
+        },
+        "treatments": {"$ref": "#/properties/before_population/properties/subjects"},
+        "weighted_access_obligations": {"$ref": "#/properties/before_population/properties/subjects"}
       },
       "required": [
         "subjects",
-        "reader_tasks"
+        "reader_tasks",
+        "treatments",
+        "weighted_access_obligations"
       ]
     },
     "after_population": {
@@ -211,12 +215,36 @@
               "weight"
             ]
           }
-        }
+        },
+        "treatments": {"$ref": "#/properties/before_population/properties/subjects"},
+        "weighted_access_obligations": {"$ref": "#/properties/before_population/properties/subjects"}
       },
       "required": [
         "subjects",
-        "reader_tasks"
+        "reader_tasks",
+        "treatments",
+        "weighted_access_obligations"
       ]
+    },
+    "denominator_reconciliation": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "before_count", "after_count", "delta", "retained_ids", "added_ids", "retired_ids", "explanation"],
+        "properties": {
+          "family": {"enum": ["subjects", "reader_tasks", "treatments", "weighted_access_obligations"]},
+          "before_count": {"type": "integer", "minimum": 0},
+          "after_count": {"type": "integer", "minimum": 0},
+          "delta": {"type": "integer"},
+          "retained_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "added_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "retired_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+          "explanation": {"type": "string"}
+        }
+      }
     },
     "deltas": {
       "type": "array",
@@ -325,6 +353,7 @@
     "base_review_file_sha256",
     "before_population",
     "after_population",
+    "denominator_reconciliation",
     "deltas",
     "overlay_sha256"
   ]

@@ -556,6 +556,12 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
         require(not (set(found) & set(missed)) and set(found) | set(missed) == set(expected_pages), "treatment_page_mismatch", f"Subject {subject_id} found/missed pages do not partition expected pages.")
         locator_recall = judgment["locator_recall"]
         require(locator_recall.get("expected") == len(expected_pages) and locator_recall.get("found") == len(found) and locator_recall.get("missed") == len(missed), "locator_recall_mismatch", f"Subject {subject_id} locator-recall counts do not match its exact page accounting.")
+        if coverage == "missing":
+            require(not expected_pages or bool(missed), "contradictory_access_judgment", f"Subject {subject_id} cannot be missing when every expected page is recorded found.")
+        if coverage == "complete":
+            require(not missed, "contradictory_access_judgment", f"Subject {subject_id} cannot be complete while expected pages are missed.")
+        if judgment.get("realistic_first_lookup_success") == "yes":
+            require(bool(matched), "contradictory_access_judgment", f"Subject {subject_id} claims first-lookup success without a matched delivered path.")
         expected_rate = None if not expected_pages else len(found) / len(expected_pages)
         if "rate" in locator_recall:
             require(locator_recall.get("rate") == expected_rate, "locator_recall_mismatch", f"Subject {subject_id} locator-recall rate does not recompute.")
@@ -614,6 +620,8 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
         require(result.get("access_mode") in ACCESS_MODES, "audit_judgment", f"Reader task {task_id} must record its tested access mode.")
         matched = result["matched_path_ids"]
         require(set(matched).issubset(candidate_path_ids), "matched_path_mismatch", f"Reader task {task_id} matched paths are invalid.")
+        if status == "succeeds":
+            require(bool(matched), "contradictory_access_judgment", f"Reader task {task_id} succeeds without a matched delivered path.")
         severity_counts[result["severity"]] += 1
         task_counts["semantic_unresolved" if status is None else status] += 1
     require(not duplicate_values(task_ids), "duplicate_reader_task_judgment", "Missing-access audit repeats reader tasks.")

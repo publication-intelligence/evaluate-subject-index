@@ -1,10 +1,22 @@
 """Cross-field checks for V10; V9 validators retain their historical meaning."""
 from copy import deepcopy
+from decimal import Decimal, ROUND_HALF_UP
 from v10_migration import GATE_IDS
 
 
 def contract_errors(document):
     errors = candidate_defect_errors(document)
+    if 'overall_score_ceiling' in document:
+        ceiling=document['overall_score_ceiling'];triggered=[r for r in ceiling['cap_evaluations'] if r['triggered']]
+        expected=min(triggered,key=lambda r:Decimal(r['maximum_percentage'])) if triggered else None
+        if ceiling['applied_cap'] != (None if expected is None else {k:expected[k] for k in ('cap_id','maximum_percentage')}):
+            errors.append('Applied overall ceiling is not the lowest triggered ceiling')
+        pre=None if ceiling['pre_cap_overall_percentage'] is None else Decimal(ceiling['pre_cap_overall_percentage'])
+        post=None if ceiling['post_cap_overall_percentage'] is None else Decimal(ceiling['post_cap_overall_percentage'])
+        expected_post=None if pre is None else min(pre,Decimal(expected['maximum_percentage'])) if expected else pre
+        if post!=expected_post:errors.append('Post-cap overall percentage does not reconstruct')
+        if document.get('overall_percentage') is not None and post is not None and Decimal(str(document['overall_percentage']))!=post.quantize(Decimal('.01'),rounding=ROUND_HALF_UP):
+            errors.append('Displayed overall percentage differs from exact post-cap score')
     if document.get('schema_version') == 'subject-index-evaluation-policy-v6':
         if tuple(row['gate_id'] for row in document['critical_gates']) != GATE_IDS:
             errors.append('V10 requires exactly its twelve ordered core quality gates')
@@ -49,4 +61,22 @@ def candidate_defect_errors(document):
         elif isinstance(value,list):
             for child in value:visit(child)
     visit(document)
+    for defect in document.get('defects',[]) if isinstance(document,dict) else []:
+        if (defect.get('severity') in {'major','critical'} and defect.get('code') in {'HED','SUB'}
+                and defect.get('dimension_owner') == 'findability_navigation'
+                and defect.get('retrieval_consequence') in {'blocks','misleads'}
+                and not any(str(item).startswith('PATH-') for item in defect.get('affected_item_ids',[]))):
+            errors.append(f"{defect.get('defect_id')}: independently evidenced destructive heading architecture must bind a delivered PATH")
+    if isinstance(document,dict) and document.get('node_judgments') is not None:
+        defects=document.get('defects',[])
+        owners={'conceptual_stance_fidelity':'conceptual_stance_fidelity',
+                'heading_access_architecture':'findability_navigation',
+                'mechanics_consistency':'mechanics_consistency'}
+        for node in document['node_judgments']:
+            for component,owner in owners.items():
+                status=node.get('component_judgments',{}).get(component,{}).get('status')
+                if status in {'major_issues','fails'} and not any(
+                    row.get('dimension_owner')==owner and node['node_id'] in row.get('affected_item_ids',[])
+                    and row.get('severity') in {'major','critical'} for row in defects):
+                    errors.append(f"{node['node_id']}: {component} {status} requires a corresponding major/critical defect record")
     return errors

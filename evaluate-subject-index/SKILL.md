@@ -86,7 +86,7 @@ Read [candidate-preparation.md](references/candidate-preparation.md) and [parall
 
 ## V10 scoring
 
-Use [V10 decision contract](references/consequence-policy-v10.md) and [V10 semantic execution contract](references/runtime-v10-semantic.md). Keep score deductions, ceilings, quality gates, validity, assessment sufficiency, and human release decisions separate.
+Use [V10.1 decision contract](references/consequence-policy-v10.1.md) and [V10 semantic execution contract](references/runtime-v10-semantic.md). Keep score deductions, ceilings, quality gates, validity, assessment sufficiency, and human release decisions separate.
 
 Inspect the exact source and full delivered candidate path before leaving an axis unresolved. When the source is available but the candidate path, locator, or reference is malformed, incomplete, polysemous, or under-specified, judge the candidate as delivered. If the candidate’s intended concept cannot be known, treat that as a severe candidate failure: do not invent intent or convert the defect into neutral uncertainty. Record known `no_fit`, `unsupported`, and `not_kept` outcomes where applicable, and apply every qualifying cap or gate without double counting.
 
@@ -114,7 +114,7 @@ Represent `not_measured`, `uninspectable`, and `uncertain` explicitly rather tha
 
 ## References
 
-- [V10 decision contract](references/consequence-policy-v10.md)
+- [V10.1 decision contract](references/consequence-policy-v10.1.md)
 - [V10 runtime](references/runtime-v10.md)
 - [V10 semantic execution contract](references/runtime-v10-semantic.md)
 - [Benchmark review](references/benchmark-review.md)

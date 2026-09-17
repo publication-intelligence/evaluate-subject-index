@@ -5,6 +5,8 @@ Review binds exact overlay proposal bytes, changed IDs and population accounting
 """
 from copy import deepcopy
 from datetime import datetime
+import hashlib
+import json
 from pathlib import Path
 import study_comparison as study
 from schema_validation import schema_errors
@@ -13,9 +15,35 @@ CLAUSES = ('IPDF-GOV-02', 'IPDF-ANA-06', 'IPDF-VOC-01', 'IPDF-VOC-02')
 
 
 def population(benchmark):
-    return {family: [{'id': row[id_key], 'weight': row.get('priority') if family == 'subjects' else 1}
-                     for row in benchmark[family]]
-            for family, id_key in (('subjects', 'subject_id'), ('reader_tasks', 'task_id'))}
+    subjects = [{'id': row['subject_id'], 'weight': row.get('priority')} for row in benchmark['subjects']]
+    tasks = [{'id': row['task_id'], 'weight': 1} for row in benchmark['reader_tasks']]
+    treatments = []
+    for subject in benchmark['subjects']:
+        seen = set()
+        for evidence in subject['evidence']:
+            locator_class = evidence.get('locator_class', 'supporting')
+            unit = (evidence['document_page'], locator_class)
+            if locator_class == 'incidental' or unit in seen:
+                continue
+            seen.add(unit)
+            payload = json.dumps({'subject_id': subject['subject_id'], 'document_page': unit[0],
+                                  'locator_class': unit[1]}, sort_keys=True, separators=(',', ':')).encode()
+            treatments.append({'id': 'TREAT-' + hashlib.sha256(payload).hexdigest()[:12].upper(), 'weight': 1})
+    obligations = ([{'id': 'SUBJECT:' + row['id'], 'weight': row['weight']} for row in subjects]
+                   + [{'id': 'TASK:' + row['id'], 'weight': row['weight']} for row in tasks]
+                   + [{'id': 'TREATMENT:' + row['id'], 'weight': row['weight']} for row in treatments])
+    return {'subjects': subjects, 'reader_tasks': tasks, 'treatments': treatments,
+            'weighted_access_obligations': obligations}
+
+
+def reconciliation(before, after):
+    rows = []
+    for family in before:
+        old = {row['id'] for row in before[family]}; new = {row['id'] for row in after[family]}
+        rows.append({'family': family, 'before_count': len(old), 'after_count': len(new),
+                     'delta': len(new) - len(old), 'retained_ids': sorted(old & new),
+                     'added_ids': sorted(new - old), 'retired_ids': sorted(old - new)})
+    return rows
 
 
 def evidence_ids(value):
@@ -92,6 +120,13 @@ def apply_overlay(base, overlay):
             rows[matches[0]] = new
     validate_facets(result)
     study.require(overlay['after_population'] == population(result), 'Access overlay after population differs')
+    expected_reconciliation = reconciliation(overlay['before_population'], overlay['after_population'])
+    supplied = overlay['denominator_reconciliation']
+    study.require([{k:v for k,v in row.items() if k != 'explanation'} for row in supplied] == expected_reconciliation,
+                  'Access overlay denominator reconciliation does not reconstruct')
+    for row in supplied:
+        if row['before_count'] and row['after_count'] * 100 < row['before_count'] * 85:
+            study.require(row['explanation'].strip(), 'A population reduction of more than 15% requires an explanation')
     # Existing benchmark validators enforce subject/task structure, unique IDs,
     # source spans and relationship references after retirement/addition.
     from benchmark_review_cli import final_benchmark_structure_errors
@@ -122,7 +157,8 @@ def validate_access(lock, base, root):
     study.require(review['overlay_file_sha256'] == access['overlay']['sha256'] and review['overlay_sha256'] == overlay['overlay_sha256'], 'Independent review does not bind exact access overlay')
     study.require(review['reviewer_id'] != overlay['author_id'], 'Access overlay requires an independent reviewer')
     study.require(sorted(review['reviewed_delta_ids']) == sorted(row['delta_id'] for row in overlay['deltas']), 'Independent review does not cover every delta')
-    study.require(review['population_sha256'] == study.digest({'before': overlay['before_population'], 'after': overlay['after_population']}), 'Independent review population accounting differs')
+    study.require(review['population_sha256'] == study.digest({'before': overlay['before_population'], 'after': overlay['after_population'],
+                  'reconciliation': overlay['denominator_reconciliation']}), 'Independent review population accounting differs')
     dates = [datetime.fromisoformat(x.replace('Z','+00:00')) for x in (overlay['prepared_at'], review['reviewed_at'], access['frozen_at'])]
     study.require(all(x.utcoffset() is not None for x in dates) and dates == sorted(dates), 'Invalid overlay review/freeze chronology')
     result = apply_overlay(base, overlay)

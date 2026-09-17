@@ -1312,13 +1312,15 @@ def systemic_defect_groups(defects: Sequence[dict[str, Any]]) -> list[dict[str, 
 def navigation_cap_defects(ledgers: dict[str, Any]) -> list[dict[str, Any]]:
     delivered = {row["reference_id"] for row in ledgers["references"] if row.get("judgment") == "unsupported"}
     nodes = {row["node_id"] for row in ledgers["nodes"]}
+    paths = {row.get("path_id") for row in ledgers["locators"] if row.get("path_id")}
     eligible = []
     for defect in ledgers["defects"]:
         if defect.get("dimension_owner") != "findability_navigation" or not material_consequence(defect):
             continue
         ids = set(defect["affected_item_ids"])
         # NODE attachments alone do not prove a delivered destructive route.
-        delivered_route = bool(ids & delivered) or (bool(ids & nodes) and defect["defect_kind"] == "substitutive_see")
+        delivered_route = (bool(ids & delivered) or bool(ids & paths)
+                           or (bool(ids & nodes) and defect["defect_kind"] == "substitutive_see"))
         if defect.get("high_priority_access_destroyed") or delivered_route or delivered_bad_locators(defect, ledgers["locators"]):
             eligible.append(defect)
     return eligible
@@ -1342,8 +1344,12 @@ def essential_cap(missing: int, denominator: int) -> tuple[Decimal, str]:
 
 def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
     optional_map = ledgers["optional_map"]
-    excluded_optional = [item for item in ledgers["subjects"] if item.get("priority") == "optional" and not optional_map[item["subject_id"]]]
-    applicable_records = [item for item in ledgers["subjects"] if item.get("priority") != "optional" or optional_map[item["subject_id"]]]
+    def material_optional_failure(item):
+        return (item.get("severity") in {"major", "critical"} and
+                (item.get("coverage") == "missing" or item.get("stance_preserved") == "no"
+                 or item.get("realistic_first_lookup_success") == "no"))
+    excluded_optional = [item for item in ledgers["subjects"] if item.get("priority") == "optional" and not optional_map[item["subject_id"]] and not material_optional_failure(item)]
+    applicable_records = [item for item in ledgers["subjects"] if item.get("priority") != "optional" or optional_map[item["subject_id"]] or material_optional_failure(item)]
     measured = [item for item in applicable_records if item.get("coverage") in COVERAGE_CREDIT]
     uninspectable = [item for item in applicable_records if item.get("coverage") == "uninspectable"]
     explicit_not_measured = [item for item in applicable_records if item.get("coverage") == "not_measured"]
@@ -1356,7 +1362,7 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         len(measured),
         len(uninspectable),
         len(explicit_not_measured) + len(missing_ids),
-        {"optional_not_frozen_as_scored": len(excluded_optional)},
+        {"optional_not_frozen_as_scored_and_no_material_failure": len(excluded_optional)},
         semantic_unresolved=len(semantic_unknown),
     )
     weight_total = sum((PRIORITY_CREDIT[item["priority"]] for item in measured), ZERO)
@@ -1991,7 +1997,12 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     refs_unknown = [item for item in ledgers["references"] if item.get("judgment") == "uninspectable"]
     refs_explicit_not_measured = [item for item in ledgers["references"] if item.get("judgment") == "not_measured"]
     refs_not_measured = ledgers["reference_not_measured"] + [item["reference_id"] for item in refs_explicit_not_measured]
-    ref_inapplicable = ref_context["status"] == "inapplicable"
+    # A frozen warranted-but-undelivered route is applicable adverse evidence;
+    # it must retain the component's 10% weight instead of renormalizing it.
+    ref_inapplicable = (ref_context["status"] == "inapplicable" and
+                        ref_context["warranted_reference_obligation_count"] == 0 and
+                        ledgers["reference_original"] == 0 and
+                        not ref_context["reference_defect_ids"])
     if ref_inapplicable:
         ref_denom = component_denominators("cross_reference_validity", ledgers["reference_original"], 0, 0, 0, 0, {"genuinely_inapplicable": ledgers["reference_original"]}, inapplicable=True)
         ref_central = ref_lower = ref_upper = ZERO

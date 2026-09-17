@@ -66,7 +66,9 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
             if gate == 'GATE-CROSS-REFERENCE' and row['defect_kind'] != 'circular_or_chained_reference': return False
         ids = atomic(row)
         if ids & blocked: return False
-        if gate not in {'GATE-CENTRAL-OMISSION','GATE-CLUTTER','GATE-STRUCTURE'} and ids & owned: return False
+        # Atomic ownership prevents duplicate labels for one predicate.  It does
+        # not erase a separately measured systemic-prevalence consequence.
+        if gate not in {'GATE-CENTRAL-OMISSION','GATE-CLUTTER','GATE-STRUCTURE','GATE-SYSTEMIC-UNSUPPORTED'} and ids & owned: return False
         if gate == 'GATE-SEE-SUBSTITUTION':
             return any(x in delivered and refs.get(x,{}).get('reference_type', refs.get(x,{}).get('target_resolution',{}).get('reference_type')) == 'see' for x in row['affected_item_ids'])
         if gate == 'GATE-SYSTEMIC-UNSUPPORTED':
@@ -93,7 +95,8 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
         # Systemic groups must be formed before ownership filtering. A root
         # containing direct evidence cannot be revived from its residual rows.
         if gate in {'GATE-SYSTEMIC-UNSUPPORTED','GATE-CROSS-REFERENCE','GATE-CLUTTER'}:
-            tainted_roots = {(row.get('root_cause_family'), item.split('-',1)[0], row.get('applicable_count',0)) for row in structure['defects'] if atomic(row) & (direct_owned | blocked) for item in row['affected_item_ids']}
+            ownership_taint = blocked if gate == 'GATE-SYSTEMIC-UNSUPPORTED' else direct_owned | blocked
+            tainted_roots = {(row.get('root_cause_family'), item.split('-',1)[0], row.get('applicable_count',0)) for row in structure['defects'] if atomic(row) & ownership_taint for item in row['affected_item_ids']}
             groups = [g for g in result['systemic_groups'] if (g['root_cause_family'],g['item_family'],g['applicable_count']) not in tainted_roots]
             if gate in {'GATE-SYSTEMIC-UNSUPPORTED','GATE-CLUTTER'}:
                 keep = {x for g in groups for x in g['defect_ids']}

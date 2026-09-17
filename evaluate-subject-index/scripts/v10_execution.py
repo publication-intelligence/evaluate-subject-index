@@ -9,9 +9,9 @@ import study_comparison as study
 from schema_validation import schema_errors
 
 BASELINE='815bcb66d3319d2f730a9645800b304bcbd4b2e9'
-CONTRACT='subject-index-v10-semantic-execution-v1'
+CONTRACT='subject-index-v10-semantic-execution-v2'
 CONSTITUENTS={
- 'subject-index-evaluation-v10-decision-v1':'f812eae0d09b60a4c1e74b1b6b9e6dd5850e088f9f9bb583152e9559f6ee07a9',
+ 'subject-index-evaluation-v10-decision-v2':'058399c34c0a6997965b39fb5906bde3634c2cdd74d3192bdfd6b4e55452512f',
  'subject-index-evaluation-v10-semantic-uncertainty-addendum-v1':'e0f0e91a23274a94e292409b17df53d1b403bd0a52b26e6e7ae84809430c5f76',
  'subject-index-evaluation-v10-semantic-uncertainty-addendum-v2':'fea2a5b87f9e063d28135895fdb7d3637dfe4d2edd294fb7a50fd3aff7009277',
  'subject-index-evaluation-v10-semantic-uncertainty-addendum-v3':'4031abef00cb37508f30c8c89ec5e12592ce89369f144c1473ebc43bf9503a7d',
@@ -64,6 +64,11 @@ def bound_execution(state,state_path):
     benchmark,_=study.registered_document(state,state_path,'benchmark_freeze','source-subject-benchmark-v2')
     lock=study.load_study_binding(state,state_path)
     study.require(inventory==requirement_inventory_provenance(benchmark,bound_amendment(state,state_path,lock)),'Derived requirement inventory provenance differs')
+    if 'defect_reconciliation' in binding:
+        prior=study.bound_document(state_path.parent,binding['prior_structure'])
+        reconciliation=study.bound_document(state_path.parent,binding['defect_reconciliation'])
+        from v10_defect_reconciliation import validate
+        validate(reconciliation,prior,state['candidate']['candidate_sha256'],binding['prior_structure']['sha256'])
     return identity
 
 
@@ -71,6 +76,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state',required=True);parser.add_argument('--compatibility',required=True)
     parser.add_argument('--source-release',required=True);parser.add_argument('--output-dir',required=True)
+    parser.add_argument('--defect-reconciliation')
     args=parser.parse_args()
     from state_cli import evaluation_mutation_lock,save_state,validate_state,now
     from study_cli import record
@@ -85,6 +91,16 @@ def main():
             study.require(out.is_relative_to(root) and out!=root and not out.exists(),'Adoption output must be new inside the evaluation')
             approval=Path(args.compatibility).resolve();release_path=Path(args.source_release).resolve()
             document=study.read(approval);release=study.read(release_path)
+            structure_records=[r for r in state['artifacts'] if r.get('artifact_type')=='structure_audit']
+            prior_structure_path=None;prior_structure=None;reconciliation_path=None
+            if structure_records:
+                study.require(len(structure_records)==1,'Adoption requires one current prior structure audit')
+                prior_structure_path=path.parent/structure_records[0]['path'];prior_structure=study.read(prior_structure_path)
+                from v10_defect_reconciliation import material_ids,validate
+                if material_ids(prior_structure):
+                    study.require(args.defect_reconciliation,'Unchanged-candidate adoption requires prior major/critical defect reconciliation')
+                    reconciliation_path=Path(args.defect_reconciliation).resolve()
+                    validate(study.read(reconciliation_path),prior_structure,state['candidate']['candidate_sha256'],study.file_digest(prior_structure_path))
             # Validate against input bindings before writing anything.
             updated=deepcopy(state)
             updated['schema_version']='subject-index-evaluation-state-v9'
@@ -92,11 +108,16 @@ def main():
                 'source_release':{'path':str(release_path),'sha256':study.file_digest(release_path)}}
             validate_compatibility(document,updated,path,release)
             files={'compatibility.json':approval.read_bytes(),'source-release.json':release_path.read_bytes(),'previous-state.json':path.read_bytes()}
+            if reconciliation_path is not None:
+                files['prior-structure.json']=prior_structure_path.read_bytes()
+                files['defect-reconciliation.json']=reconciliation_path.read_bytes()
             from v10_candidate_access import bound_amendment,requirement_inventory_provenance
             benchmark,_=study.registered_document(state,path,'benchmark_freeze','source-subject-benchmark-v2')
             lock=study.load_study_binding(state,path)
             files['requirement-inventory-provenance.json']=(json.dumps(requirement_inventory_provenance(benchmark,bound_amendment(state,path,lock)),indent=2)+'\n').encode()
             updated['execution_compatibility']={key:{'path':(out/name).relative_to(root).as_posix(),'sha256':hashlib.sha256(files[name]).hexdigest()} for key,name in [('approval','compatibility.json'),('source_release','source-release.json'),('previous_state','previous-state.json'),('requirement_inventory','requirement-inventory-provenance.json')]}
+            if reconciliation_path is not None:
+                updated['execution_compatibility'].update({key:{'path':(out/name).relative_to(root).as_posix(),'sha256':hashlib.sha256(files[name]).hexdigest()} for key,name in [('prior_structure','prior-structure.json'),('defect_reconciliation','defect-reconciliation.json')]})
             stamp=now();removed={'scoring','web_report'}
             updated['artifacts']=[r for r in updated['artifacts'] if r['stage'] not in removed]
             for name,payload in files.items():updated['artifacts'].append(record(root,out/name,payload,'initialize','study_execution_compatibility'))
