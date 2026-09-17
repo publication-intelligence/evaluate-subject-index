@@ -460,7 +460,9 @@ def validate_locator_audit(artifact: dict[str, Any], frozen: dict[str, Any], pac
     require(artifact.get("expected_locator_ids") == expected or set(artifact.get("expected_locator_ids", [])) == set(expected), "locator_denominator_mismatch", "Locator audit expected IDs differ from the exact packet.")
     judgments = artifact["judgments"]
     ids: list[str] = []
-    judgment_counts = Counter({key: 0 for key in sorted(LOCATOR_STATUSES)})
+    from runtime_profile import semantic_uncertainty
+    statuses = LOCATOR_STATUSES | ({'semantic_unresolved','not_kept_subtype_unresolved'} if semantic_uncertainty() else set())
+    judgment_counts = Counter({key: 0 for key in sorted(statuses)})
     severity_counts = Counter({key: 0 for key in sorted(SEVERITIES)})
     error_counts: Counter[str] = Counter()
     for judgment in judgments:
@@ -484,10 +486,14 @@ def validate_locator_audit(artifact: dict[str, Any], frozen: dict[str, Any], pac
     require(not duplicates, "duplicate_locator_assignment", "Locator audit repeats assignment IDs.", duplicates)
     require(set(ids) == set(expected), "missing_locator_assignment", "Locator audit does not judge the exact packet assignment set.", {"missing": sorted(set(expected) - set(ids)), "foreign": sorted(set(ids) - set(expected))})
     completion = artifact["completion"]
+    semantic_count=sum("axis_resolution" in row for row in judgments)
+    if "semantic_unresolved" in completion:
+        require(completion["semantic_unresolved"]==semantic_count,"audit_completion","Semantic completion count does not recompute.")
     require(completion.get("expected") == len(expected) and completion.get("judged") == len(ids) and completion.get("unique") is True and completion.get("complete") is True, "audit_completion", "Locator audit completion denominators do not recompute.")
     return {
         "locator_ids": ids,
         "path_ids": sorted(packet["paths"]),
+        **({"semantic_unresolved_locator_count":semantic_count} if semantic_uncertainty() else {}),
         "judgment_counts": dict(sorted(judgment_counts.items())),
         "severity_counts": dict(sorted(severity_counts.items())),
         "error_code_counts": dict(sorted(error_counts.items())),
@@ -829,6 +835,7 @@ def _replace_complete_batch(
         chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
         require(chunk_id not in seen, "duplicate_chunk", f"More than one replacement audit was supplied for {chunk_id}.")
         seen.add(chunk_id)
+        suffix = "v3" if audit.get("schema_version") == "locator-audit-v3" else "v2" if args.audit_kind == "locator" else "v1"
         destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
         require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")
         record = artifact_record(destination, frozen["root"], stage_name, artifact_type, "private", stamp, digest)
@@ -897,7 +904,7 @@ def command_register_local(args: argparse.Namespace) -> None:
                 source = Path(raw_path).resolve()
                 audit, payload, digest = load_json_snapshot(source, "Candidate audit")
                 chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
-                suffix = "v2" if args.audit_kind == "locator" else "v1"
+                suffix = "v3" if audit.get("schema_version") == "locator-audit-v3" else "v2" if args.audit_kind == "locator" else "v1"
                 stem = "locator-audit" if args.audit_kind == "locator" else "missing-access-audit"
                 destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
                 require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")

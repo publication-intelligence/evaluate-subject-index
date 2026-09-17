@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "v10-semantic-locator-fit-preflight.schema.json",
+  "title": "Native V8 locator-fit preflight",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "validated_complete_path_fit",
+    "invalid_or_contradictory_state",
+    "group_counts",
+    "aggregate_v8_score_available",
+    "prose_inference_used",
+    "semantic_unresolved_after_inspection"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-v10-semantic-locator-fit-preflight-v1"
+    },
+    "validated_complete_path_fit": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/validatedFit"
+      }
+    },
+    "invalid_or_contradictory_state": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "group_counts": {
+      "type": "object",
+      "required": [
+        "validated_complete_path_fit",
+        "invalid_or_contradictory_state",
+        "semantic_unresolved_after_inspection"
+      ],
+      "properties": {
+        "validated_complete_path_fit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid_or_contradictory_state": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantic_unresolved_after_inspection": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "aggregate_v8_score_available": {
+      "const": false
+    },
+    "prose_inference_used": {
+      "const": false
+    },
+    "semantic_unresolved_after_inspection": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/validatedFit"
+      }
+    }
+  },
+  "$defs": {
+    "validatedFit": {
+      "type": "object",
+      "required": [
+        "locator_id",
+        "path_id",
+        "fit_category",
+        "fit_classification_source",
+        "prose_inference_used"
+      ],
+      "properties": {
+        "locator_id": {
+          "type": "string",
+          "pattern": "^LOC-"
+        },
+        "path_id": {
+          "type": "string",
+          "pattern": "^PATH-"
+        },
+        "fit_category": {
+          "enum": [
+            "exact_fit",
+            "material_partial_fit",
+            "material_mismatch",
+            "severe_mismatch",
+            "no_fit",
+            "uninspectable",
+            "semantic_unresolved"
+          ]
+        },
+        "fit_classification_source": {
+          "enum": [
+            "native_complete_path_fit",
+            "native_axis_resolution"
+          ]
+        },
+        "prose_inference_used": {
+          "const": false
+        },
+        "axis_resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "treatment",
+            "complete_path_fit",
+            "keep",
+            "inspection_completed",
+            "reason_category",
+            "rationale"
+          ],
+          "properties": {
+            "treatment": {
+              "enum": [
+                "known",
+                "unresolved"
+              ]
+            },
+            "complete_path_fit": {
+              "enum": [
+                "known",
+                "unresolved"
+              ]
+            },
+            "keep": {
+              "enum": [
+                "known",
+                "unresolved"
+              ]
+            },
+            "inspection_completed": {
+              "const": true
+            },
+            "reason_category": {
+              "enum": [
+                "unresolved_referent",
+                "unresolved_relationship"
+              ]
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "dependent_reference_ids": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^XREF-"
+              }
+            },
+            "judgment_subtype": {
+              "const": "unresolved"
+            }
+          }
+        },
+        "axis_uncertainty_bounds": {
+          "type": "object",
+          "properties": {
+            "treatment": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lower",
+                "upper"
+              ],
+              "properties": {
+                "lower": {
+                  "type": "string"
+                },
+                "upper": {
+                  "type": "string"
+                }
+              }
+            },
+            "complete_path_fit": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lower",
+                "upper"
+              ],
+              "properties": {
+                "lower": {
+                  "type": "string"
+                },
+                "upper": {
+                  "type": "string"
+                }
+              }
+            },
+            "diagnostic": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lower",
+                "upper"
+              ],
+              "properties": {
+                "lower": {
+                  "type": "string"
+                },
+                "upper": {
+                  "type": "string"
+                }
+              }
+            },
+            "keep": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lower",
+                "upper"
+              ],
+              "properties": {
+                "lower": {
+                  "type": "string"
+                },
+                "upper": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "semantic_unknown_axes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "treatment",
+              "complete_path_fit",
+              "keep",
+              "judgment_subtype"
+            ]
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "label": {
+          "const": "Semantically unresolved after inspection"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

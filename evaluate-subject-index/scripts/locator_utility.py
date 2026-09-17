@@ -101,6 +101,11 @@ def _defect_errors(locator_id: str, defects: Iterable[Mapping[str, Any]]) -> lis
 
 
 def combined_state_errors(record: Mapping[str, Any], defects: Iterable[Mapping[str, Any]] = ()) -> list[str]:
+    if 'axis_resolution' in record or record.get('judgment') in {'semantic_unresolved','not_kept_subtype_unresolved'}:
+        from runtime_profile import semantic_uncertainty
+        if not semantic_uncertainty():return ['invalid:semantic_uncertainty_execution_profile_required']
+        from v10_semantic import combined_errors
+        return combined_errors(record,defects)
     required = {"locator_id", "judgment", "treatment_class", "complete_path_fit", "source_scope_status", "error_codes", "severity"}
     errors = [f"missing:{field}" for field in sorted(required - set(record))]
     if errors:
@@ -180,9 +185,13 @@ class LocatorUtilityAssignment:
     disposition_reason: str
     uncertainty_lower: Decimal
     uncertainty_upper: Decimal
+    semantic_axis_resolution: dict | None = None
+    axis_uncertainty_bounds: dict | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
+            **({'axis_resolution':self.semantic_axis_resolution,'axis_uncertainty_bounds':self.axis_uncertainty_bounds} if self.semantic_axis_resolution is not None else {}),
+            **({"keep_decision":"not_kept"} if self.judgment=="not_kept_subtype_unresolved" else {}),
             "locator_id": self.locator_id,
             "judgment": self.judgment,
             "treatment_class": self.treatment_class,
@@ -233,6 +242,9 @@ def assign_locator_utility(record: Mapping[str, Any], defects: Iterable[Mapping[
     errors = combined_state_errors(record, defects)
     if errors:
         raise ValueError(";".join(errors))
+    if 'axis_resolution' in record:
+        from v10_semantic import assign
+        return assign(record,defects)
     locator_id = str(record["locator_id"])
     judgment = str(record["judgment"])
     treatment = str(record["treatment_class"])

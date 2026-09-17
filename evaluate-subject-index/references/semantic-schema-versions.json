@@ -1,0 +1,29 @@
+{
+  "files": {
+    "dimension-calculation-input-v4.schema.json": "dimension-calculation-input-v5.schema.json",
+    "dimension-calculations-v8.schema.json": "dimension-calculations-v9.schema.json",
+    "item-assessments-v9.schema.json": "item-assessments-v10.schema.json",
+    "evaluation-result-v14.schema.json": "evaluation-result-v15.schema.json",
+    "web-report-v12.schema.json": "web-report-v13.schema.json",
+    "v10-projection-metadata-v1.schema.json": "v10-projection-metadata-v2.schema.json",
+    "web-projection-v10.schema.json": "web-projection-v10-semantic.schema.json",
+    "web-collection-v10.schema.json": "web-collection-v10-semantic.schema.json",
+    "v8-locator-fit-preflight.schema.json": "v10-semantic-locator-fit-preflight.schema.json"
+  },
+  "identities": {
+    "subject-index-dimension-calculation-input-v4": "subject-index-dimension-calculation-input-v5",
+    "subject-index-dimension-calculations-v8": "subject-index-dimension-calculations-v9",
+    "subject-index-item-assessments-v9": "subject-index-item-assessments-v10",
+    "subject-index-evaluation-result-v14": "subject-index-evaluation-result-v15",
+    "subject-index-web-report-v12": "subject-index-web-report-v13",
+    "subject-index-v10-projection-metadata-v1": "subject-index-v10-projection-metadata-v2",
+    "ohfr-v10-canonical-web-projection-v1": "ohfr-v10-canonical-web-projection-v2",
+    "ohfr-v10-web-collection-v1": "ohfr-v10-web-collection-v2",
+    "subject-index-v8-locator-fit-preflight-v1": "subject-index-v10-semantic-locator-fit-preflight-v1"
+  },
+  "additional_contracts": {
+    "locator-audit-v3.schema.json": "locator-audit-v3",
+    "candidate-access-review-v10-semantic.schema.json": "subject-index-v10-candidate-access-review-v2",
+    "v10-execution-compatibility.schema.json": "subject-index-v10-execution-compatibility-v1"
+  }
+}

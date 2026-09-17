@@ -9,7 +9,7 @@ V8.2 adds direct destination gates without changing ordinary scores or ceilings.
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, semantic_uncertainty, versioned_cli, migration_module
 
 import argparse
 import hashlib
@@ -103,6 +103,7 @@ def _deterministic_fit_record(
         "path_id": locator.get("path_id"),
         "fit_category": assignment["fit_category"],
         "fit_classification_source": assignment["fit_classification_source"],
+        **({"semantic_unknown_axes":[a for a in ("treatment","complete_path_fit","keep","judgment_subtype") if locator["axis_resolution"].get(a)=="unresolved"],"label":"Semantically unresolved after inspection"} if "axis_resolution" in locator else {}),
         "prose_inference_used": False,
     }
 
@@ -245,11 +246,13 @@ def locator_fit_preflight(
         "Every frozen locator record must appear exactly once in a V8 fit-preflight group.",
     )
     return {
-        "schema_version": "subject-index-v8-locator-fit-preflight-v1",
-        "validated_complete_path_fit": deterministic,
+        "schema_version": runtime_identity("subject-index-v8-locator-fit-preflight-v1"),
+        "validated_complete_path_fit": [r for r in deterministic if "semantic_unknown_axes" not in r],
+        **({"semantic_unresolved_after_inspection":[r for r in deterministic if "semantic_unknown_axes" in r]} if semantic_uncertainty() else {}),
         "invalid_or_contradictory_state": invalid,
         "group_counts": {
-            "validated_complete_path_fit": len(deterministic),
+            "validated_complete_path_fit": sum("semantic_unknown_axes" not in r for r in deterministic),
+            **({"semantic_unresolved_after_inspection":sum("semantic_unknown_axes" in r for r in deterministic)} if semantic_uncertainty() else {}),
             "invalid_or_contradictory_state": len(invalid),
         },
         "aggregate_v8_score_available": False,
@@ -545,9 +548,11 @@ def calculate_reliability(
     audit_mode: str,
 ) -> dict[str, Any]:
     assignments = utility_assignments(ledgers)
+    semantic_rows = [r for r in ledgers["locators"] if "axis_resolution" in r] if semantic_uncertainty() else []
+    semantic_keep = [r for r in semantic_rows if r["axis_resolution"]["keep"] == "unresolved"]
     by_id = {item["locator_id"]: item for item in assignments}
     measured_locators = [
-        item for item in ledgers["locators"] if item.get("judgment") in {"supported", "partially_supported", "unsupported"}
+        item for item in ledgers["locators"] if item.get("judgment") in {"supported", "partially_supported", "unsupported", *({"not_kept_subtype_unresolved"} if semantic_uncertainty() else set())}
     ]
     uninspectable_locators = [
         item for item in ledgers["locators"] if item.get("judgment") == "uninspectable"
@@ -561,6 +566,7 @@ def calculate_reliability(
         len(uninspectable_locators),
         len(locator_not_measured),
         {},
+        semantic_unresolved=len(semantic_keep),
     )
 
     measured_treatments = [
@@ -586,15 +592,15 @@ def calculate_reliability(
         {},
     )
 
-    assessed_assignments = [by_id[item["locator_id"]] for item in measured_locators]
+    assessed_assignments = assignments if semantic_rows else [by_id[item["locator_id"]] for item in measured_locators]
     diagnostic_numerator = sum(
-        (core.decimal_value(item["diagnostic_credit"]) for item in assessed_assignments), ZERO
+        (core.decimal_value(item["diagnostic_credit"]) for item in assessed_assignments if item["diagnostic_credit"] is not None), ZERO
     )
     treatment_numerator = sum(
-        (core.decimal_value(item["treatment_score"]) for item in assessed_assignments), ZERO
+        (core.decimal_value(item["treatment_score"]) for item in assessed_assignments if item["treatment_score"] is not None), ZERO
     )
     fit_numerator = sum(
-        (core.decimal_value(item["fit_score"]) for item in assessed_assignments), ZERO
+        (core.decimal_value(item["fit_score"]) for item in assessed_assignments if item["fit_score"] is not None), ZERO
     )
     supported = sum(item["judgment"] == "supported" for item in measured_locators)
     found = sum(item["status"] == "found" for item in measured_treatments)
@@ -605,7 +611,7 @@ def calculate_reliability(
     keep_precision = core.rate(supported, assessable)
     recall = core.rate(found, len(measured_treatments))
 
-    unknown_loc = len(uninspectable_locators) + len(locator_not_measured)
+    unknown_loc = len(uninspectable_locators) + len(locator_not_measured) + len(semantic_keep)
     unknown_treat = len(uninspectable_treatments) + len(treatment_not_measured)
     locator_bound_denominator = assessable + unknown_loc
     keep_lower = core.rate(supported, locator_bound_denominator)
@@ -710,28 +716,52 @@ def calculate_reliability(
             ),
         ]
 
+    semantic_low=[];semantic_high=[]
+    if semantic_rows:
+        from v10_semantic import resolved_possibilities
+        for row in semantic_rows:
+            worlds=resolved_possibilities(row)
+            def adverse(value):return value['complete_path_fit'] in {'severe_mismatch','no_fit'}
+            semantic_low.append(max(worlds,key=lambda value:(value['judgment']=='unsupported',adverse(value))))
+            semantic_high.append(min(worlds,key=lambda value:(value['judgment']=='unsupported',adverse(value))))
+    semantic_ids={row['locator_id'] for row in semantic_rows}
+    factual=[row for row in measured_locators if row['locator_id'] not in semantic_ids]
+    def patterns(rows):
+        return [r for r in rows if r['judgment']=='unsupported' and r['complete_path_fit'] in {'severe_mismatch','no_fit'} and set(r.get('error_codes',[])) & core.RELIABILITY_CODES]
+    low_pattern=patterns(factual+semantic_low) if semantic_rows else pattern
+    high_pattern=patterns(factual+semantic_high) if semantic_rows else pattern
+    physical_unknown=len(uninspectable_locators)+len(locator_not_measured)
     known_high_misses = [item["treatment_id"] for item in high_measured if item["status"] == "missed"]
     known_pattern_ids = [item["locator_id"] for item in pattern]
     central_caps = caps(high_found, len(high_measured), len(pattern), assessable, len(pattern_units), known_high_misses, known_pattern_ids)
     lower_caps = caps(
         high_found,
         len(high_measured) + len(high_unknown) + len(high_not_measured_ids),
-        len(pattern) + unknown_loc,
+        len(low_pattern) + physical_unknown,
         assessable + unknown_loc,
-        len(pattern_units | unknown_locator_units),
+        len({r.get("_source_unit_id") for r in low_pattern if r.get("_source_unit_id")} | unknown_locator_units),
         known_high_misses + [item["treatment_id"] for item in high_unknown] + high_not_measured_ids,
-        known_pattern_ids + [item["locator_id"] for item in uninspectable_locators] + locator_not_measured,
+        [r["locator_id"] for r in low_pattern] + [item["locator_id"] for item in uninspectable_locators] + locator_not_measured,
     )
     upper_caps = caps(
         high_found + len(high_unknown) + len(high_not_measured_ids),
         len(high_measured) + len(high_unknown) + len(high_not_measured_ids),
-        len(pattern),
+        len(high_pattern),
         assessable + unknown_loc,
-        len(pattern_units),
+        len({r.get("_source_unit_id") for r in high_pattern if r.get("_source_unit_id")}),
         known_high_misses,
-        known_pattern_ids,
+        [r["locator_id"] for r in high_pattern],
     )
 
+    if semantic_rows:
+        critical_candidates=core.defect_subset(ledgers,'page_reference_reliability',severities={'critical'},kinds={'fabricated_locator','nonexistent_locator','out_of_scope_locator'})
+        for cap_rows,witness in ((lower_caps,factual+semantic_low),(upper_caps,factual+semantic_high)):
+            for cap in cap_rows:
+                if cap['cap_id'] not in {'reliability.major_delivered_no_fit','reliability.critical_locator'}:continue
+                candidates=critical_candidates if cap['cap_id']=='reliability.critical_locator' else ledgers['defects']
+                qualified=[r for r in candidates if core.material_consequence(r) and core.delivered_bad_locators(r,witness)]
+                cap['triggered']=bool(qualified);cap['observed']={'defect_count':len(qualified)}
+                cap['affected_evidence_ids']=[r['defect_id'] for r in qualified]
     result = core.finish_dimension(
         "page_reference_reliability",
         [keep_denom, recall_denom],
@@ -743,6 +773,12 @@ def calculate_reliability(
         upper_caps,
         audit_mode,
     )
+    if semantic_rows:
+        def cap_outcome(rows):return [(r['cap_id'],r['triggered'],r['maximum_percentage']) for r in rows]
+        stable_caps=cap_outcome(lower_caps)==cap_outcome(upper_caps)
+        result['missing_data_bounds']['stable_cap_outcome']=stable_caps
+        if not stable_caps:
+            result.update(status='not_scored_insufficient_evidence',dimension_percentage=None,weighted_contribution=None)
     result["formula_id"] = f"{CALCULATION_PROFILE}:page_reference_reliability"
     result["input_roles"] = ["locator_audit", "missing_access_audit", "structure_audit"]
 
@@ -756,8 +792,14 @@ def calculate_reliability(
             return "uninspectable"
         if item["disposition"] == "not_measured":
             return "not_measured"
+        if item[field] is None and item["disposition"] == "semantic_unresolved":return "semantic_unresolved"
         return str(item[field])
 
+    if semantic_rows:
+        treatment_tiers += ('semantic_unresolved',)
+        fit_tiers += ('semantic_unresolved',)
+        diagnostic_values += ('semantic_unresolved',)
+        rating_values += ('semantic_unresolved',)
     treatment_counts = _complete_counts((item["treatment_category"] for item in assignments), treatment_tiers)
     fit_counts = _complete_counts((item["fit_category"] for item in assignments), fit_tiers)
     diagnostic_counts = _complete_counts(
@@ -770,7 +812,7 @@ def calculate_reliability(
     )
     result["raw_status_counts"] = {
         "locator_support": dict(Counter(item["judgment"] for item in ledgers["locators"])),
-        "locator_treatment_class": dict(Counter(item.get("treatment_class") for item in ledgers["locators"])),
+        "locator_treatment_class": dict(Counter(item.get("treatment_class") or "semantic_unresolved" for item in ledgers["locators"])),
         "treatment_tier": treatment_counts,
         "fit_tier": fit_counts,
         "diagnostic_credit": diagnostic_counts,
@@ -860,9 +902,9 @@ def calculate_reliability(
         "not_measured_locator_count": len(locator_not_measured),
         "counts_by_judgment": _complete_counts(
             (item.get("judgment") for item in ledgers["locators"]),
-            ("supported", "partially_supported", "unsupported", "uninspectable"),
+            ("supported", "partially_supported", "unsupported", "uninspectable") + (("semantic_unresolved","not_kept_subtype_unresolved") if semantic_rows else ()),
         ) | {"not_measured": len(locator_not_measured)},
-        "counts_by_treatment_class": dict(sorted(Counter(item.get("treatment_class") for item in ledgers["locators"]).items())) | ({"not_measured": len(locator_not_measured)} if locator_not_measured else {}),
+        "counts_by_treatment_class": dict(sorted(Counter(item.get("treatment_class") or "semantic_unresolved" for item in ledgers["locators"]).items())) | ({"not_measured": len(locator_not_measured)} if locator_not_measured else {}),
         "counts_by_treatment_tier": treatment_counts,
         "counts_by_fit_tier": fit_counts,
         "counts_by_diagnostic_credit_value": diagnostic_counts,
@@ -903,6 +945,9 @@ def calculate_reliability(
         "dimension_weight": result["dimension_weight"],
         "weighted_contribution": result["weighted_contribution"],
     }
+    if semantic_rows:
+        from v10_semantic import apply_axis_diagnostics
+        apply_axis_diagnostics(result,assignments,semantic_rows,semantic_keep)
     return result
 
 
@@ -924,6 +969,9 @@ def calculate_loaded(
         "The frozen ledgers contain invalid or contradictory V8 locator states.",
         fit_preflight["invalid_or_contradictory_state"],
     )
+    execution = (loaded.get("study_identity") or {}).get("execution_contract")
+    if semantic_uncertainty():
+        core.require(execution is not None, "execution_compatibility_required", "Corrected calculations require an explicitly adopted state and reviewed execution binding.")
     calculation_artifacts = deepcopy(loaded["input_artifacts"])
     dimensions = [
         core.calculate_coverage(ledgers, audit_mode),
@@ -1013,6 +1061,9 @@ def calculate_loaded(
         "locator_architecture": deepcopy(architecture),
         "uncertainties": deepcopy(loaded["structure"]["uncertainties"]),
     }
+    if semantic_uncertainty():
+        result["execution_contract"] = deepcopy(execution)
+        result["calculation_id"] = "CALC-" + core.canonical_hash({"baseline_id":result["calculation_id"],"execution_contract":execution})[:12].upper()
     result["calculation_sha256"] = core.canonical_hash(result, "calculation_sha256")
     return result
 
@@ -1053,7 +1104,7 @@ def command_preflight(args: argparse.Namespace) -> None:
             locator_fit_preflight(ledgers, loaded["config"]["audit_mode"])
             if ledgers is not None
             else {
-                "schema_version": "subject-index-v8-locator-fit-preflight-v1",
+                "schema_version": runtime_identity("subject-index-v8-locator-fit-preflight-v1"),
                 "validated_complete_path_fit": [],
                 "invalid_or_contradictory_state": [],
                 "group_counts": {
@@ -1153,7 +1204,7 @@ def _registered_documents(
 ) -> list[tuple[dict[str, Any], dict[str, Any], Path]]:
     records = [
         item for item in state.get("artifacts", [])
-        if item.get("stage") == stage and item.get("schema_version") == schema_version
+        if item.get("stage") == stage and (item.get("schema_version") == schema_version or (semantic_uncertainty() and schema_version == "locator-audit-v2" and item.get("schema_version") == "locator-audit-v3"))
         and (sha256 is None or item.get("sha256") == sha256)
     ]
     core.require(bool(records), "registered_artifact_missing", f"No registered {schema_version} artifact exists for {stage}.")
@@ -1611,6 +1662,7 @@ def _scorecard(calculation: Mapping[str, Any]) -> list[dict[str, Any]]:
             "dimension_percentage": item["dimension_percentage"],
             "weighted_contribution": item["weighted_contribution"],
             "formula_id": item["formula_id"],
+            **({"semantic_uncertainty":deepcopy(item["semantic_uncertainty"])} if item.get("semantic_uncertainty") else {}),
             **({key: item[key] for key in ("substantive_selectivity_percentage", "density_fit_percentage", "substantive_points_out_of_10", "density_points_out_of_5")} if percentage_native() and item["dimension_id"] == "editorial_selectivity" else {}),
         }
         for item in calculation["dimensions"]
@@ -1620,6 +1672,7 @@ def _scorecard(calculation: Mapping[str, Any]) -> list[dict[str, Any]]:
 def _calculation_reference(record: Mapping[str, Any], calculation: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": calculation["schema_version"],
+        **({"execution_contract":deepcopy(calculation["execution_contract"])} if semantic_uncertainty() else {}),
         "artifact_path": record["path"],
         "sha256": record["sha256"],
         "calculation_sha256": calculation["calculation_sha256"],
@@ -1756,6 +1809,8 @@ def _presentation_component(dimension: Mapping[str, Any], component_id: str) -> 
 
 def _presentation_component_state(dimension: Mapping[str, Any], component_id: str) -> str:
     denominator = next((item for item in dimension["denominators"]["components"] if item["component_id"] == component_id), None)
+    if dimension.get("semantic_uncertainty"):
+        return "semantic_unresolved"
     if denominator is None:
         return "not_measured"
     if denominator["genuinely_inapplicable"]:
@@ -1768,7 +1823,7 @@ def _presentation_component_state(dimension: Mapping[str, Any], component_id: st
 
 
 def _presentation_unavailable_label(state: str) -> str:
-    return {"not_applicable": "Not applicable", "uninspectable": "Uninspectable", "not_measured": "Not measured"}[state]
+    return {"not_applicable": "Not applicable", "uninspectable": "Uninspectable", "not_measured": "Not measured", "semantic_unresolved": "Semantically unresolved after inspection"}[state]
 
 
 def _presentation_ratio_metric(metric_id: str, label: str, dimension: Mapping[str, Any], component_id: str) -> dict[str, Any]:
@@ -1791,7 +1846,7 @@ def _presentation_calculation_basis(dimension: Mapping[str, Any]) -> list[dict[s
         value = component["normalized_value"]
         if value is None:
             state = _presentation_component_state(dimension, component["component_id"])
-            lines.append({"equation": f"{label} is {state.replace('_', ' ')}", "kind": "input", "number_scores": []})
+            lines.append({"equation": (f"{label}: {_presentation_unavailable_label(state)}" if state=="semantic_unresolved" else f"{label} is {state.replace(chr(95), chr(32))}"), "kind": "input", "number_scores": []})
             continue
         percentage = core.decimal_text(Decimal(str(value)) * Decimal(100))
         line = {
@@ -1826,7 +1881,7 @@ def _presentation_calculation_basis(dimension: Mapping[str, Any]) -> list[dict[s
             weight = Decimal(numerator) / Decimal(denominator)
             if value is not None and weight:
                 weighted.append((value * Decimal(100), weight))
-        if weighted:
+        if weighted and dimension["pre_cap_percentage"] is not None:
             base = Decimal(str(dimension["pre_cap_percentage"]))
             equation = "Canonical weighted combination = " + " + ".join(
                 f"{core.decimal_text(value)}% * {core.decimal_text(weight)}" for value, weight in weighted
@@ -1838,7 +1893,7 @@ def _presentation_calculation_basis(dimension: Mapping[str, Any]) -> list[dict[s
         lines.append({"equation": f"Canonical pre-cap percentage = {core.decimal_text(value)}%", "kind": "step", "number_scores": [float(value)], "score": float(value)})
 
     applied_cap = dimension["applied_cap"]
-    if applied_cap is not None:
+    if applied_cap is not None and dimension["pre_cap_percentage"] is not None and dimension["dimension_percentage"] is not None:
         pre_cap = Decimal(str(dimension["pre_cap_percentage"]))
         ceiling = Decimal(str(applied_cap["maximum_percentage"]))
         final = Decimal(str(dimension["dimension_percentage"]))
@@ -2038,7 +2093,17 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
         row = audited[locator_id]
         if unknown_ids & {locator_id, row["path_id"]}:
             continue  # Already disclosed as an applicability gap, not a locator judgment.
-        if row["judgment"] == "uninspectable" or row.get("confidence") not in {"high", "medium"} or locator_id in uncertain_locators:
+        semantic = row.get('axis_resolution') if semantic_uncertainty() else None
+        if semantic:
+            unknown_axes=[axis for axis in ('treatment','complete_path_fit','keep','judgment_subtype') if semantic.get(axis)=='unresolved']
+            dependent=set(semantic.get('dependent_reference_ids',[]))
+            if dependent-set(references):
+                block('GATE-ASSESSMENT-UNCERTAINTY-TARGET',dependent-set(references),'Semantic dependency cites an undelivered reference.')
+            blockers.append({'blocker_id':'GATE-ASSESSMENT-LOCATOR-UNCERTAIN','affected_item_ids':sorted({locator_id,row['path_id']} | (dependent & set(references))),
+                             'semantic_unknown_axes':unknown_axes,'dependent_reference_ids':sorted(dependent & set(references)),
+                             'reason':'Semantically unresolved after inspection; only predicates needing an unresolved axis are withheld.'})
+            if set(unknown_axes) & {'keep','complete_path_fit'}:continue
+        if row["judgment"] == "uninspectable" or (not semantic and row.get("confidence") not in {"high", "medium"}) or locator_id in uncertain_locators:
             block("GATE-ASSESSMENT-LOCATOR-UNCERTAIN", [locator_id], "Locator support is uncertain or uninspectable; no candidate-quality gate is inferred.")
             continue
         if row["judgment"] != "unsupported" or row["complete_path_fit"] != "no_fit":
@@ -2226,7 +2291,7 @@ def _projection_metadata(
         "report_id": f"{calculation['evaluation_id']}-{'v10' if is_v10() else 'v9' if percentage_native() else 'v8'}",
         "headline": "Subject-index evaluation",
         "summary": ("V10 percentage evaluation from validated registered artifacts and independently reviewed benchmark access proof." if is_v10() else "V9 percentage evaluation from validated registered artifacts and preserved source proof." if percentage_native() else "Current-V8 source-grounded evaluation from validated registered artifacts."),
-        "interpretation": f"The validated {'V10' if is_v10() else 'V9' if percentage_native() else 'V8'} calculation produced an overall percentage of {calculation['overall_percentage']}%.",
+        "interpretation": ("Semantically unresolved after inspection; no overall percentage is established." if semantic_uncertainty() and calculation["overall_percentage"] is None else f"The validated {'V10' if is_v10() else 'V9' if percentage_native() else 'V8'} calculation produced an overall percentage of {calculation['overall_percentage']}%."),
         "defect_counts": dict(sorted(Counter(item["severity"] for item in structure["defects"]).items())),
         "strengths": deepcopy(structure["strengths"]),
         "defects": deepcopy(structure["defects"]),
@@ -2267,7 +2332,7 @@ def _evaluation_result(
             "rubric_version": calculation["rubric_version"],
             "dimension_calculation_profile": calculation["calculation_profile"],
         },
-        "audit_scope": {"mode": calculation["audit_mode"], "complete": calculation["status"] == "scored"},
+        "audit_scope": {"mode": calculation["audit_mode"], "complete": (calculation["audit_mode"] == "full" and not any(c["not_measured"] for d in calculation["dimensions"] for c in d["denominators"]["components"])) if semantic_uncertainty() else calculation["status"] == "scored"},
         "dimension_calculations": _calculation_reference(calculation_record, calculation),
         "scorecard": _scorecard(calculation),
         "overall_percentage": calculation["overall_percentage"],
@@ -2538,17 +2603,17 @@ def command_score_state(args: argparse.Namespace) -> None:
             root = state_path.parent
             output_dir = _state_output_path(root, args.output_dir)
             outputs = {
-                "input": output_dir / ("dimension-calculation-input.v4.json" if is_v10() else "dimension-calculation-input.v3.json" if percentage_native() else "dimension-calculation-input.v2.json"),
-                "calculation": output_dir / ("dimension-calculations.v8.json" if is_v10() else "dimension-calculations.v7.json" if percentage_native() else "dimension-calculations.v6.json"),
-                "items": output_dir / ("item-assessments.v9.json" if is_v10() else "item-assessments.v8.json" if percentage_native() else "item-assessments.v7.json"),
-                "metadata": output_dir / ("projection-metadata.v10.json" if is_v10() else "projection-metadata.v9.json" if percentage_native() else "projection-metadata.v2.json"),
-                "result": output_dir / ("evaluation-result.v14.json" if is_v10() else "evaluation-result.v13.json" if percentage_native() else "evaluation-result.v12.json"),
+                "input": output_dir / ("dimension-calculation-input.v5.json" if semantic_uncertainty() else "dimension-calculation-input.v4.json" if is_v10() else "dimension-calculation-input.v3.json" if percentage_native() else "dimension-calculation-input.v2.json"),
+                "calculation": output_dir / ("dimension-calculations.v9.json" if semantic_uncertainty() else "dimension-calculations.v8.json" if is_v10() else "dimension-calculations.v7.json" if percentage_native() else "dimension-calculations.v6.json"),
+                "items": output_dir / ("item-assessments.v10.json" if semantic_uncertainty() else "item-assessments.v9.json" if is_v10() else "item-assessments.v8.json" if percentage_native() else "item-assessments.v7.json"),
+                "metadata": output_dir / ("projection-metadata.v10-semantic-v2.json" if semantic_uncertainty() else "projection-metadata.v10.json" if is_v10() else "projection-metadata.v9.json" if percentage_native() else "projection-metadata.v2.json"),
+                "result": output_dir / ("evaluation-result.v15.json" if semantic_uncertainty() else "evaluation-result.v14.json" if is_v10() else "evaluation-result.v13.json" if percentage_native() else "evaluation-result.v12.json"),
             }
             collisions = [str(path) for path in outputs.values() if path.exists()]
             core.require(not collisions, "output_exists", "Refusing to overwrite scoring output.", collisions)
             loaded, inventory, inventory_record, locator_documents, missing_documents, structure_record = _calculation_loaded_from_state(state, state_path, outputs["input"])
             calculation = calculate_loaded(loaded)
-            core.require(calculation["status"] == "scored", "v8_score_incomplete", "Current full-state inputs did not produce a complete score.", calculation["status"])
+            core.require(calculation["status"] == "scored" or (semantic_uncertainty() and any(d.get("semantic_uncertainty") for d in calculation["dimensions"])), "v8_score_incomplete", "Current full-state inputs did not produce a complete score.", calculation["status"])
             core.validate_schema_document(calculation, "dimension-calculations-v6.schema.json", "Generated V8 calculation")
             items = _current_item_assessments(inventory, inventory_record, calculation, loaded["structure"], locator_documents, missing_documents)
             stamp = now()
@@ -2567,6 +2632,7 @@ def command_score_state(args: argparse.Namespace) -> None:
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)
             if loaded.get("study_identity") is not None:
                 result["comparison_key"]["study_identity"] = loaded["study_identity"]
+            core.validate_schema_document(result,"evaluation-result-v12.schema.json","Final bound evaluation result")
             result_payload = _json_bytes(result)
             result_record = _artifact_record(root, outputs["result"], result_payload, stage="scoring", artifact_type="evaluation_result", schema_version=runtime_identity("subject-index-evaluation-result-v12"), stamp=stamp, visibility="public", input_sha256=(calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
             records = [input_record, calculation_record, items_record, metadata_record, result_record]
@@ -2610,7 +2676,7 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
             study_identity = study_comparison.preflight_state(state, state_path, require_density=True)
             core.require(result["comparison_key"].get("study_identity") == study_identity, "study_comparison_stale", "Rescore after changing the study binding; report identity must match current evidence.")
-            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / ("web-report.v12.json" if is_v10() else "web-report.v11.json" if percentage_native() else "web-report.v10.json")))
+            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / ("web-report.v13.json" if semantic_uncertainty() else "web-report.v12.json" if is_v10() else "web-report.v11.json" if percentage_native() else "web-report.v10.json")))
             bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / ("v10-canonical-projection" if is_v10() else "v9-canonical-projection" if percentage_native() else "v8-canonical-projection")))
             if not replacing:
                 core.require(not output.exists() and not bundle_output.exists(), "output_exists", "Refusing to overwrite web report or canonical web projection bundle.", [str(output), str(bundle_output)])

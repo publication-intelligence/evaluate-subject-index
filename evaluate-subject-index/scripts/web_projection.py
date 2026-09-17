@@ -95,21 +95,24 @@ def _public_label(value: Any) -> str:
 
 def public_locator_explanation(assessment: Mapping[str, Any]) -> dict[str, Any]:
     """Replace private locator prose with structured public-safe narration."""
+    semantic=assessment.get("locator_utility",{}).get("disposition")=="semantic_unresolved"
+    def label(value):
+        return "Semantically unresolved after inspection" if semantic and value in (None,"semantic_unresolved") else _public_label(value)
     explanation = deepcopy(assessment["locator_explanation"])
     treatment = explanation["page_treatment"]
     fit = explanation["complete_path_fit"]
     grade = explanation["diagnostic_locator_grade"]["score"]
     credit = explanation["keep_rating_credit"]["credit"]
-    judgment = _public_label(assessment["judgment"])
-    label = assessment["source_page_label"]
+    judgment = label(assessment["judgment"])
+    page_label = assessment["source_page_label"]
     explanation["evidence_summary"] = (
-        f"Page {label}: {judgment}; page treatment {_public_label(treatment['category'])}; "
-        f"complete-path fit {_public_label(fit['category'])}; diagnostic grade {_public_label(grade)}; "
-        f"keep credit {_public_label(credit)}."
+        f"Page {page_label}: {judgment}; page treatment {label(treatment['category'])}; "
+        f"complete-path fit {label(fit['category'])}; diagnostic grade {label(grade)}; "
+        f"keep credit {label(credit)}."
     )
     for axis, title in ((treatment, "Page treatment"), (fit, "Complete-path fit")):
         axis["rationale"] = (
-            f"{title} is {_public_label(axis['category'])} with score {_public_label(axis['score'])} "
+            f"{title} is {label(axis['category'])} with score {label(axis['score'])} "
             f"under rule {axis['rule_id']}."
         )
         axis["rationale_source"] = "mechanical_structured_category_rule"
@@ -120,6 +123,8 @@ def public_locator_assessment(assessment: Mapping[str, Any]) -> dict[str, Any]:
     """Project one private locator assessment without authored evidence prose."""
     public = deepcopy(assessment)
     explanation = public_locator_explanation(assessment)
+    if public.get("locator_utility",{}).get("axis_resolution"):
+        public["locator_utility"]["axis_resolution"]["rationale"] = "Semantically unresolved after inspection"
     public["locator_explanation"] = explanation
     public["summary"] = explanation["evidence_summary"]
     public["popover"]["summary"] = explanation["evidence_summary"]

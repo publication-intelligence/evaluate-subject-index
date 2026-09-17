@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, semantic_uncertainty, versioned_cli, migration_module
 
 import argparse
 from collections import Counter
@@ -124,7 +124,7 @@ def _locator_explanation(
             },
             "diagnostic_locator_grade": {
                 "rule_id": assignment["mapping_rule_id"],
-                "calculation": (
+                "calculation": ("Semantically unresolved after inspection" if assignment["disposition"] == "semantic_unresolved" and diagnostic_score is None else
                     f"min({_score_text(treatment_score)}, {_score_text(fit_score)}) = "
                     f"{_score_text(diagnostic_score)}"
                 ),
@@ -132,7 +132,7 @@ def _locator_explanation(
                 "credit": assignment["diagnostic_credit"],
             },
             "keep_rating_credit": {
-                "keep_decision": assignment["judgment"] == "supported",
+                "keep_decision": None if assignment["judgment"] == "semantic_unresolved" else assignment["judgment"] == "supported",
                 "rule_id": assignment["rating_rule_id"],
                 "credit": assignment["rating_credit"],
             },
@@ -255,6 +255,8 @@ def build_v8_assessments(
         )
         score = assignment["diagnostic_grade"]
         assessment["grade"] = items.grade(score)
+        if assignment["disposition"] == "semantic_unresolved" and score is None:
+            assessment["grade"].update(band="semantic_unresolved",status="semantic_unresolved")
         assessment["dimension_reliability_credit"] = assignment["rating_credit"]
         assessment["locator_utility"] = deepcopy(assignment)
         assessment["locator_explanation"] = explanation
@@ -427,6 +429,7 @@ def build_v8_assessments(
             return "uninspectable"
         if item["disposition"] == "not_measured":
             return "not_measured"
+        if item["disposition"] == "semantic_unresolved" and item[field] is None:return "semantic_unresolved"
         return str(item[field])
 
     result["summary"]["locator_utility_tiers"] = {
@@ -450,7 +453,7 @@ def command_build_assessments(args: argparse.Namespace) -> None:
         locator_documents = []
         for index, stored in enumerate(args.locator_audit or []):
             document = core.load_json(Path(stored).resolve(), f"Locator audit {index}")
-            schema_name = {"locator-audit-v2": "locator-audit-v2.schema.json"}.get(document.get("schema_version"))
+            schema_name = ({"locator-audit-v2": "locator-audit-v2.schema.json"} | ({"locator-audit-v3":"locator-audit-v3.schema.json"} if semantic_uncertainty() else {})).get(document.get("schema_version"))
             core.require(
                 schema_name is not None,
                 "unsupported_locator_audit_schema",

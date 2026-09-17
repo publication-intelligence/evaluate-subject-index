@@ -1,0 +1,681 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "locator-audit-v3.schema.json",
+  "title": "V10 axis-preserving locator audit",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "evaluation_id",
+    "candidate_sha256",
+    "chunk_id",
+    "expected_locator_ids",
+    "judgments",
+    "completion"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "locator-audit-v3"
+    },
+    "evaluation_id": {
+      "type": "string"
+    },
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_sha256": {
+      "type": "string"
+    },
+    "chunk_id": {
+      "type": "string",
+      "pattern": "^CHUNK-"
+    },
+    "expected_locator_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "judgments": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "locator_id",
+              "path_id",
+              "complete_heading_path",
+              "document_page",
+              "source_page_label",
+              "source_scope_status",
+              "treatment_class",
+              "complete_path_fit",
+              "judgment",
+              "evidence_summary",
+              "evidence_ids",
+              "confidence",
+              "error_codes",
+              "severity"
+            ],
+            "properties": {
+              "locator_id": {
+                "type": "string",
+                "pattern": "^LOC-"
+              },
+              "path_id": {
+                "type": "string",
+                "pattern": "^PATH-"
+              },
+              "complete_heading_path": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "document_page": {
+                "type": "integer"
+              },
+              "source_page_label": {
+                "type": "string"
+              },
+              "source_scope_status": {
+                "enum": [
+                  "indexable",
+                  "excluded",
+                  "unavailable",
+                  "ambiguous"
+                ]
+              },
+              "treatment_class": {
+                "enum": [
+                  "substantive",
+                  "passing_mention",
+                  "attribution_only",
+                  "citation_only",
+                  "incidental_example",
+                  "absent",
+                  "unavailable",
+                  "mixed"
+                ]
+              },
+              "complete_path_fit": {
+                "enum": [
+                  "exact_fit",
+                  "material_partial_fit",
+                  "material_mismatch",
+                  "severe_mismatch",
+                  "no_fit",
+                  "uninspectable"
+                ]
+              },
+              "judgment": {
+                "enum": [
+                  "supported",
+                  "partially_supported",
+                  "unsupported",
+                  "uninspectable"
+                ]
+              },
+              "evidence_summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "fit_rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "Public-safe authored rationale for complete-heading-path fit. Required except when substantive treatment and a supported judgment make both axes routinely perfect."
+              },
+              "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^EVID-"
+                },
+                "uniqueItems": true
+              },
+              "confidence": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "error_codes": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "SCP",
+                    "SEL",
+                    "CON",
+                    "STA",
+                    "LOC_POS",
+                    "CMP",
+                    "HED",
+                    "SUB",
+                    "XRF",
+                    "DEN",
+                    "MEC"
+                  ]
+                }
+              },
+              "severity": {
+                "enum": [
+                  "none",
+                  "cosmetic",
+                  "minor",
+                  "major",
+                  "critical"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "judgment": {
+                      "const": "supported"
+                    }
+                  },
+                  "required": [
+                    "judgment"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "complete_path_fit": {
+                      "const": "exact_fit"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "judgment": {
+                      "const": "partially_supported"
+                    }
+                  },
+                  "required": [
+                    "judgment"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "complete_path_fit": {
+                      "const": "material_partial_fit"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "judgment": {
+                      "const": "uninspectable"
+                    }
+                  },
+                  "required": [
+                    "judgment"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "complete_path_fit": {
+                      "const": "uninspectable"
+                    },
+                    "treatment_class": {
+                      "const": "unavailable"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "treatment_class": {
+                      "const": "absent"
+                    }
+                  },
+                  "required": [
+                    "treatment_class"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "complete_path_fit": {
+                      "const": "no_fit"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "not": {
+                    "properties": {
+                      "judgment": {
+                        "const": "supported"
+                      },
+                      "treatment_class": {
+                        "const": "substantive"
+                      },
+                      "source_scope_status": {
+                        "const": "indexable"
+                      },
+                      "error_codes": {
+                        "maxItems": 0
+                      },
+                      "severity": {
+                        "enum": [
+                          "none",
+                          "cosmetic"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "judgment",
+                      "treatment_class",
+                      "source_scope_status",
+                      "error_codes",
+                      "severity"
+                    ]
+                  }
+                },
+                "then": {
+                  "required": [
+                    "fit_rationale"
+                  ]
+                }
+              }
+            ],
+            "additionalProperties": true,
+            "not": {
+              "required": [
+                "axis_resolution"
+              ]
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "locator_id",
+              "path_id",
+              "complete_heading_path",
+              "document_page",
+              "source_page_label",
+              "source_scope_status",
+              "treatment_class",
+              "complete_path_fit",
+              "judgment",
+              "evidence_summary",
+              "evidence_ids",
+              "confidence",
+              "error_codes",
+              "severity",
+              "axis_resolution",
+              "fit_rationale"
+            ],
+            "properties": {
+              "locator_id": {
+                "type": "string",
+                "pattern": "^LOC-"
+              },
+              "path_id": {
+                "type": "string",
+                "pattern": "^PATH-"
+              },
+              "complete_heading_path": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "document_page": {
+                "type": "integer"
+              },
+              "source_page_label": {
+                "type": "string"
+              },
+              "source_scope_status": {
+                "enum": [
+                  "indexable",
+                  "excluded"
+                ]
+              },
+              "treatment_class": {
+                "enum": [
+                  "substantive",
+                  "passing_mention",
+                  "attribution_only",
+                  "citation_only",
+                  "incidental_example",
+                  "absent",
+                  "unavailable",
+                  "mixed",
+                  null
+                ]
+              },
+              "complete_path_fit": {
+                "enum": [
+                  "exact_fit",
+                  "material_partial_fit",
+                  "material_mismatch",
+                  "severe_mismatch",
+                  "no_fit",
+                  "uninspectable",
+                  null
+                ]
+              },
+              "judgment": {
+                "enum": [
+                  "supported",
+                  "partially_supported",
+                  "unsupported",
+                  "uninspectable",
+                  "semantic_unresolved",
+                  "not_kept_subtype_unresolved"
+                ]
+              },
+              "evidence_summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "fit_rationale": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000,
+                "description": "Public-safe authored rationale for complete-heading-path fit. Required except when substantive treatment and a supported judgment make both axes routinely perfect."
+              },
+              "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^EVID-"
+                },
+                "uniqueItems": true
+              },
+              "confidence": {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "error_codes": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "SCP",
+                    "SEL",
+                    "CON",
+                    "STA",
+                    "LOC_POS",
+                    "CMP",
+                    "HED",
+                    "SUB",
+                    "XRF",
+                    "DEN",
+                    "MEC"
+                  ]
+                }
+              },
+              "severity": {
+                "enum": [
+                  "none",
+                  "cosmetic",
+                  "minor",
+                  "major",
+                  "critical"
+                ]
+              },
+              "axis_resolution": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "treatment",
+                  "complete_path_fit",
+                  "keep",
+                  "inspection_completed",
+                  "reason_category",
+                  "rationale"
+                ],
+                "properties": {
+                  "treatment": {
+                    "enum": [
+                      "known",
+                      "unresolved"
+                    ]
+                  },
+                  "complete_path_fit": {
+                    "enum": [
+                      "known",
+                      "unresolved"
+                    ]
+                  },
+                  "keep": {
+                    "enum": [
+                      "known",
+                      "unresolved"
+                    ]
+                  },
+                  "inspection_completed": {
+                    "const": true
+                  },
+                  "reason_category": {
+                    "enum": [
+                      "unresolved_referent",
+                      "unresolved_relationship"
+                    ]
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "dependent_reference_ids": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^XREF-"
+                    }
+                  },
+                  "judgment_subtype": {
+                    "const": "unresolved"
+                  }
+                }
+              },
+              "keep_decision": {
+                "const": "not_kept"
+              }
+            },
+            "additionalProperties": true,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "judgment": {
+                      "const": "not_kept_subtype_unresolved"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "keep_decision"
+                  ],
+                  "properties": {
+                    "axis_resolution": {
+                      "required": [
+                        "judgment_subtype"
+                      ],
+                      "properties": {
+                        "keep": {
+                          "const": "known"
+                        }
+                      }
+                    }
+                  }
+                },
+                "else": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "keep_decision"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "axis_resolution": {
+                            "required": [
+                              "judgment_subtype"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "completion": {
+      "type": "object",
+      "required": [
+        "expected",
+        "judged",
+        "unique",
+        "complete"
+      ],
+      "properties": {
+        "expected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "judged": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status_counts": {
+          "$ref": "#/$defs/locatorStatusCounts"
+        },
+        "severity_counts": {
+          "$ref": "#/$defs/severityCounts"
+        },
+        "error_code_counts": {
+          "$ref": "#/$defs/errorCodeCounts"
+        },
+        "semantic_unresolved": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "locatorStatusCounts": {
+      "type": "object",
+      "properties": {
+        "supported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partially_supported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsupported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semantic_unresolved": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "severityCounts": {
+      "type": "object",
+      "properties": {
+        "none": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cosmetic": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "major": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "errorCodeCounts": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "SCP",
+          "COV",
+          "SEL",
+          "CON",
+          "STA",
+          "LOC_POS",
+          "LOC_NEG",
+          "CMP",
+          "HED",
+          "SUB",
+          "XRF",
+          "DEN",
+          "MEC"
+        ]
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    }
+  },
+  "additionalProperties": true
+}

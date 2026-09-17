@@ -121,3 +121,10 @@ independently reviewed, candidate-blind benchmark-access amendment and lock v3.
 Never infer activation, actual amendment freeze, candidate execution, or publication
 from implementation approval. Native V10 human release decisions remain separately
 bound artifacts and never change machine score, gate, validity, or readiness facts.
+
+For explicitly reviewed semantic-uncertainty correction adoption, read
+[the semantic execution contract](references/runtime-v10-semantic.md) and use
+`scripts/v10_semantic_cli.py`. This successor preserves known axes, separates
+inspected semantic uncertainty from physical uninspectability, and requires an
+explicit execution-compatibility binding. It does not activate itself or alter
+frozen source history.

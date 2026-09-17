@@ -123,3 +123,8 @@ V10 is available for coordinated implementation review through `v10_cli.py`.
 See [the V10 runtime contract](evaluate-subject-index/references/runtime-v10.md)
 for its independently reviewed benchmark-access amendment, separate quality and
 validity outcomes, and execution hold. Default V8.2 and explicit V9 remain intact.
+
+The separately selected [V10 semantic correction](evaluate-subject-index/references/runtime-v10-semantic.md)
+is available for coordinated review through `v10_semantic_cli.py`. It preserves
+known evidence axes and binds successor execution explicitly; it does not change
+the default or baseline V10 runtime.

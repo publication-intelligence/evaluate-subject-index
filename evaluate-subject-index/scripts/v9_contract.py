@@ -55,7 +55,7 @@ def density_errors(density):
     return errors
 
 
-def contract_errors(document):
+def contract_errors(document, *, allow_semantic=False):
     errors = []
     if document.get('schema_version') == 'ohfr-v9-canonical-web-projection-v1':
         views = document['score_views']
@@ -81,6 +81,12 @@ def contract_errors(document):
                 errors.extend(f'{path}: {error}' for error in density_errors(value['details']))
             if value.get('dimension_id') == 'editorial_selectivity' and ('post_cap_percentage' in value or 'substantive_selectivity_percentage' in value):
                 s, d = value['substantive_selectivity_percentage'], value['density_fit_percentage']
+                if allow_semantic and s is None and value.get('semantic_uncertainty'):
+                    if value['substantive_points_out_of_10'] is not None or value.get('post_cap_percentage',value.get('dimension_percentage')) is not None:
+                        errors.append(f'{path}: unresolved selectivity cannot assert central points or percentage')
+                    if Decimal(value['density_points_out_of_5']) != Decimal(d)*5/100:
+                        errors.append(f'{path}: density contribution does not reconstruct')
+                    return
                 if Decimal(value['substantive_points_out_of_10']) != Decimal(s) * 10 / 100 or Decimal(value['density_points_out_of_5']) != Decimal(d) * 5 / 100:
                     errors.append(f'{path}: selectivity point contributions do not reconstruct')
                 percentage = value.get('post_cap_percentage', value.get('dimension_percentage'))
