@@ -141,9 +141,16 @@ def validate_review(document, *, state, state_path, benchmark, lock, structure_p
                     affected.update(p['path_id'] for p in inventory['paths'] if fid in p.get('node_ids',[]))
             unresolved.append({'blocker_id':'GATE-ASSESSMENT-ACCESS-REVIEW','affected_item_ids':sorted(affected),
                                'reason':f"Unresolved factual review of {row['requirement_kind']} {row['requirement_id']} under {row['parent_id']}; private review rationale retained in the bound receipt."})
-    benchmark_subjects={row['subject_id']:row for row in benchmark['subjects']}
     for (kind,parent_id),parent_rows in rows_by_parent.items():
-        if kind!='subject' or len(parent_rows)<2 or benchmark_subjects[parent_id].get('priority')!='essential':
+        if (kind=='subject' and subjects[parent_id].get('realistic_first_lookup_success')=='no'
+                and any('realistic_first_lookup_success' in row['judgment_fields'] for row in parent_rows)):
+            matches=[row for row in defects.values() if row.get('dimension_owner')=='findability_navigation'
+                     and parent_id in row.get('affected_item_ids',[])]
+            study.require(matches,'Failed realistic first lookup requires a subject-bound findability defect')
+            if subjects[parent_id].get('severity') in {'major','critical'}:
+                study.require(any(row.get('severity') in {'major','critical'} and any(str(x).startswith('PATH-') for x in row.get('affected_item_ids',[])) for row in matches),
+                              'Material first-lookup failure requires a material findability defect bound to its delivered PATH')
+        if kind!='subject' or len(parent_rows)<2:
             continue
         parent=subjects[parent_id]
         if parent.get('coverage')!='complete':
@@ -202,4 +209,5 @@ def main():
     except (ValueError,KeyError,TypeError,OSError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)}));raise SystemExit(1)
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    __import__('runtime_profile').require_public_cli();main()

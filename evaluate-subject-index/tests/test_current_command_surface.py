@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -162,12 +163,18 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             self.assertEqual("subject-index-evaluation-policy-v7", policy["schema_version"])
             self.assertEqual("subject-index-standard-policy-v10", policy["policy_profile"]["id"])
             self.assertEqual("subject-index-evaluation-v10-decision-v3", policy["v10_contract"]["contract_id"])
+            self.assertEqual("779fb8ffb21bc17fe87a23ee9160a124e013a094c08280b7bdb26fef40d2da50", policy["v10_contract"]["contract_sha256"])
             self.assertTrue({"GATE-WRONG-LOCATOR", "GATE-BROKEN-REFERENCE"} <= {row["gate_id"] for row in policy["critical_gates"]})
             self.assertNotIn("standard_policy_sha256", policy["policy_profile"])
 
     def test_v10_is_the_only_public_runtime_and_initializes_natively(self) -> None:
         self.assertFalse((SCRIPTS / "v9_cli.py").exists())
         self.assertFalse((SCRIPTS / "v10_semantic_cli.py").exists())
+        self.assertFalse((SCRIPTS / "v10_migration_cli.py").exists())
+        direct_env=dict(os.environ);direct_env.pop('ESI_FROZEN_TEST_CLI',None)
+        direct=subprocess.run([sys.executable,str(SCRIPTS/'policy_cli.py'),'--help'],text=True,capture_output=True,env=direct_env)
+        self.assertNotEqual(0,direct.returncode)
+        self.assertIn('use scripts/v10_cli.py',direct.stdout+direct.stderr)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "source.pdf"

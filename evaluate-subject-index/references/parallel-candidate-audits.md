@@ -7,7 +7,7 @@ Locator and missing-access audits can be divided among chats by frozen chunk own
 First create the frozen packets from registered local artifacts:
 
 ```bash
-python scripts/page_chunk_cli.py prepare-locator-chunks \
+python scripts/v10_cli.py page-chunks prepare-locator-chunks \
   --state evaluation-state.json \
   --normalized-candidate candidate/candidate-index.json \
   --page-map page-map.json \
@@ -29,7 +29,7 @@ the packet, candidate, evaluation, stable IDs, and exact owned denominator.
 Validate without mutation:
 
 ```bash
-python scripts/parallel_candidate_audit_cli.py validate-audits \
+python scripts/v10_cli.py audit-candidate validate-audits \
   --audit-kind locator \
   --audit locator-audit.CHUNK-001.json \
   --locator-packet locator-packet.CHUNK-001.json \

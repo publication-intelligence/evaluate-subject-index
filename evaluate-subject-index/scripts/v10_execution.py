@@ -68,7 +68,8 @@ def bound_execution(state,state_path):
         prior=study.bound_document(state_path.parent,binding['prior_structure'])
         reconciliation=study.bound_document(state_path.parent,binding['defect_reconciliation'])
         from v10_defect_reconciliation import validate
-        validate(reconciliation,prior,state['candidate']['candidate_sha256'],binding['prior_structure']['sha256'])
+        current,_=study.registered_document(state,state_path,'structure_audit','structure-audit-v6')
+        validate(reconciliation,prior,state['candidate']['candidate_sha256'],binding['prior_structure']['sha256'],current)
     return identity
 
 
@@ -137,4 +138,5 @@ def main():
     except (ValueError,KeyError,TypeError,OSError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)}));raise SystemExit(1)
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    __import__('runtime_profile').require_public_cli();main()

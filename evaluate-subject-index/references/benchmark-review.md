@@ -45,16 +45,16 @@ The draft reference carries one selected-artifact SHA-256. The screen inventory 
 Use:
 
 ```bash
-python scripts/benchmark_review_cli.py screen \
+python scripts/v10_cli.py benchmark screen \
   --draft source/source-benchmark.draft.v1.json \
   --output validation/source-benchmark-review-inventory.json
 
-python scripts/benchmark_review_cli.py validate-review \
+python scripts/v10_cli.py benchmark validate-review \
   --draft source/source-benchmark.draft.v1.json \
   --inventory validation/source-benchmark-review-inventory.json \
   --review validation/source-benchmark-review.v1.json
 
-python scripts/benchmark_review_cli.py freeze \
+python scripts/v10_cli.py benchmark freeze \
   --state evaluation-state.json \
   --draft source/source-benchmark.draft.v1.json \
   --inventory validation/source-benchmark-review-inventory.json \

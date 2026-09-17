@@ -526,4 +526,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    __import__('runtime_profile').require_public_cli()
     main()

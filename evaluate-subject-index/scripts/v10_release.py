@@ -45,4 +45,5 @@ def main():
     except (ValueError,KeyError,TypeError,OSError) as exc:
         print(json.dumps({'ok':False,'error':str(exc)}));raise SystemExit(1)
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    __import__('runtime_profile').require_public_cli();main()

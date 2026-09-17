@@ -369,4 +369,5 @@ def main():
         print(json.dumps({'ok':False,'error':{'code':'study_comparison_failed','message':str(exc)}},indent=2));raise SystemExit(1)
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    __import__('runtime_profile').require_public_cli();main()

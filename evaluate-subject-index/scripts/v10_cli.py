@@ -30,7 +30,7 @@ def main():
     parser.add_argument("tool", choices=TOOLS)
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    runtime_profile.select_v10_semantic()
+    runtime_profile.activate_public_cli()
     script = Path(__file__).with_name(TOOLS[args.tool])
     sys.argv = [str(script), *args.arguments]
     runpy.run_path(str(script), run_name="__main__")

@@ -54,7 +54,7 @@ def validate_source_policy(lock, release, source_state, path):
 
 
 def migrate_state_identity(state):
-    state['schema_version'] = identity('subject-index-evaluation-state-v6', profile='v10')
+    state['schema_version'] = identity('subject-index-evaluation-state-v6')
     config = state['configuration']
     config['policy_profile'] = identity(v9_migration.SOURCE_PROFILE, profile='v10')
     config['rubric_version'] = identity(SOURCE_IDENTITIES['rubric_version'], profile='v10')

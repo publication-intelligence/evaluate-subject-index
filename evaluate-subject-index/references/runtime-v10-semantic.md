@@ -8,6 +8,20 @@ This review runtime implements the parent V10 decision plus the immutable
 part of the canonical `scripts/v10_cli.py` runtime. There is no separate baseline
 or semantic entrypoint.
 
+Always invoke candidate adoption and study commands through `scripts/v10_cli.py`.
+Importing `v10_migration.policy_content` directly before runtime selection is an
+internal-module misuse and deliberately yields the historical non-semantic V10
+identity; it is not a supported candidate execution path.
+
+The current execution safeguards conserve every prior major/critical finding
+and every prior warranted-reference defect against live successor IDs or
+evidence-backed resolution. They require a findability defect for failed first
+lookup, coherent access for every multi-facet parent, and exact judgment of any
+delivered reference whose inventory target is unresolved. Confirmed optional
+minor failures enter their dimension without severity escalation. Distributed
+reliability prevalence counts every zero-rating locator. These are dimension and
+audit-integrity consequences only; decision v3 still has no overall-score cap.
+
 ## Adoption
 
 Already frozen studies may carry an execution-compatibility adoption receipt.

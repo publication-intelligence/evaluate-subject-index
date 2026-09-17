@@ -16,7 +16,10 @@ SCRIPTS = completion.SCRIPTS
 
 
 def v10(*args):
-    return subprocess.run([sys.executable,str(SCRIPTS/'v10_migration_cli.py'),*map(str,args)],capture_output=True,text=True)
+    target={'study':'study_cli.py','access-review':'v10_candidate_access.py','score':'dimension_score_v8_cli.py','bundle':'bundle_cli.py'}[args[0]]
+    code="import runpy,sys;from runtime_profile import select_v10;select_v10();sys.argv=[sys.argv[1],*sys.argv[2:]];runpy.run_path(sys.argv[0],run_name='__main__')"
+    return subprocess.run([sys.executable,'-c',code,str(SCRIPTS/target),*map(str,args[1:])],cwd=SCRIPTS.parent,
+                          env={**__import__('os').environ,'ESI_FROZEN_TEST_CLI':'1','PYTHONPATH':'tests:scripts'},capture_output=True,text=True)
 
 
 def rebind(f):
@@ -287,6 +290,9 @@ class V10RuntimeTests(unittest.TestCase):
         for row in receipt['requirements']:row['resulting_parent_judgment']=deepcopy(parent)
         row=receipt['requirements'][0]
         row.update(disposition='reviewed',factual_status='not_satisfied',structure_finding_ids=['NODE-001'])
+        first_lookup=defect('DEFECT-FIRST-LOOKUP','misleading_access_route','SUBJ-001')
+        first_lookup['affected_item_ids'].append('PATH-001')
+        structure['defects'].append(first_lookup)
         for field,component in [('stance_preserved','conceptual_stance_fidelity'),('realistic_first_lookup_success','heading_access_architecture')]:
             row['judgment_fields']=[field]
             for status in ('passes','uninspectable','minor_issues','major_issues','fails'):

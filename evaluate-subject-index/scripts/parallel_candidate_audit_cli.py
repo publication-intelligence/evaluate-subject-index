@@ -622,6 +622,8 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
         require(set(matched).issubset(candidate_path_ids), "matched_path_mismatch", f"Reader task {task_id} matched paths are invalid.")
         if status == "succeeds":
             require(bool(matched), "contradictory_access_judgment", f"Reader task {task_id} succeeds without a matched delivered path.")
+        if status == "fails":
+            require(not matched, "contradictory_access_judgment", f"Reader task {task_id} cannot fail while recording a matched delivered route.")
         severity_counts[result["severity"]] += 1
         task_counts["semantic_unresolved" if status is None else status] += 1
     require(not duplicate_values(task_ids), "duplicate_reader_task_judgment", "Missing-access audit repeats reader tasks.")
@@ -1018,4 +1020,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    __import__('runtime_profile').require_public_cli()
     main()
