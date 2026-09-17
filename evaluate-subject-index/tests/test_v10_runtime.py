@@ -290,9 +290,14 @@ class V10RuntimeTests(unittest.TestCase):
         for row in receipt['requirements']:row['resulting_parent_judgment']=deepcopy(parent)
         row=receipt['requirements'][0]
         row.update(disposition='reviewed',factual_status='not_satisfied',structure_finding_ids=['NODE-001'])
+        row['judgment_fields']=['realistic_first_lookup_success']
         first_lookup=defect('DEFECT-FIRST-LOOKUP','misleading_access_route','SUBJ-001')
-        first_lookup['affected_item_ids'].append('PATH-001')
         structure['defects'].append(first_lookup)
+        row['structure_finding_ids']=['DEFECT-FIRST-LOOKUP']
+        f.f.structure_path.write_text(json.dumps(structure));receipt['structure_binding']['sha256']=study.file_digest(f.f.structure_path)
+        with self.assertRaisesRegex(ValueError,'tested delivered PATH'):validate(receipt)
+        first_lookup['affected_item_ids']=['PATH-001']
+        row['structure_finding_ids']=['NODE-001']
         for field,component in [('stance_preserved','conceptual_stance_fidelity'),('realistic_first_lookup_success','heading_access_architecture')]:
             row['judgment_fields']=[field]
             for status in ('passes','uninspectable','minor_issues','major_issues','fails'):
