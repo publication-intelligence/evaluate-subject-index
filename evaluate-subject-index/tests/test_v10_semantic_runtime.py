@@ -23,6 +23,30 @@ def compatibility(f,revision=None):
 
 
 class SemanticRuntimeTests(unittest.TestCase):
+    def test_material_optional_failure_scores_and_builds_report(self):
+        case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups);f=case.complete_fixture(amendment_style='none')
+        approval,release=compatibility(f)
+        adopted=command('adopt','--state',f.state_path,'--compatibility',approval,'--source-release',release,'--output-dir','semantic-execution')
+        self.assertEqual(0,adopted.returncode,adopted.stdout+adopted.stderr)
+        state=study.read(f.state_path)
+        audit_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='missing_access_audit')
+        audit_path=f.root/audit_record['path'];audit=study.read(audit_path);subject=audit['subject_judgments'][0]
+        subject.update(priority='optional',severity='major',stance_preserved='no',error_codes=['STA'])
+        audit_path.write_text(json.dumps(audit))
+        audit_record.update(sha256=study.file_digest(audit_path),artifact_id=baseline.completion.state_cli.artifact_id(audit_record['path'],study.file_digest(audit_path)))
+        structure_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='structure_audit')
+        structure_path=f.root/structure_record['path'];structure=study.read(structure_path)
+        structure['scoring_context']['optional_subject_scoring']=[{'subject_id':subject['subject_id'],'scored':False,'rule_id':'OPTIONAL-SYNTHETIC'}]
+        structure_path.write_text(json.dumps(structure));structure_record.update(sha256=study.file_digest(structure_path),artifact_id=baseline.completion.state_cli.artifact_id(structure_record['path'],study.file_digest(structure_path)))
+        f.state_path.write_text(json.dumps(state))
+        scored=command('score','score','--state',f.state_path,'--output-dir','scoring-optional')
+        self.assertEqual(0,scored.returncode,scored.stdout+scored.stderr)
+        reported=command('score','build-report','--state',f.state_path)
+        self.assertEqual(0,reported.returncode,reported.stdout+reported.stderr)
+        report=study.read(f.root/'scoring-optional/web-report.v13.json')
+        coverage=next(r for r in report['presentation_summary']['metrics'] if r['metric_id']=='weighted_concept_access_partial_credit')
+        self.assertEqual('1',coverage['denominator_weight'])
+
     def test_public_v8_four_family_migration_then_decision_v3_adoption(self):
         f=baseline.prepare_v10(self)
         template=f.root/'release/public-v7-policy-template.json'
