@@ -1,16 +1,13 @@
-# Explicit V10 evaluation runtime
+# V10 evaluation runtime
 
-V10 is implemented for review only. The adopted boundary is the byte-preserved
+V10 is the only operational evaluation runtime. The adopted boundary is the
 [decision contract](consequence-policy-v10.md), SHA-256
 `f812eae0d09b60a4c1e74b1b6b9e6dd5850e088f9f9bb583152e9559f6ee07a9`.
-Do not activate the runtime, select a real lock, freeze an actual access amendment,
-migrate/evaluate candidates, or deploy a consumer until coordinated review.
-
-Use `scripts/v10_cli.py TOOL ...`; ordinary entrypoints remain V8.2 and
-`v9_cli.py` retains V9 behavior. Runtime selection occurs before workflow imports.
-Fresh source discovery still uses the source-only V8.2 workflow. V10's initial
-study migration accepts an existing V8 candidate state and preserves its exact
-prior bytes. It does not relabel V9 state or old candidate audits.
+Use `scripts/v10_cli.py TOOL ...` for new source discovery, policy creation,
+benchmark review, candidate audit, scoring, reporting, and study comparison.
+New evaluations start directly with V10-native state and policy. Historical
+schema readers exist only to validate already frozen evidence; they are not an
+alternative workflow.
 
 ## Versioned artifacts
 
@@ -18,11 +15,11 @@ prior bytes. It does not relabel V9 state or old candidate audits.
 | --- | --- |
 | Policy / rubric | subject-index-standard-policy-v10 / subject-index-rubric-v10 |
 | Calculation profile | subject-index-dimension-calculation-v9 |
-| Policy / state | subject-index-evaluation-policy-v6 / subject-index-evaluation-state-v8 |
-| Calculation input / calculation | subject-index-dimension-calculation-input-v4 / subject-index-dimension-calculations-v8 |
-| Items / result | subject-index-item-assessments-v9 / subject-index-evaluation-result-v14 |
-| Report | subject-index-web-report-v12 |
-| Projection / collections | ohfr-v10-canonical-web-projection-v1 / ohfr-v10-web-collection-v1 |
+| Policy / state | subject-index-evaluation-policy-v7 / subject-index-evaluation-state-v9 |
+| Calculation input / calculation | subject-index-dimension-calculation-input-v5 / subject-index-dimension-calculations-v9 |
+| Items / result | subject-index-item-assessments-v10 / subject-index-evaluation-result-v15 |
+| Report | subject-index-web-report-v13 |
+| Projection / collections | ohfr-v10-canonical-web-projection-v2 / ohfr-v10-web-collection-v2 |
 | Study lock / typed binding | subject-index-study-benchmark-lock-v3 / retrospective-study-binding-v3.schema.json |
 
 Artifact version suffixes are sequential schema versions, not rubric names.
@@ -43,7 +40,7 @@ lock fields such as `benchmark_access.overlay` and `overlay_sha256` remain stabl
 technical identifiers. Human-facing text calls this a benchmark-access amendment;
 “representation-correction overlay” refers only to candidate display corrections.
 
-Lock v3 retains `release` as the exact V8.2 base freeze and adds:
+Lock v3 retains `release` as the exact original reviewed freeze and adds:
 
 - `source_benchmark_semantic_sha256`: preserved base content;
 - `benchmark_semantic_sha256`: effective V10 content;

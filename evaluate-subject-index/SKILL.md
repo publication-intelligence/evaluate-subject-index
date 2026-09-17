@@ -1,44 +1,56 @@
 ---
 name: evaluate-subject-index
-description: Run repeatable, source-grounded evaluations of finished subject indexes, including benchmark construction or reconciliation, candidate audits, scoring, comparison, reporting, checkpoints, and study closeout.
+description: Run repeatable, source-grounded V10 evaluations of finished subject indexes, including benchmark discovery or reconciliation, candidate audits, scoring, comparison, reporting, checkpoints, and study closeout.
 ---
 
 # Evaluate Subject Index
 
-The default legacy entrypoints remain **V8.2**. For V10 studies, use the explicit V10 runtime described below. Frozen evaluations require explicit migration and new policy/calculation identities.
+Use **V10 only** through `scripts/v10_cli.py`. Historical artifacts may be read as evidence, but all current state, policy, benchmark binding, candidate audit, scoring, reporting, and comparison work must use V10 identities and contracts.
 
-Evaluate one finished subject index against its source and a frozen policy. Use the current V8.2 workflow and create current-schema artifacts.
+## Benchmark discovery and confirmation gate
 
-## Explicit V9 cutover
+Before source-subject discovery, benchmark synthesis or migration, or candidate inspection:
 
-V9 is available through `scripts/v9_cli.py TOOL ...`; existing entrypoints retain V8.2. Read [V9 percentage runtime and migration](references/percentage-runtime-v9.md) when V9 is explicitly selected. V9 changes representation and provenance only. It preserves the reviewed V8.2 source freeze, validates its unchanged state/policy/draft/review/final bytes, and creates separately identified candidate artifacts. Do not relabel or edit source proof, activate an unreviewed runtime, or reuse invalidated candidate audits by copying registrations. This feature does not itself authorize a study cutover.
+1. Search the current evaluation directory and repository, every relevant `evaluation-state.json`, sibling repositories and worktrees, study locks, reviewed releases, checkpoints, and accessible remote branches or releases. Search by schema identity, benchmark ID, source hash, title, edition, and page-map identity rather than filename alone.
+2. Record the searched locations and every plausible benchmark, review ledger, release, and lock. Validate identity and review status before recommending anything.
+3. Present the valid benchmark choices and evidence to the user and explicitly ask which benchmark to use. Wait for confirmation before binding a benchmark or beginning candidate evaluation.
+4. If several benchmarks exist, recommend source-first, candidate-blind reconciliation when appropriate, but do not reconcile or create a successor until the user confirms that direction.
+5. If none is found, explicitly ask whether a benchmark exists elsewhere that the workflow should know about. Wait for the answer. Create a new candidate-blind benchmark only after the user confirms that no existing benchmark should be used, and preserve that confirmation in the workpapers.
+
+Never silently choose a benchmark, create a duplicate, or expose candidate output or scores to benchmark discovery, reconciliation, synthesis, or review.
 
 ## Method
 
-1. Map one-based document pages to source page labels. Store labels as strings and require the user to approve chunk boundaries.
-2. Freeze the standard V8.2 policy, then discover source subjects before exposing the candidate index to the discovery context.
-3. Synthesize, independently review, and freeze the candidate-blind benchmark.
-4. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments from the published layout contract.
-5. Audit locator support by complete heading path, then audit missing access against the frozen benchmark.
-6. Build the native exception-oriented structure ledger only after the locator and missing-access ledgers are complete. Bind its exact node, cross-reference, and locator-bearing-path denominators; omit attested passes; record exceptions, architecture decisions, defects, strengths, and uncertainties.
-7. Calculate the six V8 dimensions from validated ledgers. Do not ask a model to maintain arithmetic or workflow state.
-8. Produce structured JSON, `web-report.v10.json`, and its canonical public web projection bundle.
+1. Initialize one V10 state and map one-based document pages to source page labels. Store labels as strings and obtain approval for chunk boundaries.
+2. Freeze the V10 policy and source scope.
+3. Complete the benchmark discovery and confirmation gate. Reuse, reconcile, or, only after confirmation, synthesize and independently review one candidate-blind benchmark.
+4. Freeze one V10 benchmark release and bind its source, page map, chunks, policy, semantic fingerprint, study lock, runtime, and comparison compatibility identities.
+5. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments.
+6. Audit every locator against the complete delivered heading path, then audit missing access against the frozen benchmark.
+7. Build the exception-oriented structure ledger after locator and missing-access audits are complete. Bind exact denominators and record exceptions, architecture decisions, defects, strengths, and real uncertainties.
+8. Register benchmark-access review, calculate the six V10 dimensions deterministically, build the V10 report and canonical public projection, and run study preflight before comparison assembly.
 
-Use [standard-policy-v8.md](references/standard-policy-v8.md), [judgment-policy-v8.md](references/judgment-policy-v8.md), and [rubric-v8.md](references/rubric-v8.md) for substantive decisions. Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
+Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
 
-## Current command surface
+## V10 command surface
 
-- `scripts/state_cli.py`: initialize, inspect, validate, and advance the single canonical state.
-- `scripts/page_chunk_cli.py`: page mapping, source chunking, and registered-state locator-packet preparation.
-- `scripts/policy_cli.py`: instantiate the standard policy.
-- `scripts/parallel_discovery_cli.py`: validate and register source-discovery chunks.
-- `scripts/benchmark_review_cli.py`: temporary benchmark screening, typed review/freeze, and the narrow reviewed-legacy compatibility import.
-- `scripts/candidate_preparation_cli.py`: validate the published candidate-layout contract, then normalize and locally register candidate preparation.
-- `scripts/parallel_candidate_audit_cli.py`: validate or register locator and missing-access chunks created in separate chats.
-- `scripts/dimension_score_v8_cli.py`: typed structure registration, canonical-state input assembly, deterministic V8 scoring, and web-report projection; low-level preflight and calculation remain available for diagnostics.
-- `scripts/item_grade_v8_cli.py`: low-level current item-projection validation.
-- `scripts/bundle_cli.py`: optional checkpoints, artifact listing, and resume imports.
-- `scripts/study_cli.py`: explicitly authorized retrospective study binding, comparison preflight, and comparison bundle assembly.
+Use `scripts/v10_cli.py TOOL ...` for every user-facing operation:
+
+- `state`: initialize, inspect, validate, and advance canonical state.
+- `policy`: construct the V10 policy.
+- `page-chunks`: page mapping, chunking, and locator-packet preparation.
+- `discover-source`: validate and register source-discovery chunks.
+- `benchmark`: review and freeze the user-confirmed benchmark.
+- `prepare-candidate`: normalize and register the delivered candidate.
+- `audit-candidate`: validate and register locator and missing-access audits.
+- `access-review`: register V10 benchmark-access review.
+- `score`: register structure, calculate, and build the report/projection.
+- `grade`: validate diagnostic item projections.
+- `study`: bind, preflight, and assemble comparable evaluations.
+- `bundle`: create or import checkpoints.
+- `release-decision`: validate separately authorized human release decisions.
+
+Treat the underlying modules as implementation details. Do not invoke legacy wrappers or low-level scripts as an alternative workflow.
 
 ## State and artifacts
 
@@ -52,11 +64,9 @@ Keep source and candidate files restricted. Keep public reports free of source t
 
 Create checkpoints at useful milestones and before a likely conversation or network boundary. Checkpointing is a durability feature, not a mandatory stage gate.
 
-A checkpoint contains the canonical state plus accessible registered artifacts. Portable checkpoints omit restricted files. Import validates archive path safety, member inventory, and the current state shape, but does not require an old archive hash or member hashes to match. After import, reconnect unavailable restricted inputs explicitly and continue from `state_cli.py next`.
+A checkpoint contains the canonical state plus accessible registered artifacts. Portable checkpoints omit restricted files. Import validates archive path safety, member inventory, and the current state shape. After import, reconnect unavailable restricted inputs explicitly and continue from `v10_cli.py state next`.
 
 Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before checkpointing or resuming.
-
-An already frozen, independently reviewed candidate-blind benchmark may bypass repeated discovery and full editorial review only through `benchmark_review_cli.py import-reviewed-legacy`. Read [benchmark-review.md](references/benchmark-review.md) first. The command requires exact legacy release evidence plus a separate current-schema compatibility approval, permits only its enumerated mechanical normalization and policy/release rebinding, and records explicitly that the four imported stages were not rerun. Never author the compatibility approval on the reviewer's behalf.
 
 For authorized comparison of already candidate-visible evaluations, read [Retrospective study binding and comparison](references/study-comparison.md). Preserve both historical freezes and actual candidate visibility; a reviewed release and approved common policy/density lock are required before binding or assembling comparable outputs. This workflow does not select a release or authorize audit transfer.
 
@@ -70,19 +80,19 @@ Branches, pull requests, and chat attachments may be used for transport or revie
 
 Candidate preparation is mechanical and benchmark-blind. Candidate input must match [candidate-layout-extraction.schema.json](references/schemas/candidate-layout-extraction.schema.json); convert it before invoking the skill if necessary. Then run `normalize`, disposition the optional non-empty issues report if one was created, run computed `validate-private`, and `register`. Clean preparation permanently registers only the normalized candidate, fidelity layout extraction, and currently required item inventory. It does not require a publication workflow.
 
-After local registration, run `page_chunk_cli.py prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk, then completes `locator_chunk_preparation`. Routing exceptions write an unregistered diagnostic and leave state unchanged.
+After local registration, run `v10_cli.py page-chunks prepare-locator-chunks` with the canonical state and its registered normalized candidate, page map, chunk manifest, and frozen benchmark. The registered candidate-to-benchmark binding in `evaluation-state.json` is sufficient. Successful preparation writes and registers one frozen packet per manifest chunk, then completes `locator_chunk_preparation`. Routing exceptions write an unregistered diagnostic and leave state unchanged.
 
 Read [candidate-preparation.md](references/candidate-preparation.md) and [parallel-candidate-audits.md](references/parallel-candidate-audits.md).
 
-## Scoring
+## V10 scoring
 
-Native V8 uses evaluation-policy V4, state V6, `structure-audit-v6`, `locator-audit-v2`, calculation input V2, dimension calculations V6, item assessments V7, result V12, projection metadata V2, and web report V10. Every adverse heading-access judgment carries source-linked causal findings, which are reporting provenance and never arithmetic inputs. Every locator audit states `complete_path_fit` directly. Page treatment and complete-path fit remain independent diagnostics combined with `min(T,F)` for the displayed locator grade only. Page-reference Reliability uses binary keep precision: `supported` means keep unchanged and receives 1; `partially_supported` and `unsupported` receive 0. Diagnostic item grades are not a seventh dimension and do not replace the dimension calculation.
+Use [V10 decision contract](references/consequence-policy-v10.md) and [V10 semantic execution contract](references/runtime-v10-semantic.md). Keep score deductions, ceilings, quality gates, validity, assessment sufficiency, and human release decisions separate.
 
-For an authorized retrospective migration, use the schema-defined `retrospective_migration` policy/build-input field and `policy_cli.py build --original-policy`; add `--base-policy` for provenance-only cleanup of a finished V8.2 migration. Read the [migration contract](references/consequence-policy-v8.2.md#retrospective-policy-provenance-contract) first. The current freeze records actual migration visibility; the original candidate-blind freeze and original review/release evidence remain separate preserved provenance. This does not authorize or claim fresh discovery, review, or approval.
+Inspect the exact source and full delivered candidate path before leaving an axis unresolved. When the source is available but the candidate path, locator, or reference is malformed, incomplete, polysemous, or under-specified, judge the candidate as delivered. If the candidate’s intended concept cannot be known, treat that as a severe candidate failure: do not invent intent or convert the defect into neutral uncertainty. Record known `no_fit`, `unsupported`, and `not_kept` outcomes where applicable, and apply every qualifying cap or gate without double counting.
 
-Complete the final stages with `dimension_score_v8_cli.py register-structure`, `score`, and `build-report`. These commands select exact registered current artifacts from canonical state, validate their bytes and bindings, write current-schema outputs, and advance state atomically. Do not complete these stages with generic `state_cli.py set-stage`.
+Reserve uncertainty for source facts that genuinely remain unavailable or unresolved after inspection. Apply singleton-domain and known-nonkeep rules first. A comparative study requiring numeric results is not complete while a required candidate remains indeterminate.
 
-`build-report` is the standard final reporting action. From finalized registered artifacts only, it writes and registers `web-report.v10.json`, `v8-canonical-projection/projection.v1.json`, and the `data/index-records.v1.json`, `data/source-subjects.v1.json`, and `data/density.v1.json` collections. It includes `data/correction-overlay.v1.json` only when one confirmed, self-hashed correction overlay is already registered and bound to the evaluation. With no applicable overlay, omit the file and use the established `correction_outcomes` non-applicability shape. Read [json-contracts-v8.md](references/json-contracts-v8.md) before consuming or adapting the bundle.
+Complete final stages with `v10_cli.py score register-structure`, `score`, and `build-report`. These commands validate exact registered artifacts, advance state atomically, and produce the V10 report and canonical projection. Do not complete typed stages with generic state mutation.
 
 ## Output contract
 
@@ -104,33 +114,14 @@ Represent `not_measured`, `uninspectable`, and `uncertain` explicitly rather tha
 
 ## References
 
-- [workflow.md](references/workflow.md)
-- [storage-and-checkpoints.md](references/storage-and-checkpoints.md)
-- [candidate-preparation.md](references/candidate-preparation.md)
-- [parallel-candidate-audits.md](references/parallel-candidate-audits.md)
-- [benchmark-review.md](references/benchmark-review.md)
-- [page-mapping-and-chunks.md](references/page-mapping-and-chunks.md)
-- [structure-audit-v8.md](references/structure-audit-v8.md)
-- [customer-methodology-v8.md](references/customer-methodology-v8.md)
-- [json-contracts-v8.md](references/json-contracts-v8.md)
-
-## Explicit V10 review runtime
-
-For an explicitly authorized V10 implementation or migration, read
-`references/runtime-v10.md` and the adopted `references/consequence-policy-v10.md`.
-Use `scripts/v10_cli.py`; preserve the V8.2 source proof and require the separate
-independently reviewed, candidate-blind benchmark-access amendment and lock v3.
-Never infer activation, actual amendment freeze, candidate execution, or publication
-from implementation approval. Native V10 human release decisions remain separately
-bound artifacts and never change machine score, gate, validity, or readiness facts.
-
-When a V10 study has an approved runtime, benchmark, and study lock, follow their
-recorded activation status rather than the original implementation hold in the
-design document. Preserve the activation record and exact compatibility identities.
-
-For explicitly reviewed semantic-uncertainty correction adoption, read
-[the semantic execution contract](references/runtime-v10-semantic.md) and use
-`scripts/v10_semantic_cli.py`. This successor preserves known axes, separates
-inspected semantic uncertainty from physical uninspectability, and requires an
-explicit execution-compatibility binding. It does not activate itself or alter
-frozen source history.
+- [V10 decision contract](references/consequence-policy-v10.md)
+- [V10 runtime](references/runtime-v10.md)
+- [V10 semantic execution contract](references/runtime-v10-semantic.md)
+- [Benchmark review](references/benchmark-review.md)
+- [Benchmark reconciliation and study closeout](references/benchmark-reconciliation-and-closeout.md)
+- [Study comparison](references/study-comparison.md)
+- [Workflow](references/workflow.md)
+- [Storage and checkpoints](references/storage-and-checkpoints.md)
+- [Candidate preparation](references/candidate-preparation.md)
+- [Parallel candidate audits](references/parallel-candidate-audits.md)
+- [Page mapping and chunks](references/page-mapping-and-chunks.md)

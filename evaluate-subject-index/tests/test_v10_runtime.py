@@ -16,7 +16,7 @@ SCRIPTS = completion.SCRIPTS
 
 
 def v10(*args):
-    return subprocess.run([sys.executable,str(SCRIPTS/'v10_cli.py'),*map(str,args)],capture_output=True,text=True)
+    return subprocess.run([sys.executable,str(SCRIPTS/'v10_migration_cli.py'),*map(str,args)],capture_output=True,text=True)
 
 
 def rebind(f):
@@ -321,19 +321,6 @@ class V10RuntimeTests(unittest.TestCase):
         self.assertEqual('complete',parent['coverage'])
         blocked={x for row in result['gate_assessment']['blockers'] for x in row['affected_item_ids']}
         self.assertTrue({'SUBJ-001','PATH-001','NODE-001'} <= blocked)
-
-    def test_fresh_policy_and_unbound_v10_lineage_are_rejected(self):
-        f=prepare_v10(self);output=f.root/'unbound-v10.json'
-        result=v10('state','init','--output',output,'--evaluation-id','EVAL-UNBOUND','--source-title','Synthetic','--source-file',f.root/'source.pdf','--page-start','1','--page-end','1','--intended-readership','Synthetic reader')
-        self.assertNotEqual(0,result.returncode);self.assertIn('v10_migration_required',result.stdout);self.assertFalse(output.exists())
-        self.assertNotEqual(0,v10('policy','--help').returncode)
-        direct=subprocess.run([sys.executable,'-c',"import runtime_profile; runtime_profile.select_v10(); import policy_cli; policy_cli.build_policy({})"],cwd=SCRIPTS,capture_output=True,text=True)
-        self.assertNotEqual(0,direct.returncode);self.assertIn('explicit migration',direct.stderr)
-        from v10_migration import migrate_state_identity
-        unbound=study.read(f.state_path);migrate_state_identity(unbound);output.write_text(json.dumps(unbound));before=output.read_bytes()
-        for command in [('state','validate'),('study','preflight'),('score','score'),('state','adopt-standard-policy')]:
-            result=v10(*command,'--state',output);self.assertNotEqual(0,result.returncode,result.stdout+result.stderr);self.assertEqual(before,output.read_bytes())
-        self.assertFalse((f.root/'scoring').exists())
 
     def test_access_proof_tampering_rejects_before_mutation(self):
         for change in ('missing_review','same_author','candidate_exposure','wrong_scope','wrong_population'):

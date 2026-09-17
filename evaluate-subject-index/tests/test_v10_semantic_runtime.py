@@ -11,7 +11,7 @@ from v10_execution import BASELINE,CONTRACT,CONSTITUENTS,payload_fingerprint
 
 
 def command(*args):
-    return subprocess.run([sys.executable,str(SCRIPTS/'v10_semantic_cli.py'),*map(str,args)],capture_output=True,text=True)
+    return subprocess.run([sys.executable,str(SCRIPTS/'v10_cli.py'),*map(str,args)],capture_output=True,text=True)
 
 
 def compatibility(f,revision=None):

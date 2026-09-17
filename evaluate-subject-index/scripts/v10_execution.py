@@ -87,6 +87,7 @@ def main():
             document=study.read(approval);release=study.read(release_path)
             # Validate against input bindings before writing anything.
             updated=deepcopy(state)
+            updated['schema_version']='subject-index-evaluation-state-v9'
             updated['execution_compatibility']={'approval':{'path':str(approval),'sha256':study.file_digest(approval)},
                 'source_release':{'path':str(release_path),'sha256':study.file_digest(release_path)}}
             validate_compatibility(document,updated,path,release)
@@ -104,7 +105,7 @@ def main():
             out.mkdir()
             try:
                 for name,payload in files.items():(out/name).write_bytes(payload)
-                errors,_=validate_state(updated,state_path=path,profile='v10')
+                errors,_=validate_state(updated,state_path=path)
                 study.require(not errors,'Adopted state fails validation: '+str(errors))
                 bound_execution(updated,path)
                 save_state(path,updated)

@@ -2544,7 +2544,13 @@ def _calculation_loaded_from_state(
     state: Mapping[str, Any], state_path: Path, config_path: Path
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, Any]]:
     study_identity = study_comparison.preflight_state(state, state_path, require_density=True)
-    policy, policy_record, policy_path = _registered_documents(state, state_path, stage="define_policy", schema_version=runtime_identity("subject-index-evaluation-policy-v4"), schema_name="evaluation-policy-v4.schema.json")[0]
+    try:
+        policy_entry = _registered_documents(state, state_path, stage="define_policy", schema_version=runtime_identity("subject-index-evaluation-policy-v4"), schema_name="evaluation-policy-v4.schema.json")[0]
+    except core.CalculationError:
+        if not semantic_uncertainty():
+            raise
+        policy_entry = _registered_documents(state, state_path, stage="define_policy", schema_version="subject-index-evaluation-policy-v6", schema_name="evaluation-policy-v6.schema.json")[0]
+    policy, policy_record, policy_path = policy_entry
     validate_v8_policy(policy)
     manifest, manifest_record, manifest_path = _registered_documents(state, state_path, stage="chunk_definition", schema_version="chunk-manifest-v1", schema_name="chunk-manifest.schema.json")[0]
     locator_entries = _registered_documents(state, state_path, stage="locator_audit", schema_version="locator-audit-v2", schema_name="locator-audit-v2.schema.json", many=True)

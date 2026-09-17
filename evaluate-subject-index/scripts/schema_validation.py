@@ -39,6 +39,15 @@ def _schema_store() -> dict[str, dict[str, Any]]:
 def schema_errors(document: Any, schema_name: str, *, profile: str | None = None) -> list[str]:
     """Return deterministic, path-qualified structural errors."""
     requested_schema = schema_name
+    if (
+        (profile or runtime_profile.ACTIVE) == "v10s"
+        and requested_schema in {"evaluation-policy-v4.schema.json", "evaluation-policy-v6.schema.json"}
+        and isinstance(document, dict)
+        and document.get("schema_version") == "subject-index-evaluation-policy-v6"
+    ):
+        # Read-only compatibility for already frozen V10 policies. New policies
+        # are created as V7; preserved V6 bytes remain valid source evidence.
+        profile = "v10"
     if requested_schema == 'locator-audit-v2.schema.json' and (profile or runtime_profile.ACTIVE) == 'v10s' and document.get('schema_version') == 'locator-audit-v2':
         if any('axis_resolution' in row or row.get('judgment') in {'semantic_unresolved','not_kept_subtype_unresolved'} for row in document.get('judgments',[])):
             return ['Semantic uncertainty requires the new locator-audit-v3 identity']

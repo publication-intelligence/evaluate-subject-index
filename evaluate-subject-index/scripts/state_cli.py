@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Track one current V8 subject-index evaluation in one atomic state file."""
+"""Track one V10 subject-index evaluation in one atomic state file."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ REQUIRED_INPUTS = {
     "initialize": ["source file", "source title", "document-page span"],
     "page_mapping": ["source page-label mapping"],
     "chunk_definition": ["expanded page map", "approved chunk ranges"],
-    "define_policy": ["source facts", "page map", "chunk manifest", "standard V8 policy"],
+    "define_policy": ["source facts", "page map", "chunk manifest", "standard V10 policy"],
     "source_chunk_preparation": ["source PDF", "page map", "chunk manifest"],
     "source_subject_discovery": ["source chunks", "sidecars", "policy"],
     "benchmark_synthesis": ["all source-subject chunks"],
@@ -56,10 +56,10 @@ REQUIRED_INPUTS = {
     "locator_audit": ["locator packets", "source chunks"],
     "missing_access_audit": ["benchmark", "normalized candidate", "locator audits"],
     "structure_audit": ["complete candidate audits", "normalized index", "structured heading-access causal findings"],
-    "scoring": ["complete V8 audit ledgers"],
-    "web_report": ["validated V8 result", "V8 item assessments"],
+    "scoring": ["complete V10 audit ledgers"],
+    "web_report": ["validated V10 result", "V10 item assessments"],
 }
-COMPLETION_TESTS = {name: f"A current V8 {name.replace('_', ' ')} artifact is registered." for name in STAGES}
+COMPLETION_TESTS = {name: f"A current V10 {name.replace('_', ' ')} artifact is registered." for name in STAGES}
 COMPLETION_TESTS["initialize"] = "The state file and source identity are recorded."
 
 VALID_STATUSES = {"not_started", "in_progress", "completed", "blocked"}
@@ -197,7 +197,7 @@ def validate_state(
     configuration = state["configuration"]
     expected_identity = {"rubric_version": runtime_identity("subject-index-rubric-v8.2", profile=profile), "dimension_calculation_profile": runtime_identity("subject-index-dimension-calculation-v7", profile=profile)}
     if configuration.get("scoring_identity") != expected_identity:
-        errors.append("configuration.scoring_identity must select the current V8 profile.")
+        errors.append("configuration.scoring_identity must select the current V10 profile.")
 
     stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
     completed_prefix = True
@@ -314,8 +314,8 @@ def state_summary(state: dict[str, Any], state_path: Path | None = None) -> dict
 
 
 def command_init(args: argparse.Namespace) -> None:
-    if percentage_native():
-        fail("v10_migration_required" if is_v10() else "v9_migration_required", "The selected runtime requires an explicit study migration preserving the V8.2 source freeze; initialize and freeze source policy under V8.2.")
+    if percentage_native() and not is_v10():
+        fail("unsupported_runtime", "Only the V10 runtime may initialize a new evaluation.")
     output = Path(args.output).resolve()
     if output.exists() and not args.force:
         fail("state_exists", f"Refusing to overwrite existing state: {output}")
@@ -408,7 +408,7 @@ def command_set_stage(args: argparse.Namespace) -> None:
                 schema_version = document.get("schema_version")
         required_schema = _completion_schema(args.stage) if args.status == "completed" else None
         if required_schema and schema_version != required_schema:
-            fail("current_v8_artifact_required", f"Completing {args.stage} requires {required_schema}.", {"actual": schema_version})
+            fail("current_v10_artifact_required", f"Completing {args.stage} requires {required_schema}.", {"actual": schema_version})
         record = {
             "artifact_id": artifact_id(relative, digest), "stage": args.stage,
             "artifact_type": args.artifact_type or local.stem, "path": relative, "sha256": digest,
@@ -445,8 +445,8 @@ def command_validate(args: argparse.Namespace) -> None:
 
 
 def command_adopt_standard_policy(args: argparse.Namespace) -> None:
-    if percentage_native():
-        fail("v10_migration_required" if is_v10() else "v9_migration_required", "The selected runtime requires an explicit study migration preserving the V8.2 source freeze; initialize and freeze source policy under V8.2.")
+    if percentage_native() and not is_v10():
+        fail("unsupported_runtime", "Only the V10 runtime may adopt the standard policy.")
     state_path = Path(args.state)
     state = load_state(state_path)
     if state.get("stages", {}).get("define_policy", {}).get("status") == "completed":

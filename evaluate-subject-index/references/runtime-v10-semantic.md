@@ -1,22 +1,21 @@
-# Explicit V10 semantic correction
+# V10 semantic execution contract
 
 This review runtime implements the parent V10 decision plus the immutable
 [semantic addendum v1](semantic-uncertainty-addendum-v1.md) and controlling
 [v2 clarification](semantic-uncertainty-addendum-v2.md),
 [v3 singleton rule](semantic-uncertainty-addendum-v3.md) and
-[v4 known-nonkeep representation](semantic-uncertainty-addendum-v4.md). It is selected through
-`scripts/v10_semantic_cli.py`; `v10_cli.py` retains the reviewed 815 behavior.
-Installation, adoption and publication remain separate decisions.
+[v4 known-nonkeep representation](semantic-uncertainty-addendum-v4.md). It is
+part of the canonical `scripts/v10_cli.py` runtime. There is no separate baseline
+or semantic entrypoint.
 
 ## Adoption
 
-First migrate a complete preserved V8 predecessor through the ordinary baseline
-V10 source migration and selected source release. Preserve all prior artifacts.
-Do not run source migration through the semantic CLI or reinitialize a V10 state.
-The correction adopts an already migrated V10 evaluation:
+Already frozen studies may carry an execution-compatibility adoption receipt.
+New studies start directly in the canonical V10 runtime and do not perform this
+historical adoption step. For a preserved study that requires receipt validation:
 
 ```sh
-python scripts/v10_semantic_cli.py adopt \
+python scripts/v10_cli.py adopt \
   --state /evaluation/evaluation-state.json \
   --compatibility /review/execution-compatibility.json \
   --source-release /review/successor-release.json \

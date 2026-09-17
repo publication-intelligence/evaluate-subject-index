@@ -152,16 +152,37 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
                 "deviations": [],
             }))
             result = subprocess.run(
-                [sys.executable, str(SCRIPTS / "policy_cli.py"), "build", "--input", str(source), "--output", str(output)],
+                [sys.executable, str(SCRIPTS / "v10_cli.py"), "policy", "build", "--input", str(source), "--output", str(output)],
                 text=True,
                 capture_output=True,
                 check=False,
             )
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             policy = json.loads(output.read_text())
-            self.assertEqual("subject-index-evaluation-policy-v4", policy["schema_version"])
-            self.assertEqual("subject-index-standard-policy-v8.2", policy["policy_profile"]["id"])
+            self.assertEqual("subject-index-evaluation-policy-v7", policy["schema_version"])
+            self.assertEqual("subject-index-standard-policy-v10", policy["policy_profile"]["id"])
+            self.assertEqual("subject-index-evaluation-v10-decision-v1", policy["v10_contract"]["contract_id"])
             self.assertNotIn("standard_policy_sha256", policy["policy_profile"])
+
+    def test_v10_is_the_only_public_runtime_and_initializes_natively(self) -> None:
+        self.assertFalse((SCRIPTS / "v9_cli.py").exists())
+        self.assertFalse((SCRIPTS / "v10_semantic_cli.py").exists())
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.pdf"
+            source.write_bytes(b"synthetic source")
+            state = root / "evaluation-state.json"
+            result = subprocess.run([
+                sys.executable, str(SCRIPTS / "v10_cli.py"), "state", "init",
+                "--output", str(state), "--evaluation-id", "EVAL-V10-NATIVE",
+                "--source-title", "Synthetic", "--source-file", str(source),
+                "--document-page-start", "1", "--document-page-end", "2",
+                "--intended-readership", "general", "--readership-rationale", "Synthetic test.",
+            ], text=True, capture_output=True, check=False)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            document = json.loads(state.read_text())
+            self.assertEqual("subject-index-evaluation-state-v9", document["schema_version"])
+            self.assertEqual("subject-index-standard-policy-v10", document["configuration"]["policy_profile"])
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
-"""Explicit process-level runtime selection. Existing entrypoints always default to V8.2.
+"""Process-level runtime selection for the canonical V10 workflow.
 
-Only explicit versioned CLIs select successor runtimes, before loading any workflow module. No environment-variable
-switches, source-artifact rewriting, or inference from display labels is allowed.
+The public V10 CLI selects the complete semantic runtime before loading workflow
+modules. Historical profiles remain implementation-only readers for frozen
+artifacts and are not user-facing workflows.
 """
 import sys
 
@@ -64,7 +65,7 @@ def percentage_native():
 
 
 def versioned_cli():
-    return "v10_semantic_cli.py" if semantic_uncertainty() else "v10_cli.py" if is_v10() else "v9_cli.py"
+    return "v10_cli.py"
 
 
 def migration_module():
@@ -130,3 +131,18 @@ def semantic_uncertainty():
 # Only changed candidate/output contracts acquire a successor identity.
 V10S_IDENTITIES = {'subject-index-dimension-calculation-input-v4': 'subject-index-dimension-calculation-input-v5', 'subject-index-dimension-calculations-v8': 'subject-index-dimension-calculations-v9', 'subject-index-item-assessments-v9': 'subject-index-item-assessments-v10', 'subject-index-evaluation-result-v14': 'subject-index-evaluation-result-v15', 'subject-index-web-report-v12': 'subject-index-web-report-v13', 'subject-index-v10-projection-metadata-v1': 'subject-index-v10-projection-metadata-v2', 'ohfr-v10-canonical-web-projection-v1': 'ohfr-v10-canonical-web-projection-v2', 'ohfr-v10-web-collection-v1': 'ohfr-v10-web-collection-v2', 'subject-index-v8-locator-fit-preflight-v1': 'subject-index-v10-semantic-locator-fit-preflight-v1', 'subject-index-dimension-calculation-input-v2': 'subject-index-dimension-calculation-input-v5', 'subject-index-dimension-calculations-v6': 'subject-index-dimension-calculations-v9', 'subject-index-item-assessments-v7': 'subject-index-item-assessments-v10', 'subject-index-evaluation-result-v12': 'subject-index-evaluation-result-v15', 'subject-index-web-report-v10': 'subject-index-web-report-v13', 'subject-index-v8-projection-metadata-v2': 'subject-index-v10-projection-metadata-v2', 'ohfr-v8-canonical-web-projection-v1': 'ohfr-v10-canonical-web-projection-v2', 'ohfr-v8-web-collection-v1': 'ohfr-v10-web-collection-v2'}
 V10S_SCHEMAS = {'dimension-calculation-input-v4.schema.json': 'dimension-calculation-input-v5.schema.json', 'dimension-calculations-v8.schema.json': 'dimension-calculations-v9.schema.json', 'item-assessments-v9.schema.json': 'item-assessments-v10.schema.json', 'evaluation-result-v14.schema.json': 'evaluation-result-v15.schema.json', 'web-report-v12.schema.json': 'web-report-v13.schema.json', 'v10-projection-metadata-v1.schema.json': 'v10-projection-metadata-v2.schema.json', 'web-projection-v10.schema.json': 'web-projection-v10-semantic.schema.json', 'web-collection-v10.schema.json': 'web-collection-v10-semantic.schema.json', 'v8-locator-fit-preflight.schema.json': 'v10-semantic-locator-fit-preflight.schema.json', 'locator-audit-v2.schema.json': 'locator-audit-v3.schema.json'}
+
+# New evaluations start directly in V10-native source state and policy. Existing
+# V10 migration schemas remain readable but are not creation targets.
+V10S_IDENTITIES.update({
+    'subject-index-evaluation-policy-v4': 'subject-index-evaluation-policy-v7',
+    'subject-index-evaluation-policy-v6': 'subject-index-evaluation-policy-v7',
+    'subject-index-evaluation-state-v6': 'subject-index-evaluation-state-v9',
+    'subject-index-evaluation-state-v8': 'subject-index-evaluation-state-v9',
+})
+V10S_SCHEMAS.update({
+    'evaluation-policy-v4.schema.json': 'evaluation-policy-v7.schema.json',
+    'evaluation-policy-v6.schema.json': 'evaluation-policy-v7.schema.json',
+    'evaluation-state.schema.json': 'evaluation-state-v9.schema.json',
+    'evaluation-state-v8.schema.json': 'evaluation-state-v9.schema.json',
+})
