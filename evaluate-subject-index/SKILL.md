@@ -24,11 +24,11 @@ Never silently choose a benchmark, create a duplicate, or expose candidate outpu
 1. Initialize one V10 state and map one-based document pages to source page labels. Store labels as strings and obtain approval for chunk boundaries.
 2. Freeze the V10 policy and source scope.
 3. Complete the benchmark discovery and confirmation gate. Reuse, reconcile, or, only after confirmation, synthesize and independently review one candidate-blind benchmark.
-4. Freeze one V10 benchmark release and bind its source, page map, chunks, policy, semantic fingerprint, study lock, runtime, and comparison compatibility identities.
+4. Freeze one V10 benchmark release and create one shared execution kit containing its source, page map, chunks, policy, semantic fingerprint, study lock, runtime revision and payload, comparison compatibility receipt, density evidence, and a manifest of their exact file hashes. Distribute those exact common bytes to every candidate; candidate workers must not regenerate equivalent-looking locks, policies, density evidence, or compatibility receipts.
 5. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments.
 6. Audit every locator against the complete delivered heading path, then audit missing access against the frozen benchmark.
 7. Build the exception-oriented structure ledger after locator and missing-access audits are complete. Bind exact denominators and record exceptions, architecture decisions, defects, strengths, and real uncertainties.
-8. Register benchmark-access review, calculate the six V10 dimensions deterministically, build the V10 report and canonical public projection, and run study preflight before comparison assembly.
+8. As soon as two candidates have adopted the shared execution kit, run a multi-state study preflight; repeat it with every candidate before scoring. Register benchmark-access review, calculate the six V10 dimensions deterministically, build the V10 report and canonical public projection, and run the final all-candidate preflight before comparison assembly.
 
 Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
 
@@ -75,6 +75,10 @@ For benchmark reconciliation, multi-candidate finalization, artifact preservatio
 ## Parallel chats
 
 Parallel work is divided by deterministic chunk ownership. Workers return complete current-schema JSON artifacts. The coordinator validates the selected files together and registers them in the single state.
+
+For a multi-candidate study, the coordinator owns the shared execution kit and gives every candidate worker its exact manifest and hashes. A worker may author its candidate-specific approval and migrated state, but must not create a new common lock, policy template, density file, compatibility receipt, or runtime selection. Every handoff reports the canonical state path, runtime payload, lock file and semantic hashes, compatibility semantic, score, gates, validity/sufficiency, and final report/projection hashes. A mismatch stops the fan-out before additional scoring.
+
+If the evaluator runtime, semantic policy, benchmark, density map, or consequence contract changes after fan-out, stop every candidate at the same boundary. Rebuild the shared kit once, migrate all candidates to it, and rerun the all-candidate preflight. Do not let candidates independently select the latest revision or mix results from before and after the change.
 
 Branches, pull requests, and chat attachments may be used for transport or review, but GitHub receipts, blob proofs, merge evidence, recovery receipts, and matching checkpoint hashes are not prerequisites for canonical registration. Registration completes an audit stage only when every frozen chunk denominator is covered exactly once.
 
