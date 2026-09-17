@@ -1,0 +1,2652 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "V10 Display-ready V8 report with heading-access causal provenance",
+  "type": "object",
+  "required": [
+    "gate_assessment",
+    "schema_version",
+    "report_id",
+    "headline",
+    "summary",
+    "grade",
+    "scorecard",
+    "calculation_explainer",
+    "precision_diagnostics",
+    "structure_audit",
+    "key_metrics",
+    "density",
+    "gate_status",
+    "strengths",
+    "defects",
+    "examples",
+    "item_grade_index",
+    "locator_explanations",
+    "heading_access_causal_provenance",
+    "score_views",
+    "methodology",
+    "comparability",
+    "disclosures",
+    "limitations",
+    "evidence_index",
+    "method_readiness",
+    "authoritative_evaluation",
+    "human_release_decision",
+    "evaluation_validity"
+  ],
+  "properties": {
+    "gate_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "sufficient",
+            "indeterminate"
+          ]
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "blocker_id": {
+                "type": "string",
+                "pattern": "^GATE-ASSESSMENT-"
+              },
+              "affected_item_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "uniqueItems": true
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "blocker_id",
+              "affected_item_ids",
+              "reason"
+            ]
+          }
+        }
+      },
+      "required": [
+        "status",
+        "blockers"
+      ]
+    },
+    "review_signals": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "evaluation_validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "valid",
+            "indeterminate",
+            "invalid"
+          ]
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "blocker_id": {
+                    "const": "VALIDITY-UNINSPECTABLE"
+                  },
+                  "outcome": {
+                    "const": "indeterminate"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "denominator": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "rate": {
+                    "type": "string",
+                    "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+                  },
+                  "threshold": {
+                    "type": "string",
+                    "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "blocker_id",
+                  "outcome",
+                  "count",
+                  "denominator",
+                  "rate",
+                  "threshold"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "blocker_id": {
+                    "const": "VALIDITY-SOURCE-SPAN"
+                  },
+                  "outcome": {
+                    "const": "invalid"
+                  },
+                  "evidence": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "binding_role": {
+                          "enum": [
+                            "source_identity",
+                            "source_span",
+                            "page_map"
+                          ]
+                        },
+                        "expected": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "observed": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "evidence_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "uniqueItems": true,
+                          "minItems": 1
+                        }
+                      },
+                      "required": [
+                        "binding_role",
+                        "expected",
+                        "observed",
+                        "evidence_ids"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "reason",
+                  "blocker_id",
+                  "outcome",
+                  "evidence"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "blocker_id": {
+                    "const": "VALIDITY-ATTESTATION"
+                  },
+                  "outcome": {
+                    "const": "indeterminate"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "blocker_id",
+                  "outcome"
+                ]
+              }
+            ]
+          }
+        },
+        "used_as_publication_gate": {
+          "const": false
+        }
+      },
+      "required": [
+        "status",
+        "blockers",
+        "used_as_publication_gate"
+      ]
+    },
+    "schema_version": {
+      "const": "subject-index-web-report-v12"
+    },
+    "report_id": {
+      "$ref": "#/$defs/inherited_1"
+    },
+    "headline": {
+      "$ref": "#/$defs/inherited_2"
+    },
+    "summary": {
+      "$ref": "#/$defs/inherited_3"
+    },
+    "grade": {
+      "$ref": "#/$defs/inherited_4"
+    },
+    "scorecard": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": [
+          "dimension_id",
+          "dimension_percentage",
+          "weight",
+          "weighted_contribution",
+          "formula_id"
+        ],
+        "properties": {
+          "dimension_id": {
+            "type": "string"
+          },
+          "dimension_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "weighted_contribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "formula_id": {
+            "type": "string",
+            "pattern": "^subject-index-dimension-calculation-v9:"
+          },
+          "substantive_selectivity_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "density_fit_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "substantive_points_out_of_10": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "density_points_out_of_5": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "dimension_id": {
+                  "const": "editorial_selectivity"
+                }
+              },
+              "required": [
+                "dimension_id"
+              ]
+            },
+            "then": {
+              "required": [
+                "substantive_selectivity_percentage",
+                "density_fit_percentage",
+                "substantive_points_out_of_10",
+                "density_points_out_of_5"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "calculation_explainer": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calculationReference"
+        },
+        {
+          "required": [
+            "item_grades_used",
+            "gates_used",
+            "dimension_denominators"
+          ],
+          "properties": {
+            "item_grades_used": {
+              "const": false
+            },
+            "gates_used": {
+              "const": false
+            },
+            "dimension_denominators": {
+              "type": "array",
+              "minItems": 6,
+              "maxItems": 6,
+              "items": {
+                "$ref": "#/$defs/dimensionDenominator"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "presentation_summary": {
+      "$ref": "#/$defs/inherited_5"
+    },
+    "precision_diagnostics": {
+      "$ref": "#/$defs/inherited_13"
+    },
+    "structure_audit": {
+      "allOf": [
+        {
+          "type": "object",
+          "required": [
+            "schema_version",
+            "artifact_path",
+            "sha256"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "structure-audit-v6"
+            },
+            "artifact_path": {
+              "$ref": "#/$defs/inherited_14"
+            },
+            "sha256": {
+              "$ref": "#/$defs/inherited_15"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "required": [
+            "candidate_denominator",
+            "full_scope_attestation",
+            "locator_architecture",
+            "uncertainties"
+          ],
+          "properties": {
+            "candidate_denominator": {
+              "$ref": "#/$defs/inherited_16"
+            },
+            "full_scope_attestation": {
+              "$ref": "#/$defs/inherited_19"
+            },
+            "locator_architecture": {
+              "$ref": "#/$defs/inherited_20"
+            },
+            "uncertainties": {
+              "$ref": "#/$defs/inherited_23"
+            }
+          }
+        }
+      ]
+    },
+    "key_metrics": {
+      "$ref": "#/$defs/inherited_24"
+    },
+    "density": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/inherited_25"
+        },
+        {
+          "type": "object",
+          "required": [
+            "density_fit_percentage",
+            "chapter_fit_by_chunk",
+            "total_weighted_percentage_numerator",
+            "total_indexable_source_words"
+          ],
+          "properties": {
+            "density_fit_percentage": {
+              "$ref": "#/$defs/inherited_27"
+            },
+            "chapter_fit_by_chunk": {
+              "type": "object",
+              "minProperties": 1,
+              "patternProperties": {
+                "^CHUNK-": {
+                  "type": "object",
+                  "required": [
+                    "path_fit_percentage",
+                    "occurrence_fit_percentage",
+                    "unit_fit_percentage",
+                    "weighted_percentage_numerator"
+                  ],
+                  "properties": {
+                    "path_fit_percentage": {
+                      "$ref": "#/$defs/inherited_27"
+                    },
+                    "occurrence_fit_percentage": {
+                      "$ref": "#/$defs/inherited_27"
+                    },
+                    "unit_fit_percentage": {
+                      "$ref": "#/$defs/inherited_27"
+                    },
+                    "weighted_percentage_numerator": {
+                      "type": "string",
+                      "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "total_weighted_percentage_numerator": {
+              "type": "string",
+              "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+            },
+            "total_indexable_source_words": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
+    "gate_status": {
+      "$ref": "#/$defs/inherited_28"
+    },
+    "strengths": {
+      "$ref": "#/$defs/inherited_29"
+    },
+    "defects": {
+      "$ref": "#/$defs/inherited_30"
+    },
+    "examples": {
+      "$ref": "#/$defs/inherited_31"
+    },
+    "item_grade_index": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_path",
+        "sha256",
+        "grading_policy",
+        "summary",
+        "color_legend",
+        "interaction"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "subject-index-item-assessments-v9"
+        },
+        "artifact_path": {
+          "$ref": "#/$defs/inherited_14"
+        },
+        "sha256": {
+          "$ref": "#/$defs/inherited_15"
+        },
+        "grading_policy": {
+          "const": "subject-index-item-grading-v4"
+        },
+        "summary": {
+          "type": "object"
+        },
+        "color_legend": {
+          "type": "array"
+        },
+        "interaction": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "locator_explanations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/inherited_32"
+      }
+    },
+    "heading_access_causal_provenance": {
+      "$ref": "#/$defs/inherited_35"
+    },
+    "score_views": {
+      "type": "object",
+      "required": [
+        "primary_view_id",
+        "adjustment_status",
+        "views"
+      ],
+      "properties": {
+        "primary_view_id": {
+          "const": "canonical_as_delivered"
+        },
+        "adjustment_status": {
+          "enum": [
+            "none",
+            "separate_evidentiary_correction"
+          ]
+        },
+        "views": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "view_id",
+              "label",
+              "view_kind",
+              "score",
+              "maximum",
+              "calculation",
+              "structure_audit",
+              "causal_attribution",
+              "provenance_artifacts"
+            ],
+            "properties": {
+              "view_id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "view_kind": {
+                "enum": [
+                  "observed",
+                  "counterfactual"
+                ]
+              },
+              "score": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "maximum": {
+                "const": 100
+              },
+              "calculation": {
+                "$ref": "#/$defs/calculationReference"
+              },
+              "structure_audit": {
+                "$ref": "#/properties/structure_audit/allOf/0"
+              },
+              "causal_attribution": {
+                "enum": [
+                  "primary_observed_result",
+                  "separate_evidentiary_correction_not_methodology_effect"
+                ]
+              },
+              "provenance_artifacts": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/inherited_41"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "methodology": {
+      "type": "object",
+      "required": [
+        "rubric_version",
+        "calculation_profile",
+        "locator_utility",
+        "diagnostic_minimum_rule",
+        "binary_keep_rule",
+        "keep_precision",
+        "editorial_selectivity_separate",
+        "long_string_review",
+        "long_range_review",
+        "numeric_trigger_is_automatic_defect"
+      ],
+      "properties": {
+        "benchmark": {
+          "type": "object",
+          "required": [
+            "benchmark_id",
+            "version",
+            "benchmark_sha256",
+            "benchmark_semantic_sha256"
+          ]
+        },
+        "rubric_version": {
+          "const": "subject-index-rubric-v10"
+        },
+        "calculation_profile": {
+          "const": "subject-index-dimension-calculation-v9"
+        },
+        "locator_utility": {
+          "type": "string"
+        },
+        "diagnostic_minimum_rule": {
+          "type": "string"
+        },
+        "binary_keep_rule": {
+          "type": "string"
+        },
+        "keep_precision": {
+          "type": "string"
+        },
+        "editorial_selectivity_separate": {
+          "const": true
+        },
+        "long_string_review": {
+          "type": "string"
+        },
+        "long_range_review": {
+          "type": "string"
+        },
+        "numeric_trigger_is_automatic_defect": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparability": {
+      "$ref": "#/$defs/inherited_42"
+    },
+    "disclosures": {
+      "$ref": "#/$defs/inherited_43"
+    },
+    "limitations": {
+      "$ref": "#/$defs/inherited_44"
+    },
+    "evidence_index": {
+      "$ref": "#/$defs/inherited_45"
+    },
+    "method_readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "ready",
+            "not_ready",
+            "indeterminate"
+          ]
+        },
+        "triggered_gate_ids": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "GATE-WRONG-LOCATOR",
+              "GATE-BROKEN-REFERENCE",
+              "GATE-SCOPE-LOCATOR",
+              "GATE-SYSTEMIC-UNSUPPORTED",
+              "GATE-CENTRAL-OMISSION",
+              "GATE-STANCE",
+              "GATE-COMPOUND",
+              "GATE-SEE-SUBSTITUTION",
+              "GATE-CROSS-REFERENCE",
+              "GATE-CLUTTER",
+              "GATE-GROUNDING",
+              "GATE-STRUCTURE"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "assessment_blockers": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "triggered_gate_ids",
+        "assessment_blockers"
+      ]
+    },
+    "authoritative_evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "authoritative",
+            "indeterminate",
+            "invalid"
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ]
+    },
+    "human_release_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "not_recorded"
+        }
+      },
+      "required": [
+        "status"
+      ]
+    }
+  },
+  "$defs": {
+    "calculationReference": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_path",
+        "sha256",
+        "calculation_sha256",
+        "rubric_version",
+        "calculation_profile"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "subject-index-dimension-calculations-v8"
+        },
+        "artifact_path": {
+          "$ref": "#/$defs/inherited_14"
+        },
+        "sha256": {
+          "$ref": "#/$defs/inherited_15"
+        },
+        "calculation_sha256": {
+          "$ref": "#/$defs/inherited_15"
+        },
+        "rubric_version": {
+          "const": "subject-index-rubric-v10"
+        },
+        "calculation_profile": {
+          "const": "subject-index-dimension-calculation-v9"
+        }
+      },
+      "additionalProperties": true
+    },
+    "dimensionDenominator": {
+      "type": "object",
+      "required": [
+        "dimension_id",
+        "components"
+      ],
+      "properties": {
+        "dimension_id": {
+          "enum": [
+            "meaningful_coverage",
+            "editorial_selectivity",
+            "conceptual_stance_fidelity",
+            "page_reference_reliability",
+            "findability_navigation",
+            "mechanics_consistency"
+          ]
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/inherited_46"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_1": {
+      "type": "string"
+    },
+    "inherited_2": {
+      "type": "string"
+    },
+    "inherited_3": {
+      "type": "string"
+    },
+    "inherited_4": {
+      "type": "object",
+      "required": [
+        "score",
+        "maximum",
+        "label"
+      ],
+      "properties": {
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "maximum": {
+          "const": 100
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_6": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_7": {
+      "type": "object",
+      "required": [
+        "complete",
+        "partial",
+        "missing"
+      ],
+      "properties": {
+        "complete": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partial": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_9": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+    },
+    "inherited_10": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+    },
+    "inherited_8": {
+      "type": "object",
+      "required": [
+        "metric_id",
+        "label",
+        "display_value",
+        "value"
+      ],
+      "properties": {
+        "metric_id": {
+          "enum": [
+            "weighted_concept_access_partial_credit",
+            "essential_concept_miss_rate",
+            "locator_recall",
+            "reader_task_strict_success",
+            "substantive_selectivity",
+            "strict_supported_locator_rate",
+            "conceptual_stance_fidelity",
+            "valid_entry_precision_at_least_partial",
+            "density_fit",
+            "heading_access_architecture",
+            "cross_reference_validity",
+            "mechanics_consistency"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_value": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "$ref": "#/$defs/inherited_9"
+        },
+        "numerator": {
+          "$ref": "#/$defs/inherited_9"
+        },
+        "adjusted_numerator": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "denominator": {
+          "$ref": "#/$defs/inherited_9"
+        },
+        "complete_weight": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "partial_weight": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "denominator_weight": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "partial_credit_value": {
+          "$ref": "#/$defs/inherited_9"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "metric_id": {
+                "const": "weighted_concept_access_partial_credit"
+              }
+            },
+            "required": [
+              "metric_id"
+            ]
+          },
+          "then": {
+            "required": [
+              "complete_weight",
+              "partial_weight",
+              "denominator_weight"
+            ]
+          },
+          "else": {
+            "required": [
+              "numerator",
+              "denominator"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "metric_id": {
+                "const": "reader_task_strict_success"
+              }
+            },
+            "required": [
+              "metric_id"
+            ]
+          },
+          "then": {
+            "required": [
+              "partial_credit_value"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "inherited_12": {
+      "type": "object",
+      "required": [
+        "equation",
+        "kind",
+        "number_scores"
+      ],
+      "properties": {
+        "equation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "input",
+            "step"
+          ]
+        },
+        "number_scores": {
+          "type": "array",
+          "items": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tooltip": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_11": {
+      "type": "object",
+      "required": [
+        "dimension_id",
+        "label",
+        "rationale",
+        "calculation_basis"
+      ],
+      "properties": {
+        "dimension_id": {
+          "enum": [
+            "meaningful_coverage",
+            "editorial_selectivity",
+            "conceptual_stance_fidelity",
+            "page_reference_reliability",
+            "findability_navigation",
+            "mechanics_consistency"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "calculation_basis": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/inherited_12"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_5": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Public presentation summary derived from canonical V8 reporting inputs",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "provenance",
+        "coverage_by_priority",
+        "scope",
+        "metrics",
+        "dimensions"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "subject-index-presentation-summary-v1"
+        },
+        "provenance": {
+          "type": "object",
+          "required": [
+            "evaluation_id",
+            "web_report_sha256"
+          ],
+          "properties": {
+            "evaluation_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "web_report_sha256": {
+              "$ref": "#/$defs/inherited_6"
+            }
+          },
+          "additionalProperties": false
+        },
+        "coverage_by_priority": {
+          "type": "object",
+          "required": [
+            "essential",
+            "major",
+            "optional"
+          ],
+          "properties": {
+            "essential": {
+              "$ref": "#/$defs/inherited_7"
+            },
+            "major": {
+              "$ref": "#/$defs/inherited_7"
+            },
+            "optional": {
+              "$ref": "#/$defs/inherited_7"
+            }
+          },
+          "additionalProperties": false
+        },
+        "scope": {
+          "type": "object",
+          "required": [
+            "displayed_locators",
+            "expected_treatments"
+          ],
+          "properties": {
+            "displayed_locators": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "expected_treatments": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "metrics": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/inherited_8"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "weighted_concept_access_partial_credit"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "essential_concept_miss_rate"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "locator_recall"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "reader_task_strict_success"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "substantive_selectivity"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "strict_supported_locator_rate"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "conceptual_stance_fidelity"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "valid_entry_precision_at_least_partial"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "density_fit"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "heading_access_architecture"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "cross_reference_validity"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "metric_id": {
+                    "const": "mechanics_consistency"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
+        },
+        "dimensions": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/inherited_11"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "dimension_id": {
+                    "const": "meaningful_coverage"
+                  }
+                },
+                "required": [
+                  "dimension_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "dimension_id": {
+                    "const": "editorial_selectivity"
+                  }
+                },
+                "required": [
+                  "dimension_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "dimension_id": {
+                    "const": "conceptual_stance_fidelity"
+                  }
+                },
+                "required": [
+                  "dimension_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "dimension_id": {
+                    "const": "page_reference_reliability"
+                  }
+                },
+                "required": [
+                  "dimension_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "dimension_id": {
+                    "const": "findability_navigation"
+                  }
+                },
+                "required": [
+                  "dimension_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "dimension_id": {
+                    "const": "mechanics_consistency"
+                  }
+                },
+                "required": [
+                  "dimension_id"
+                ]
+              },
+              "minContains": 1,
+              "maxContains": 1
+            }
+          ]
+        }
+      },
+      "$defs": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "decimal": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "decimalOrNull": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "coverageCounts": {
+          "type": "object",
+          "required": [
+            "complete",
+            "partial",
+            "missing"
+          ],
+          "properties": {
+            "complete": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "partial": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "missing": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "metric": {
+          "type": "object",
+          "required": [
+            "metric_id",
+            "label",
+            "display_value",
+            "value"
+          ],
+          "properties": {
+            "metric_id": {
+              "enum": [
+                "weighted_concept_access_partial_credit",
+                "essential_concept_miss_rate",
+                "locator_recall",
+                "reader_task_strict_success",
+                "substantive_selectivity",
+                "strict_supported_locator_rate",
+                "conceptual_stance_fidelity",
+                "valid_entry_precision_at_least_partial",
+                "density_fit",
+                "heading_access_architecture",
+                "cross_reference_validity",
+                "mechanics_consistency"
+              ]
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "display_value": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "$ref": "#/$defs/inherited_9"
+            },
+            "numerator": {
+              "$ref": "#/$defs/inherited_9"
+            },
+            "adjusted_numerator": {
+              "$ref": "#/$defs/inherited_10"
+            },
+            "denominator": {
+              "$ref": "#/$defs/inherited_9"
+            },
+            "complete_weight": {
+              "$ref": "#/$defs/inherited_10"
+            },
+            "partial_weight": {
+              "$ref": "#/$defs/inherited_10"
+            },
+            "denominator_weight": {
+              "$ref": "#/$defs/inherited_10"
+            },
+            "partial_credit_value": {
+              "$ref": "#/$defs/inherited_9"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "metric_id": {
+                    "const": "weighted_concept_access_partial_credit"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "then": {
+                "required": [
+                  "complete_weight",
+                  "partial_weight",
+                  "denominator_weight"
+                ]
+              },
+              "else": {
+                "required": [
+                  "numerator",
+                  "denominator"
+                ]
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "metric_id": {
+                    "const": "reader_task_strict_success"
+                  }
+                },
+                "required": [
+                  "metric_id"
+                ]
+              },
+              "then": {
+                "required": [
+                  "partial_credit_value"
+                ]
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "calculationLine": {
+          "type": "object",
+          "required": [
+            "equation",
+            "kind",
+            "number_scores"
+          ],
+          "properties": {
+            "equation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "enum": [
+                "input",
+                "step"
+              ]
+            },
+            "number_scores": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "score": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "tooltip": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "dimension": {
+          "type": "object",
+          "required": [
+            "dimension_id",
+            "label",
+            "rationale",
+            "calculation_basis"
+          ],
+          "properties": {
+            "dimension_id": {
+              "enum": [
+                "meaningful_coverage",
+                "editorial_selectivity",
+                "conceptual_stance_fidelity",
+                "page_reference_reliability",
+                "findability_navigation",
+                "mechanics_consistency"
+              ]
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 1
+            },
+            "calculation_basis": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/inherited_12"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_13": {
+      "type": "object"
+    },
+    "inherited_14": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+    },
+    "inherited_15": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_17": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "heading_path",
+        "role"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^NODE-"
+        },
+        "heading_path": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "role": {
+          "enum": [
+            "main_heading",
+            "subheading"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_18": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_16": {
+      "type": "object",
+      "required": [
+        "nodes",
+        "cross_reference_ids",
+        "locator_bearing_path_ids",
+        "node_count",
+        "cross_reference_count",
+        "locator_bearing_path_count",
+        "node_id_set_sha256",
+        "cross_reference_id_set_sha256",
+        "locator_bearing_path_id_set_sha256"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inherited_17"
+          }
+        },
+        "cross_reference_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^XREF-"
+          },
+          "uniqueItems": true
+        },
+        "locator_bearing_path_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^PATH-"
+          },
+          "uniqueItems": true
+        },
+        "node_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cross_reference_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "locator_bearing_path_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "node_id_set_sha256": {
+          "$ref": "#/$defs/inherited_18"
+        },
+        "cross_reference_id_set_sha256": {
+          "$ref": "#/$defs/inherited_18"
+        },
+        "locator_bearing_path_id_set_sha256": {
+          "$ref": "#/$defs/inherited_18"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_19": {
+      "type": "object",
+      "required": [
+        "complete",
+        "all_nodes_reviewed",
+        "all_cross_references_reviewed",
+        "all_locator_bearing_paths_checked_for_triggers",
+        "unlisted_node_disposition",
+        "unlisted_cross_reference_disposition",
+        "pilot_pass_node_ids",
+        "pilot_supported_cross_reference_ids",
+        "evidence_ids"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "all_nodes_reviewed": {
+          "type": "boolean"
+        },
+        "all_cross_references_reviewed": {
+          "type": "boolean"
+        },
+        "all_locator_bearing_paths_checked_for_triggers": {
+          "type": "boolean"
+        },
+        "unlisted_node_disposition": {
+          "enum": [
+            "passes",
+            "not_measured"
+          ]
+        },
+        "unlisted_cross_reference_disposition": {
+          "enum": [
+            "supported",
+            "not_measured"
+          ]
+        },
+        "pilot_pass_node_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^NODE-"
+          },
+          "uniqueItems": true
+        },
+        "pilot_supported_cross_reference_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^XREF-"
+          },
+          "uniqueItems": true
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_22": {
+      "type": "object",
+      "required": [
+        "display_id",
+        "kind",
+        "range_id",
+        "expanded_atomic_locator_ids",
+        "atomic_assignment_count",
+        "range_endpoints",
+        "inclusive_range_span"
+      ],
+      "properties": {
+        "display_id": {
+          "type": "string",
+          "pattern": "^DISPLAY-"
+        },
+        "kind": {
+          "enum": [
+            "singleton",
+            "range"
+          ]
+        },
+        "range_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^RANGE-"
+        },
+        "expanded_atomic_locator_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^LOC-"
+          },
+          "uniqueItems": true
+        },
+        "atomic_assignment_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "range_endpoints": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "inclusive_range_span": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_21": {
+      "type": "object",
+      "required": [
+        "review_id",
+        "path_id",
+        "terminal_node_id",
+        "displayed_locator_count",
+        "displayed_locators",
+        "expanded_atomic_locator_ids",
+        "atomic_assignment_count",
+        "maximum_range_span",
+        "long_displayed_locator_string_review_trigger",
+        "long_continuous_range_review_trigger",
+        "review_status",
+        "conceptually_distinguishable_treatments",
+        "meaningful_subheadings_or_access_routes",
+        "material_scanning_or_retrieval_impairment",
+        "subdivision_is_conceptual_not_trivial",
+        "evidence_ids",
+        "defect_ids"
+      ],
+      "properties": {
+        "review_id": {
+          "type": "string",
+          "pattern": "^ARCHREV-"
+        },
+        "path_id": {
+          "type": "string",
+          "pattern": "^PATH-"
+        },
+        "terminal_node_id": {
+          "type": "string",
+          "pattern": "^NODE-"
+        },
+        "displayed_locator_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "displayed_locators": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/inherited_22"
+          }
+        },
+        "expanded_atomic_locator_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^LOC-"
+          },
+          "uniqueItems": true
+        },
+        "atomic_assignment_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximum_range_span": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "long_displayed_locator_string_review_trigger": {
+          "type": "boolean"
+        },
+        "long_continuous_range_review_trigger": {
+          "type": "boolean"
+        },
+        "review_status": {
+          "enum": [
+            "defect_confirmed",
+            "reviewed_no_defect",
+            "not_reviewed"
+          ]
+        },
+        "conceptually_distinguishable_treatments": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "meaningful_subheadings_or_access_routes": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "material_scanning_or_retrieval_impairment": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "subdivision_is_conceptual_not_trivial": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "defect_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^DEFECT-"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_20": {
+      "type": "object",
+      "required": [
+        "thresholds",
+        "triggered_path_ids",
+        "triggered_reviews"
+      ],
+      "properties": {
+        "thresholds": {
+          "const": {
+            "long_displayed_locator_string": {
+              "operator": ">",
+              "displayed_locator_count": 6
+            },
+            "long_continuous_range": {
+              "operator": ">",
+              "inclusive_range_span": 10
+            },
+            "numeric_trigger_is_automatic_defect": false
+          }
+        },
+        "triggered_path_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^PATH-"
+          },
+          "uniqueItems": true
+        },
+        "triggered_reviews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inherited_21"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_23": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "uncertainty_id",
+          "affected_item_ids",
+          "summary"
+        ],
+        "properties": {
+          "uncertainty_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "affected_item_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "inherited_24": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inherited_26": {
+      "type": "object",
+      "required": [
+        "chunk_id",
+        "indexable_source_words",
+        "locator_bearing_heading_paths",
+        "locator_occurrences"
+      ],
+      "properties": {
+        "chunk_id": {
+          "type": "string",
+          "pattern": "^CHUNK-"
+        },
+        "indexable_source_words": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "locator_bearing_heading_paths": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "locator_occurrences": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_25": {
+      "type": "object",
+      "required": [
+        "policy_status",
+        "measurement_level",
+        "targets",
+        "chapter_measurements",
+        "maximum_score_contribution",
+        "distribution_findings"
+      ],
+      "properties": {
+        "policy_status": {
+          "const": "scored"
+        },
+        "measurement_level": {
+          "const": "chapter_or_approved_intellectual_unit"
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object"
+          }
+        },
+        "chapter_measurements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/inherited_26"
+          }
+        },
+        "maximum_score_contribution": {
+          "const": 5
+        },
+        "distribution_findings": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_27": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+    },
+    "inherited_28": {
+      "type": "object",
+      "required": [
+        "critical_gates",
+        "outcomes_sha256",
+        "used_in_score_arithmetic"
+      ],
+      "properties": {
+        "critical_gates": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "outcomes_sha256": {
+          "$ref": "#/$defs/inherited_15"
+        },
+        "used_in_score_arithmetic": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_29": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inherited_30": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inherited_31": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inherited_34": {
+      "type": "object",
+      "required": [
+        "category",
+        "score",
+        "rule_id",
+        "rationale",
+        "rationale_source"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rule_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rationale_source": {
+          "enum": [
+            "authored_evidence_summary",
+            "authored_locator_audit",
+            "mechanical_structured_category_rule"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_33": {
+      "type": "object",
+      "required": [
+        "locator_id",
+        "path_id",
+        "evidence_summary",
+        "page_treatment",
+        "complete_path_fit",
+        "diagnostic_locator_grade",
+        "keep_rating_credit",
+        "evidence_ids",
+        "structured_defect_ids",
+        "fit_rationale_required"
+      ],
+      "properties": {
+        "locator_id": {
+          "type": "string",
+          "pattern": "^LOC-"
+        },
+        "path_id": {
+          "type": "string",
+          "pattern": "^PATH-"
+        },
+        "evidence_summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "page_treatment": {
+          "$ref": "#/$defs/inherited_34"
+        },
+        "complete_path_fit": {
+          "$ref": "#/$defs/inherited_34"
+        },
+        "diagnostic_locator_grade": {
+          "type": "object",
+          "required": [
+            "rule_id",
+            "calculation",
+            "score",
+            "credit"
+          ],
+          "properties": {
+            "rule_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "calculation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "score": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100
+            },
+            "credit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "keep_rating_credit": {
+          "type": "object",
+          "required": [
+            "keep_decision",
+            "rule_id",
+            "credit"
+          ],
+          "properties": {
+            "keep_decision": {
+              "type": "boolean"
+            },
+            "rule_id": {
+              "type": "string",
+              "pattern": "^R-[A-Z0-9-]+$"
+            },
+            "credit": {
+              "enum": [
+                "1",
+                "0",
+                null
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "structured_defect_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^DEFECT-"
+          },
+          "uniqueItems": true
+        },
+        "fit_rationale_required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_32": {
+      "$ref": "#/$defs/inherited_33"
+    },
+    "inherited_38": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "kind",
+        "source_ids",
+        "reason_codes",
+        "severity",
+        "evidence_ids",
+        "summary"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^HAF-"
+        },
+        "kind": {
+          "enum": [
+            "heading_fit",
+            "benchmark_access",
+            "cross_reference",
+            "confirmed_subdivision_architecture"
+          ]
+        },
+        "source_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:LOC|PATH|SUBJ|TASK|TREAT|XREF|NODE|DEFECT|ARCHREV)-"
+          },
+          "uniqueItems": true
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "severity": {
+          "enum": [
+            "minor",
+            "major",
+            "critical"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^EVID-"
+          },
+          "uniqueItems": true
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_37": {
+      "$ref": "#/$defs/inherited_38"
+    },
+    "inherited_40": {
+      "type": "object",
+      "required": [
+        "basis",
+        "basis_id"
+      ],
+      "properties": {
+        "basis": {
+          "enum": [
+            "deterministic_rule",
+            "explicit_adjudication"
+          ]
+        },
+        "basis_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_39": {
+      "$ref": "#/$defs/inherited_40"
+    },
+    "inherited_36": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "status",
+        "causal_findings"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^NODE-"
+        },
+        "status": {
+          "enum": [
+            "passes",
+            "minor_issues",
+            "major_issues",
+            "fails",
+            "uninspectable",
+            "not_applicable",
+            "not_measured"
+          ]
+        },
+        "causal_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inherited_37"
+          }
+        },
+        "primary_finding_id": {
+          "type": "string",
+          "pattern": "^HAF-"
+        },
+        "primary_basis": {
+          "$ref": "#/$defs/inherited_39"
+        }
+      },
+      "dependentRequired": {
+        "primary_finding_id": [
+          "primary_basis"
+        ],
+        "primary_basis": [
+          "primary_finding_id"
+        ]
+      },
+      "additionalProperties": false
+    },
+    "inherited_35": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/inherited_36"
+      }
+    },
+    "inherited_41": {
+      "type": "object",
+      "required": [
+        "role",
+        "schema_version",
+        "artifact_path",
+        "sha256"
+      ],
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "schema_version": {
+          "type": "string"
+        },
+        "artifact_path": {
+          "$ref": "#/$defs/inherited_14"
+        },
+        "sha256": {
+          "$ref": "#/$defs/inherited_15"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_42": {
+      "type": "object"
+    },
+    "inherited_43": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "inherited_44": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "inherited_45": {
+      "type": "object"
+    },
+    "inherited_46": {
+      "type": "object",
+      "required": [
+        "component_id",
+        "original",
+        "applicable",
+        "measured",
+        "excluded",
+        "uninspectable",
+        "not_measured",
+        "exclusion_reasons",
+        "measurement_coverage",
+        "small_denominator_exception",
+        "genuinely_inapplicable",
+        "zero_due_to_non_attempt",
+        "defined_zero_rule",
+        "provisionally_scoreable"
+      ],
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "original": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measured": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "excluded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_measured": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exclusion_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "measurement_coverage": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "small_denominator_exception": {
+          "type": "boolean"
+        },
+        "genuinely_inapplicable": {
+          "type": "boolean"
+        },
+        "zero_due_to_non_attempt": {
+          "type": "boolean"
+        },
+        "defined_zero_rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provisionally_scoreable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$id": "web-report-v12.schema.json",
+  "allOf": [
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ]
+}

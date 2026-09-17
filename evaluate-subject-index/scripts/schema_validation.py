@@ -57,13 +57,19 @@ def schema_errors(document: Any, schema_name: str, *, profile: str | None = None
         f"{'.'.join(map(str, error.absolute_path)) or '<root>'}: {error.message}"
         for error in errors
     ]
-    if not messages and requested_schema in {"evaluation-state.schema.json", "evaluation-state-v7.schema.json"} and "study_comparison" in document:
+    if not messages and requested_schema in {"evaluation-state.schema.json", "evaluation-state-v7.schema.json", "evaluation-state-v8.schema.json"} and "study_comparison" in document:
         messages.extend("study_comparison." + message for message in schema_errors(document["study_comparison"], "retrospective-study-binding.schema.json", profile=profile))
-    if not messages and requested_schema in {"evaluation-policy-v4.schema.json", "evaluation-policy-v5.schema.json"}:
+    if not messages and requested_schema in {"evaluation-policy-v4.schema.json", "evaluation-policy-v5.schema.json", "evaluation-policy-v6.schema.json"}:
         messages.extend(policy_migration_errors(document))
-    if not messages and schema_name in runtime_profile.SCHEMAS.values():
+    if not messages and schema_name in (*runtime_profile.SCHEMAS.values(), *runtime_profile.V10_SCHEMAS.values()):
         from v9_contract import contract_errors
         messages.extend(contract_errors(document))
+    if not messages and schema_name in runtime_profile.V10_SCHEMAS.values():
+        from v10_contract import contract_errors
+        messages.extend(contract_errors(document))
+    if not messages and (profile or runtime_profile.ACTIVE) == 'v10' and schema_name in {'structure-audit-v5.schema.json','structure-audit-v6.schema.json'}:
+        from v10_contract import candidate_defect_errors
+        messages.extend(candidate_defect_errors(document))
     return messages
 
 

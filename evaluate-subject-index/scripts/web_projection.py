@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, is_v9
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
 
 import hashlib
 import json
@@ -60,8 +60,8 @@ def public_safe(value: Any) -> Any:
 
 
 def _projection_limitations(result: Mapping[str, Any]) -> list[str]:
-    if is_v9():
-        return list(dict.fromkeys([*public_safe(deepcopy(result["limitations"])), "Aggregate scores come from the authoritative V9 calculation; item scores are diagnostics.", "Exact percentage and point-contribution strings are authoritative.", "Source excerpts and private layout evidence are excluded."]))
+    if percentage_native():
+        return list(dict.fromkeys([*public_safe(deepcopy(result["limitations"])), f"Aggregate scores come from the authoritative {'V10' if is_v10() else 'V9'} calculation; item scores are diagnostics.", "Exact percentage and point-contribution strings are authoritative.", "Source excerpts and private layout evidence are excluded."]))
     return list(dict.fromkeys([*public_safe(deepcopy(result["limitations"])), *DISPLAY_CAUTIONS]))
 
 
@@ -76,7 +76,7 @@ def dimension_denominator_disclosures(calculation: Mapping[str, Any]) -> list[di
 
 
 def scorecard_with_compatibility_aliases(scorecard: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    if is_v9():
+    if percentage_native():
         return [{**deepcopy(row), "awarded_points": row["weighted_contribution"], "maximum_points": str(row["weight"])} for row in scorecard]
     return [
         {
@@ -433,7 +433,7 @@ def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any], cal
         fit = calculated[measurement["chunk_id"]]
         rows.append({
             "source_order": source_order, "chunk_id": measurement["chunk_id"], "title": chunk["title"],
-            **({"path_rate": fit["path_rate"], "occurrence_rate": fit["occurrence_rate"]} if is_v9() else {}),
+            **({"path_rate": fit["path_rate"], "occurrence_rate": fit["occurrence_rate"]} if percentage_native() else {}),
             "source_units": deepcopy(chunk["source_units"]), "owned_document_page_ranges": deepcopy(chunk["owned_document_page_ranges"]),
             **deepcopy(measurement),
             "path_rate_per_1000_words": None if fit.get("path_rate") is None else float(fit["path_rate"]),
@@ -443,7 +443,7 @@ def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any], cal
                 "path_fit_percentage": fit.get("path_fit_percentage"),
                 "occurrence_fit_percentage": fit.get("occurrence_fit_percentage"),
                 "unit_fit_percentage": fit.get("unit_fit_percentage"),
-                **({"weighted_percentage_numerator": fit["weighted_percentage_numerator"]} if is_v9() else {}),
+                **({"weighted_percentage_numerator": fit["weighted_percentage_numerator"]} if percentage_native() else {}),
                 "status": fit.get("status", "not_measured" if fit.get("unit_fit_percentage") is None else "measured"),
                 "basis": "canonical_finalized_density_calculation",
                 "automatic_defect": False,
@@ -451,7 +451,7 @@ def build_density(structure: Mapping[str, Any], manifest: Mapping[str, Any], cal
         })
     density = structure["density"]
     fit_percentage = component.get("percentage")
-    if is_v9():
+    if percentage_native():
         details = component["details"]
         return collection("density", rows, "chunk manifest packet order", policy_status=density["policy_status"], measurement_level=density["measurement_level"], targets=deepcopy(density["targets"]), maximum_score_contribution=density["maximum_score_contribution"], fit_percentage=details["fit_percentage"], density_fit_percentage=details["density_fit_percentage"], scoring_density_fit_percentage=component["percentage"], **({"scoring_override": deepcopy(details["scoring_override"])} if "scoring_override" in details else {}), total_weighted_percentage_numerator=details["total_weighted_percentage_numerator"], total_indexable_source_words=details["total_indexable_source_words"])
     return collection("density", rows, "chunk manifest packet order", policy_status=density["policy_status"], measurement_level=density["measurement_level"], targets=deepcopy(density["targets"]), maximum_score_contribution=density["maximum_score_contribution"], fit_percentage=fit_percentage, fit_rating=None if fit_percentage is None else float(fit_percentage) / 20)
@@ -462,6 +462,9 @@ def _artifact_binding(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def publication_readiness(result: Mapping[str, Any]) -> dict[str, Any]:
+    if is_v10():
+        from v10_consequences import readiness
+        return readiness(result)
     gates = result["critical_gates"]
     validity = result.get("evaluation_validity", {}).get("status", "valid")
     assessment = result.get("gate_assessment", {"status": "indeterminate", "blockers": [{"blocker_id": "GATE-ASSESSMENT-MISSING", "affected_item_ids": [], "reason": "Destination-gate assessment is unavailable."}]})
@@ -517,11 +520,11 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
         }))
     projection = {
         "schema_version": PROJECTION_SCHEMA_VERSION,
-        "projection_id": ("OHFR-V9-WEB-" if is_v9() else "OHFR-V8-WEB-") + hashlib.sha256(json.dumps({"evaluation_id": result["evaluation_id"], "result_sha256": result_record["sha256"]}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12].upper(),
+        "projection_id": ("OHFR-V10-WEB-" if is_v10() else "OHFR-V9-WEB-" if percentage_native() else "OHFR-V8-WEB-") + hashlib.sha256(json.dumps({"evaluation_id": result["evaluation_id"], "result_sha256": result_record["sha256"]}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12].upper(),
         "review_signals": deepcopy(result.get("review_signals", [])),
         "projection_role": "deterministic_public_safe_display_projection", "evaluation_id": result["evaluation_id"],
         "view_selection": {"authoritative_view_id": "canonical_as_delivered", "primary_view_id": "canonical_as_delivered", "default_display_view_id": "canonical_as_delivered", "display_view_rationale": "The canonical as-delivered result is authoritative."},
-        "score_views": {"canonical_source_adjustment_status": report["score_views"]["adjustment_status"], "projection_adjustment_status": ("diagnostic_overlay_only" if is_v9() else "confirmed_representation_adjustment_applied") if overlay_applicable else "not_applicable", "total_delta": 0, "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "role": "authoritative_primary_observation", "score": result["overall_percentage"], "maximum": 100, "scorecard": scorecard, "dimension_denominators": dimension_denominators, "critical_gates": gates, "readiness": readiness, "provenance_artifacts": [_artifact_binding(result_record), _artifact_binding(report_record), _artifact_binding(calculation_record)]}]},
+        "score_views": {"canonical_source_adjustment_status": report["score_views"]["adjustment_status"], "projection_adjustment_status": ("diagnostic_overlay_only" if percentage_native() else "confirmed_representation_adjustment_applied") if overlay_applicable else "not_applicable", "total_delta": 0, "views": [{"view_id": "canonical_as_delivered", "label": "Canonical as delivered", "view_kind": "observed", "role": "authoritative_primary_observation", "score": result["overall_percentage"], "maximum": 100, "scorecard": scorecard, "dimension_denominators": dimension_denominators, "critical_gates": gates, "readiness": readiness, "provenance_artifacts": [_artifact_binding(result_record), _artifact_binding(report_record), _artifact_binding(calculation_record)]}]},
         "correction_outcomes": correction_outcomes,
         "item_summaries": {"observed": deepcopy(items["summary"])}, "collections": bindings,
         "provenance": {"source_artifacts": [_artifact_binding(row) for row in sorted(source_records, key=lambda row: row["path"])], "source_sha256": result["provenance"]["source_sha256"], "benchmark_sha256": result["provenance"]["benchmark_sha256"], "judgment_policy_sha256": result["provenance"]["judgment_policy_sha256"], "rubric_version": result["provenance"]["rubric_version"], "dimension_calculation_profile": result["provenance"]["dimension_calculation_profile"], "projection_metadata_sha256": result["projection_metadata"]["projection_metadata_sha256"], "calculation_sha256": result["dimension_calculations"]["calculation_sha256"], "missing_access_audit_set_sha256": items["evidence_identity"]["missing_access_audit_set_sha256"], "correction_overlay_sha256": overlay.get("overlay_sha256") if overlay_applicable else None},
@@ -533,6 +536,8 @@ def build_bundle(*, result: Mapping[str, Any], result_record: Mapping[str, Any],
     if comparison_identity is not None:
         projection["comparison_identity"] = deepcopy(comparison_identity)
         projection["methodology"]["benchmark"]["release"] = deepcopy(comparison_identity["release"])
+    if is_v10():
+        projection.update({key: deepcopy(result[key]) for key in ("method_readiness", "authoritative_evaluation", "human_release_decision", "evaluation_validity", "gate_assessment")})
     projection["projection_sha256"] = _self_hash(projection, "projection_sha256")
     return projection, collections
 
@@ -577,7 +582,7 @@ def validate_bundle(
     canonical_scorecard: Sequence[Mapping[str, Any]] = (),
     dimension_denominators: Sequence[Mapping[str, Any]] = (),
 ) -> None:
-    core.require(not (is_v9() and allow_legacy_display), "v9_legacy_display_forbidden", "V9 requires its native percentage contract")
+    core.require(not (percentage_native() and allow_legacy_display), "v9_legacy_display_forbidden", "The percentage runtime requires its native percentage contract")
     strict_display = True
     try:
         core.validate_schema_document(dict(projection), "web-projection-v1.schema.json", "Generated canonical web projection")
@@ -592,10 +597,10 @@ def validate_bundle(
         )
     for view in projection["score_views"]["views"] if strict_display else []:
         for row in view["scorecard"]:
-            if is_v9():
+            if percentage_native():
                 from v9_contract import scorecard_errors
                 errors = scorecard_errors(row)
-                core.require(not errors, "projection_percentage_mismatch", "V9 points must reconstruct exactly", errors)
+                core.require(not errors, "projection_percentage_mismatch", "Percentage-native points must reconstruct exactly", errors)
                 continue
             core.require(
                 float(row["rating"]) == float(row["dimension_percentage"]) / 20

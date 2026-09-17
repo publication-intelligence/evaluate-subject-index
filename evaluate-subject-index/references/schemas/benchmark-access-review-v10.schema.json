@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-benchmark-access-review-v10"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "candidate_seen": {
+      "const": false
+    },
+    "decision": {
+      "const": "approved"
+    },
+    "overlay_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "overlay_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "population_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "reviewed_delta_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "uniqueItems": true
+    },
+    "source_evidence_verified": {
+      "const": true
+    },
+    "no_source_scope_change": {
+      "const": true
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    }
+  },
+  "required": [
+    "schema_version",
+    "reviewer_id",
+    "reviewed_at",
+    "candidate_seen",
+    "decision",
+    "overlay_sha256",
+    "overlay_file_sha256",
+    "population_sha256",
+    "reviewed_delta_ids",
+    "source_evidence_verified",
+    "no_source_scope_change",
+    "rationale"
+  ]
+}

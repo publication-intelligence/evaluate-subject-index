@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, is_v9
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
 
 import hashlib
 import json
@@ -1519,7 +1519,7 @@ def calculate_density(ledgers: dict[str, Any]) -> tuple[Decimal, dict[str, Any]]
             "path_fit_percentage": decimal_text(path_rating),
             "occurrence_fit_percentage": decimal_text(occurrence_rating),
             "unit_fit_percentage": decimal_text(unit),
-            **({"weighted_percentage_numerator": decimal_text(unit * Decimal(words))} if is_v9() else {}),
+            **({"weighted_percentage_numerator": decimal_text(unit * Decimal(words))} if percentage_native() else {}),
         })
     raw = weighted / Decimal(total_words)
     return raw, {
@@ -1527,7 +1527,7 @@ def calculate_density(ledgers: dict[str, Any]) -> tuple[Decimal, dict[str, Any]]
         "aggregation": "indexable_source_word_weighted_mean",
         "metric_weights": {"paths": "0.5", "occurrences": "0.5"},
         "fit_percentage": decimal_text(raw),
-        **({"density_fit_percentage": decimal_text(raw), "total_weighted_percentage_numerator": decimal_text(weighted), "total_indexable_source_words": total_words} if is_v9() else {}),
+        **({"density_fit_percentage": decimal_text(raw), "total_weighted_percentage_numerator": decimal_text(weighted), "total_indexable_source_words": total_words} if percentage_native() else {}),
         "chapter_measurements": chapter_results,
         "zero_metric_rule": "a metric value of zero receives 0%",
     }
@@ -1626,7 +1626,7 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     observed_density_rating, density_detail = calculate_density(ledgers)
     density_rating = ZERO if non_attempt else observed_density_rating
     if non_attempt:
-        density_detail["scoring_override"] = {("percentage" if is_v9() else "rating"): ("0" if is_v9() else 0), "rule": f"candidate_attempt:{attempt}"}
+        density_detail["scoring_override"] = {("percentage" if percentage_native() else "rating"): ("0" if percentage_native() else 0), "rule": f"candidate_attempt:{attempt}"}
 
     central_sub_post, _ = apply_cap(central_base, central_caps)
     lower_sub_post, _ = apply_cap(lower_base, lower_caps)
@@ -1676,7 +1676,7 @@ def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         {"component_id": "substantive_selectivity", "raw_numerator": decimal_text(credit), "raw_denominator": decimal_text(Decimal(len(measured))), "normalized_value": decimal_text(central_sub_post / HUNDRED), "weight": "10/15", "effective_weight": "10/15", "weight_renormalized": False, "percentage": decimal_text(central_sub_post)},
         {"component_id": "density_fit", "raw_numerator": decimal_text(density_rating), "raw_denominator": "100", "normalized_value": decimal_text(density_rating / HUNDRED), "weight": "5/15", "effective_weight": "5/15", "weight_renormalized": False, "percentage": decimal_text(density_rating), "details": density_detail},
     ]
-    if is_v9():
+    if percentage_native():
         result.update(substantive_selectivity_percentage=decimal_text(central_sub_post),
                       density_fit_percentage=decimal_text(density_rating),
                       substantive_points_out_of_10=decimal_text(central_sub_post * Decimal(10) / HUNDRED),

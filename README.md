@@ -118,3 +118,8 @@ Copyright (c) 2026 John Camden.
 This project is licensed under the GNU Affero General Public License, version 3 only (`AGPL-3.0-only`). See [LICENSE](LICENSE). Third-party components remain subject to their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 PyMuPDF and MuPDF are available under the GNU AGPL v3 or a separate commercial license from Artifex. This repository uses them under the GNU AGPL v3 and does not grant an Artifex commercial license.
+
+V10 is available for coordinated implementation review through `v10_cli.py`.
+See [the V10 runtime contract](evaluate-subject-index/references/runtime-v10.md)
+for its independently reviewed benchmark-access amendment, separate quality and
+validity outcomes, and execution hold. Default V8.2 and explicit V9 remain intact.

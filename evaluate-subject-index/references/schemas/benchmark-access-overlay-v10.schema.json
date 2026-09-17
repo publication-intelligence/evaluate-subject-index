@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-benchmark-access-overlay-v10"
+    },
+    "overlay_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "author_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "prepared_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "candidate_seen": {
+      "const": false
+    },
+    "source_scope": {
+      "type": "object",
+      "required": [
+        "source_sha256",
+        "document_page_span",
+        "page_map_sha256",
+        "chunk_manifest_sha256"
+      ],
+      "properties": {
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "document_page_span": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "page_map_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "chunk_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_methodology": {
+      "type": "object",
+      "required": [
+        "policy_profile",
+        "rubric_version",
+        "calculation_profile",
+        "source_policy_sha256",
+        "source_policy_file_sha256"
+      ],
+      "properties": {
+        "policy_profile": {
+          "const": "subject-index-standard-policy-v8.2"
+        },
+        "rubric_version": {
+          "const": "subject-index-rubric-v8.2"
+        },
+        "calculation_profile": {
+          "const": "subject-index-dimension-calculation-v7"
+        },
+        "source_policy_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_policy_file_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "base_benchmark_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base_benchmark_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base_review_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "before_population": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subjects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "weight": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "weight"
+            ]
+          }
+        },
+        "reader_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "weight": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "weight"
+            ]
+          }
+        }
+      },
+      "required": [
+        "subjects",
+        "reader_tasks"
+      ]
+    },
+    "after_population": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subjects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "weight": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "weight"
+            ]
+          }
+        },
+        "reader_tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "weight": {
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "weight"
+            ]
+          }
+        }
+      },
+      "required": [
+        "subjects",
+        "reader_tasks"
+      ]
+    },
+    "deltas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "delta_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "clause_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "IPDF-GOV-02",
+                "IPDF-ANA-06",
+                "IPDF-VOC-01",
+                "IPDF-VOC-02"
+              ]
+            }
+          },
+          "family": {
+            "enum": [
+              "subjects",
+              "reader_tasks"
+            ]
+          },
+          "item_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "operation": {
+            "enum": [
+              "add",
+              "update",
+              "retire"
+            ]
+          },
+          "weight_treatment": {
+            "enum": [
+              "unweighted_facets",
+              "new_weighted_parent",
+              "updated_parent",
+              "retired_parent"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "distinct_obligation_rationale": {
+            "type": "string"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "replacement": {
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "delta_id",
+          "clause_ids",
+          "family",
+          "item_id",
+          "operation",
+          "weight_treatment",
+          "reason",
+          "distinct_obligation_rationale",
+          "evidence_ids",
+          "replacement"
+        ]
+      }
+    },
+    "overlay_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "overlay_id",
+    "author_id",
+    "prepared_at",
+    "candidate_seen",
+    "source_scope",
+    "source_methodology",
+    "base_benchmark_sha256",
+    "base_benchmark_file_sha256",
+    "base_review_file_sha256",
+    "before_population",
+    "after_population",
+    "deltas",
+    "overlay_sha256"
+  ]
+}

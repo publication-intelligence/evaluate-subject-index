@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, is_v9
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
 
 import argparse
 import hashlib

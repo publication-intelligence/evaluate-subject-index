@@ -8,9 +8,9 @@ from unittest import mock
 
 scripts=Path(sys.argv[2]) if len(sys.argv)>2 else Path(__file__).resolve().parents[1]/'scripts'
 sys.path.insert(0,str(scripts))
-if sys.argv[1]=='v9':
+if sys.argv[1] in {'v9','v10'}:
     import runtime_profile
-    runtime_profile.select_v9()
+    (runtime_profile.select_v10 if sys.argv[1]=='v10' else runtime_profile.select_v9)()
 import scoring_core as core
 import dimension_score_v8_cli as scoring
 # These helpers only construct synthetic evidence; target runtime is imported first.
@@ -60,6 +60,6 @@ def equivalent(value):
     if isinstance(value,dict):return {k:equivalent(v) for k,v in value.items() if k not in additions}
     if isinstance(value,(list,tuple)):return [equivalent(v) for v in value]
     if isinstance(value,Decimal):return str(value)
-    if isinstance(value,str) and value.startswith('subject-index-dimension-calculation-v8:'):return value.replace('-v8:', '-v7:',1)
+    if isinstance(value,str) and value.startswith(('subject-index-dimension-calculation-v8:','subject-index-dimension-calculation-v9:')):return value.replace('-v8:', '-v7:',1).replace('-v9:', '-v7:',1)
     return value
 print(json.dumps(equivalent(result),sort_keys=True,indent=2))

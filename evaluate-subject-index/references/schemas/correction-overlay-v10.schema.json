@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "correction-overlay-v10.schema.json",
+  "title": "Confirmed V10 representation correction overlay",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "evaluation_id",
+    "overlay_role",
+    "causal_classification",
+    "affected_heading_count",
+    "affected_node_ids",
+    "character_replacement_count",
+    "headings",
+    "character_replacements",
+    "adjusted_item_changes",
+    "provenance",
+    "overlay_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "ohfr-v10-representation-correction-overlay-v1"
+    },
+    "evaluation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "overlay_role": {
+      "const": "display_only_counterfactual_bound_to_canonical_v10"
+    },
+    "causal_classification": {
+      "type": "string",
+      "minLength": 1
+    },
+    "affected_heading_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "affected_node_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^NODE-"
+      }
+    },
+    "character_replacement_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "headings": {
+      "type": "array",
+      "minItems": 1
+    },
+    "character_replacements": {
+      "type": "array",
+      "minItems": 1
+    },
+    "adjusted_item_changes": {
+      "type": "object"
+    },
+    "correction_outcomes": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "overlay_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "cross_reference_resolution": {
+      "type": "object",
+      "description": "Optional: omitted for heading-only diagnostic overlays; presence supplies explicit cross-reference identities.",
+      "required": [
+        "item_id"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^XREF-"
+        },
+        "remaining_unresolved_reference": {
+          "type": "object",
+          "required": [
+            "reference_id"
+          ],
+          "properties": {
+            "reference_id": {
+              "type": "string",
+              "pattern": "^XREF-"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ]
+}
