@@ -3,7 +3,7 @@
 
 Usage: v10_cli.py TOOL [arguments...]
 Tools: state, page-chunks, prepare-candidate, audit-candidate,
-score, grade, study, bundle, release-decision.
+score, grade, study, bundle, release-decision, access-review.
 The preserved V8 benchmark/source workflow remains the source-proof authority.
 """
 import argparse
@@ -13,7 +13,7 @@ from pathlib import Path
 import runtime_profile
 
 TOOLS = {
-    "state": "state_cli.py", "release-decision": "v10_release.py",
+    "state": "state_cli.py", "access-review": "v10_candidate_access.py", "release-decision": "v10_release.py",
     "page-chunks": "page_chunk_cli.py", "bundle": "bundle_cli.py",
     "prepare-candidate": "candidate_preparation_cli.py",
     "audit-candidate": "parallel_candidate_audit_cli.py",

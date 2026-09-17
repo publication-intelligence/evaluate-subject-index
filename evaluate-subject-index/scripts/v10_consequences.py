@@ -9,6 +9,17 @@ ORDER = ('GATE-WRONG-LOCATOR', 'GATE-BROKEN-REFERENCE', 'GATE-STANCE',
          'GATE-CENTRAL-OMISSION', 'GATE-CLUTTER', 'GATE-STRUCTURE')
 
 
+def delivered_severe_evidence(defect, locators):
+    """Fit evidence is independent of the locator's severity label.
+
+    Major/critical qualifies the structured defect consequence. This helper is
+    exclusive to V10 quality gates; score and cap helpers retain their meaning.
+    """
+    affected=set(defect['affected_item_ids'])
+    return [row for row in locators if {row['locator_id'],row.get('path_id')} & affected
+            and row.get('complete_path_fit',row.get('fit_category')) in {'severe_mismatch','no_fit'}]
+
+
 def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
     """Reuse the frozen predicates, tighten ownership and delivered populations.
 
@@ -19,9 +30,11 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
     core.require(tuple(row['gate_id'] for row in policy['critical_gates']) == GATE_IDS,
                  'v10_gate_register', 'V10 requires exactly its twelve core quality gates.')
     direct_locators, direct_references, assessment = destination_evidence or ([], [], {'blockers': []})
-    direct_owned = {row['locator_id'] for row in direct_locators} | {row['reference_id'] for row in direct_references}
     invalid_source = any(row['blocker_id'] == 'GATE-ASSESSMENT-SOURCE' for row in assessment['blockers'])
     blocked = {item for row in assessment['blockers'] for item in row['affected_item_ids']}
+    direct_locators=[row for row in direct_locators if not {row['locator_id'],row.get('path_id')} & blocked]
+    direct_references=[row for row in direct_references if row['reference_id'] not in blocked]
+    direct_owned = {row['locator_id'] for row in direct_locators} | {row['reference_id'] for row in direct_references}
     provenance = next(d for d in calculation['dimensions'] if d['dimension_id'] == 'page_reference_reliability')['reliability_provenance']
     locators = [dict(row, path_id=provenance.get('locator_path_bindings', {}).get(row['locator_id'],row.get('path_id')))
                 for row in provenance.get('locator_utility_assignments', [])]
@@ -32,7 +45,7 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
     owned = set(direct_owned)
     output = {}
     def atomic(row):
-        return set(row['affected_item_ids']) | {x['locator_id'] for x in core.delivered_bad_locators(row,locators)}
+        return set(row['affected_item_ids']) | {x['locator_id'] for x in delivered_severe_evidence(row,locators)}
     def eligible(row, gate):
         if invalid_source:
             if gate not in {'GATE-BROKEN-REFERENCE','GATE-CROSS-REFERENCE','GATE-STRUCTURE'}: return False
@@ -51,7 +64,8 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
         filtered = deepcopy(structure)
         filtered['defects'] = [row for row in structure['defects'] if eligible(row,gate)]
         result = legacy({'critical_gates':[definitions[gate]]}, filtered, calculation,
-                        destination_evidence=(direct_locators,direct_references,assessment))[0]
+                        destination_evidence=(direct_locators,direct_references,assessment),
+                        bad_locator_evidence=delivered_severe_evidence)[0]
         if gate == 'GATE-SYSTEMIC-UNSUPPORTED':
             rows = [row for row in structure['defects']
                     if row['dimension_owner'] == 'page_reference_reliability'

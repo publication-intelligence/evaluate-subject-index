@@ -121,5 +121,5 @@ PyMuPDF and MuPDF are available under the GNU AGPL v3 or a separate commercial l
 
 V10 is available for coordinated implementation review through `v10_cli.py`.
 See [the V10 runtime contract](evaluate-subject-index/references/runtime-v10.md)
-for its independently reviewed benchmark-access overlay, separate quality and
+for its independently reviewed benchmark-access amendment, separate quality and
 validity outcomes, and execution hold. Default V8.2 and explicit V9 remain intact.

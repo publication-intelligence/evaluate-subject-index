@@ -26,7 +26,7 @@ def rebind(f):
     Path(f.args.approval).write_text(json.dumps(approval))
 
 
-def prepare_v10(case, *, evaluation_id=None):
+def prepare_v10(case, *, evaluation_id=None, amendment_style="facet"):
     f=StudyFixture(case,evaluation_id=evaluation_id);case.addCleanup(f.f.tearDown)
     f.current_source_release(revised=True)
     f.args.release_policy=str(Path(f.args.release_state).parent/'evaluation-policy.json')
@@ -45,8 +45,20 @@ def prepare_v10(case, *, evaluation_id=None):
     f.lock['benchmark_access']={'overlay':{'path':'access-overlay.json','sha256':study.file_digest(overlay_path)},'review':{'path':'access-review.json','sha256':study.file_digest(review_path)},'overlay_sha256':overlay['overlay_sha256'],'effective_benchmark_semantic_sha256':f.lock['benchmark_semantic_sha256'],'frozen_at':'2026-09-16T00:02:00Z'}
     rebind(f)
     parent=deepcopy(base['subjects'][0]);rows=preserved_evidence_rows(parent)
+    original_parent=deepcopy(parent)
     parent['required_access_facets']=[{'facet_id':'FACET-SYNTHETIC','label':'Synthetic lookup','meaning':'Preserved source-supported access.','acceptable_access':['Alpha'],'document_pages':[rows[0]['document_page']],'independently_weighted':False}]
     set_deltas(f,[{'delta_id':'DELTA-SYNTHETIC','clause_ids':['IPDF-VOC-02'],'family':'subjects','item_id':parent['subject_id'],'operation':'update','weight_treatment':'unweighted_facets','reason':'Preserved evidence warrants an explicit lookup facet.','distinct_obligation_rationale':'','evidence_ids':[row['evidence_id'] for row in rows],'replacement':parent}])
+    if amendment_style=='none':set_deltas(f,[])
+    elif amendment_style=='terms':
+        original_parent['acceptable_access'].append('Synthetic synonym')
+        delta=study.read(f.root/'release/access-overlay.json')['deltas'][0]
+        delta.update(delta_id='DELTA-TERM',weight_treatment='updated_parent',replacement=original_parent)
+        set_deltas(f,[delta])
+    elif amendment_style=='question':
+        task=deepcopy(base['reader_tasks'][0]);task['question']+=' Use a source-supported equivalent lookup term.'
+        delta=study.read(f.root/'release/access-overlay.json')['deltas'][0]
+        delta.update(delta_id='DELTA-QUESTION',family='reader_tasks',item_id=task['task_id'],weight_treatment='updated_parent',replacement=task)
+        set_deltas(f,[delta])
     return f
 
 
@@ -73,6 +85,28 @@ def migrate(f):
     return v10(*args)
 
 
+def create_access_review(f, *, unresolved=False):
+    from v10_candidate_access import requirements,bound_amendment
+    state=study.read(f.state_path);benchmark=study.read(f.root/'migration/selected-benchmark.json')
+    lock=study.read(f.root/state['study_comparison']['lock']['path'])
+    records=[r for r in state['artifacts'] if r['stage']=='missing_access_audit' and r.get('schema_version')=='missing-access-audit-v1']
+    parents={}
+    for r in records:
+        audit=study.read(f.root/r['path'])
+        parents.update({('subject',row['subject_id']):row for row in audit['subject_judgments']})
+        parents.update({('reader_task',row['task_id']):row for row in audit['reader_task_results']})
+    rows=[]
+    expected=requirements(benchmark,bound_amendment(state,f.state_path,lock))
+    if not expected:return None
+    for (kind,parent,requirement_kind,identity),sha in expected.items():
+        rows.append({'parent_kind':kind,'parent_id':parent,'requirement_kind':requirement_kind,'requirement_id':identity,'requirement_sha256':sha,'disposition':'unresolved' if unresolved else 'reviewed','factual_status':'uninspectable' if unresolved else 'satisfied','judgment_fields':['coverage'] if kind=='subject' else ['result'],'tested_path_ids':['PATH-001'],'evidence_ids':['EVID-TREAT-001'],'structure_finding_ids':['NODE-001'],'rationale':'Synthetic factual inspection of the required access, existing parent judgment and structure evidence.','resulting_parent_judgment':deepcopy(parents[(kind,parent)])})
+    receipt={'schema_version':'subject-index-v10-candidate-access-review-v1','review_id':'ACCESS-REVIEW-SYNTHETIC','reviewer_id':'REVIEWER-SYNTHETIC','reviewed_at':'2026-09-16T00:03:00Z','candidate_seen':True,'evaluation_id':state['evaluation_id'],'candidate_sha256':state['candidate']['candidate_sha256'],'benchmark_sha256':benchmark['benchmark_sha256'],'study_lock_sha256':lock['lock_sha256'],'benchmark_access_sha256':lock['benchmark_access']['overlay_sha256'],'audit_bindings':[{'path':r['path'],'sha256':r['sha256']} for r in records],'structure_binding':{'path':f.f.structure_path.relative_to(f.root).as_posix(),'sha256':study.file_digest(f.f.structure_path)},'requirements':rows}
+    path=f.f.write('candidate/v10-access-review.json',receipt)
+    result=v10('access-review','--state',f.state_path,'--input',path)
+    if result.returncode:raise AssertionError(result.stdout+result.stderr)
+    return path
+
+
 def add_broken_reference(f):
     from structure_audit import id_set_hash
     from test_wrong_destination_gates import evidence
@@ -96,8 +130,8 @@ def add_broken_reference(f):
 
 
 class V10RuntimeTests(unittest.TestCase):
-    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False):
-        f=prepare_v10(self,evaluation_id=evaluation_id)
+    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, unresolved_access=False, amendment_style="facet"):
+        f=prepare_v10(self,evaluation_id=evaluation_id,amendment_style=amendment_style)
         if source_fixture is not None:
             for key in ('release_policy','release_state','release_draft','release_review','release_benchmark','release_descriptor','release_review_inventory','study_lock','study_policy'):
                 setattr(f.args,key,getattr(source_fixture.args,key))
@@ -123,6 +157,7 @@ class V10RuntimeTests(unittest.TestCase):
             state['stages'][stage]=deepcopy(prior['stages'][stage])
             state['artifacts'] += [f.f.record(f.root/r['path'],stage,r['artifact_type'],r.get('schema_version')) for r in prior['artifacts'] if r['stage']==stage]
         f.state_path.write_text(json.dumps(state))
+        create_access_review(f,unresolved=unresolved_access)
         for command,extra in [('register-structure',['--input',f.f.structure_path]),('score',['--output-dir','scoring-v10']),('build-report',[])]:
             result=v10('score',command,'--state',f.state_path,*extra);self.assertEqual(0,result.returncode,result.stdout+result.stderr)
         calculation=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')
@@ -169,6 +204,123 @@ class V10RuntimeTests(unittest.TestCase):
         before=path.read_bytes();validate_decision(decision,result,study.file_digest(path));self.assertEqual(before,path.read_bytes())
         decision['status']='approved'
         with self.assertRaises(ValueError):validate_decision(decision,result,study.file_digest(path))
+
+    def test_factual_access_review_exact_set_bindings_and_parent_agreement(self):
+        from v10_candidate_access import validate_review,requirements
+        f=self.complete_fixture();state=study.read(f.state_path);benchmark=study.read(f.root/'migration/selected-benchmark.json');lock=study.read(f.root/state['study_comparison']['lock']['path'])
+        receipt=study.read(f.root/'candidate/v10-access-review.json')
+        before=f.state_path.read_bytes()
+        for mutation in ('omitted','omit_delta','duplicate','foreign','stale_content','old_audit','old_amendment','parent_disagrees','foreign_path','foreign_evidence','unsatisfied','partial'):
+            with self.subTest(mutation=mutation):
+                bad=deepcopy(receipt)
+                if mutation=='omitted':bad['requirements']=[]
+                elif mutation=='omit_delta':bad['requirements']=[r for r in bad['requirements'] if r['requirement_kind']!='amendment_delta']
+                elif mutation=='duplicate':bad['requirements'].append(deepcopy(bad['requirements'][0]))
+                elif mutation=='foreign':bad['requirements'][0]['parent_id']='SUBJ-FOREIGN'
+                elif mutation=='stale_content':bad['requirements'][0]['requirement_sha256']='0'*64
+                elif mutation=='old_audit':bad['audit_bindings'][0]['sha256']='0'*64
+                elif mutation=='old_amendment':bad['benchmark_access_sha256']='0'*64
+                elif mutation=='parent_disagrees':bad['requirements'][0]['resulting_parent_judgment']['coverage']='missing'
+                elif mutation=='foreign_path':bad['requirements'][0]['tested_path_ids']=['PATH-FOREIGN']
+                elif mutation=='foreign_evidence':bad['requirements'][0]['evidence_ids']=['EVID-FOREIGN']
+                else:bad['requirements'][0]['factual_status']='not_satisfied' if mutation=='unsatisfied' else 'partially_satisfied'
+                with self.assertRaises(ValueError):validate_review(bad,state=state,state_path=f.state_path,benchmark=benchmark,lock=lock,structure_path=f.f.structure_path)
+        self.assertEqual(before,f.state_path.read_bytes())
+        missing=deepcopy(state);missing['artifacts']=[r for r in missing['artifacts'] if r.get('artifact_type')!='candidate_benchmark_access_review']
+        from v10_candidate_access import bound_review
+        with self.assertRaises(ValueError):bound_review(missing,f.state_path,benchmark,lock)
+        missing_path=f.root/'state-without-access-review.json';missing_path.write_text(json.dumps(missing))
+        rejected=v10('study','preflight','--state',missing_path,'--require-density')
+        self.assertNotEqual(0,rejected.returncode);self.assertIn('GATE-ASSESSMENT-ACCESS-REVIEW',rejected.stdout)
+        empty=deepcopy(benchmark)
+        for row in empty['subjects']:row.pop('required_access_facets',None)
+        self.assertEqual({},requirements(empty))
+        amended=deepcopy(benchmark);amended['subjects'][0]['access_scope_rule']='A new frozen scope requirement.'
+        self.assertEqual(len(requirements(benchmark))+1,len(requirements(amended)))
+        with self.assertRaises(ValueError):validate_review(receipt,state=state,state_path=f.state_path,benchmark=amended,lock=lock,structure_path=f.f.structure_path)
+
+    def test_adverse_access_requires_adverse_component_and_reference_uncertainty_is_explicit(self):
+        from v10_candidate_access import validate_review
+        from test_v10_consequences import defect, outcomes
+        from test_wrong_destination_gates import evidence
+        from v10_consequences import gate_outcomes
+        from policy_cli import CRITICAL_GATES
+        import dimension_score_v8_cli as scoring
+        f=self.complete_fixture(unresolved_access=True,broken_reference=True)
+        state=study.read(f.state_path);benchmark=study.read(f.root/'migration/selected-benchmark.json');lock=study.read(f.root/state['study_comparison']['lock']['path'])
+        receipt=study.read(f.root/'candidate/v10-access-review.json')
+        def validate(document):
+            return validate_review(document,state=state,state_path=f.state_path,benchmark=benchmark,lock=lock,structure_path=f.f.structure_path)
+        # Generic node/path uncertainty leaves independent broken-target proof intact.
+        result=study.read(f.root/'scoring-v10/evaluation-result.v14.json')
+        self.assertTrue(next(r for r in result['critical_gates'] if r['gate_id']=='GATE-BROKEN-REFERENCE')['triggered'])
+        structure=study.read(f.f.structure_path)
+        finding=defect('DEFECT-XREF','unsupported_reference','XREF-001')
+        structure['defects'].append(finding);f.f.structure_path.write_text(json.dumps(structure))
+        receipt['structure_binding']['sha256']=study.file_digest(f.f.structure_path)
+        receipt['requirements'][0]['structure_finding_ids'].append('DEFECT-XREF')
+        assessment=validate(receipt)
+        self.assertIn('XREF-001',{x for b in assessment['blockers'] for x in b['affected_item_ids']})
+        data=evidence(fit='exact_fit',judgment='supported',treatment='substantive')
+        data[0]['cross_reference_judgments'][0]['reference_id']='XREF-001'
+        data[0]['candidate_denominator']['cross_reference_ids']=['XREF-001']
+        data[3]['cross_references'][0]['reference_id']='XREF-001'
+        self.assertTrue(outcomes(data)[0]['GATE-BROKEN-REFERENCE']['triggered'])
+        proof=scoring._destination_gate_evidence(*data)
+        proof[2]['status']='indeterminate';proof[2]['blockers'].extend(assessment['blockers'])
+        policy={'critical_gates':[{'gate_id':k,'description':v} for k,v in CRITICAL_GATES]}
+        after={r['gate_id']:r for r in gate_outcomes(policy,data[0],data[1],proof,scoring._legacy_critical_gate_outcomes)}
+        self.assertFalse(after['GATE-BROKEN-REFERENCE']['triggered'])
+        # A negative parent judgment cannot use a passing node as adverse support.
+        audit_record=next(r for r in state['artifacts'] if r.get('schema_version')=='missing-access-audit-v1')
+        audit_path=f.root/audit_record['path'];audit=study.read(audit_path)
+        parent=audit['subject_judgments'][0]
+        parent['stance_preserved']='no';parent['realistic_first_lookup_success']='no'
+        audit_path.write_text(json.dumps(audit));audit_record['sha256']=study.file_digest(audit_path)
+        for binding in receipt['audit_bindings']:
+            if binding['path']==audit_record['path']:binding['sha256']=audit_record['sha256']
+        for row in receipt['requirements']:row['resulting_parent_judgment']=deepcopy(parent)
+        row=receipt['requirements'][0]
+        row.update(disposition='reviewed',factual_status='not_satisfied',structure_finding_ids=['NODE-001'])
+        for field,component in [('stance_preserved','conceptual_stance_fidelity'),('realistic_first_lookup_success','heading_access_architecture')]:
+            row['judgment_fields']=[field]
+            for status in ('passes','uninspectable','minor_issues','major_issues','fails'):
+                structure['node_judgments'][0]['component_judgments'][component]['status']=status
+                f.f.structure_path.write_text(json.dumps(structure));receipt['structure_binding']['sha256']=study.file_digest(f.f.structure_path)
+                with self.subTest(field=field,status=status):
+                    if status in {'passes','uninspectable'}:
+                        with self.assertRaisesRegex(ValueError,'relevant bound structure evidence'):validate(receipt)
+                    else:validate(receipt)
+
+    def test_parent_access_delta_requires_review_without_facets_and_empty_requirements_preserve_results(self):
+        from v10_candidate_access import requirements,bound_amendment
+        terms=self.complete_fixture(amendment_style='terms')
+        state=study.read(terms.state_path);benchmark=study.read(terms.root/'migration/selected-benchmark.json');lock=study.read(terms.root/state['study_comparison']['lock']['path'])
+        expected=requirements(benchmark,bound_amendment(state,terms.state_path,lock))
+        self.assertEqual({'amendment_delta'},{key[2] for key in expected})
+        self.assertEqual(len(expected),len(study.read(terms.root/'candidate/v10-access-review.json')['requirements']))
+        question=self.complete_fixture(amendment_style='question')
+        qstate=study.read(question.state_path);qbenchmark=study.read(question.root/'migration/selected-benchmark.json');qlock=study.read(question.root/qstate['study_comparison']['lock']['path']);qreceipt=study.read(question.root/'candidate/v10-access-review.json')
+        qreceipt['requirements'][0]['factual_status']='not_satisfied'
+        from v10_candidate_access import validate_review
+        with self.assertRaises(ValueError):validate_review(qreceipt,state=qstate,state_path=question.state_path,benchmark=qbenchmark,lock=qlock,structure_path=question.f.structure_path)
+        empty=self.complete_fixture(amendment_style='none')
+        self.assertFalse((empty.root/'candidate/v10-access-review.json').exists())
+        result=study.read(empty.root/'scoring-v10/evaluation-result.v14.json')
+        self.assertEqual('ready',result['method_readiness']['status'])
+        self.assertEqual(0,result['comparison_key']['study_identity']['candidate_access_review']['requirement_count'])
+
+    def test_unresolved_access_review_blocks_authority_without_inventing_quality_failure(self):
+        f=self.complete_fixture(unresolved_access=True)
+        result=study.read(f.root/'scoring-v10/evaluation-result.v14.json')
+        self.assertEqual('indeterminate',result['gate_assessment']['status'])
+        self.assertEqual('indeterminate',result['authoritative_evaluation']['status'])
+        self.assertEqual('indeterminate',result['method_readiness']['status'])
+        self.assertFalse(any(row['triggered'] for row in result['critical_gates']))
+        parent=study.read(f.root/'candidate/v10-access-review.json')['requirements'][0]['resulting_parent_judgment']
+        self.assertEqual('complete',parent['coverage'])
+        blocked={x for row in result['gate_assessment']['blockers'] for x in row['affected_item_ids']}
+        self.assertTrue({'SUBJ-001','PATH-001','NODE-001'} <= blocked)
 
     def test_fresh_policy_and_unbound_v10_lineage_are_rejected(self):
         f=prepare_v10(self);output=f.root/'unbound-v10.json'

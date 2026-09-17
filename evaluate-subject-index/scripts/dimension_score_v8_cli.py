@@ -2086,7 +2086,7 @@ def _critical_gate_outcomes(policy, structure, calculation, *, destination_evide
 
 def _legacy_critical_gate_outcomes(
     policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any],
-    *, destination_evidence: tuple | None = None,
+    *, destination_evidence: tuple | None = None, bad_locator_evidence=None,
 ) -> list[dict[str, Any]]:
     direct_locators, direct_references, _ = destination_evidence or ([], [], {})
     owned_locators = {row["locator_id"] for row in direct_locators}
@@ -2099,7 +2099,7 @@ def _legacy_critical_gate_outcomes(
     references -= blocked_ids
     locators = [row for row in locators if not {row["locator_id"], row.get("path_id")} & blocked_ids]
     def bad(item):
-        return core.delivered_bad_locators(item, locators)
+        return (bad_locator_evidence or core.delivered_bad_locators)(item, locators)
     def major(item):
         return not set(item["affected_item_ids"]) & blocked_ids and core.material_consequence(item) and not core.partial_fit_only(item, locators)
     def delivered_reference(item):
@@ -2206,14 +2206,18 @@ def _projection_metadata(
     candidate_label: str,
     locator_documents: Sequence[Mapping[str, Any]],
     inventory: Mapping[str, Any],
+    candidate_access_review=None,
 ) -> dict[str, Any]:
     destination_evidence = _destination_gate_evidence(structure, calculation, locator_documents, inventory)
+    if candidate_access_review and candidate_access_review['blockers']:
+        destination_evidence[2]['blockers'].extend(deepcopy(candidate_access_review['blockers']))
+        destination_evidence[2]['status'] = 'indeterminate'
     gates = _critical_gate_outcomes(policy, structure, calculation, destination_evidence=destination_evidence)
     limitations = [item["summary"] for item in structure["uncertainties"]]
     metadata = {
         "schema_version": runtime_identity("subject-index-v8-projection-metadata-v2"),
         "candidate_label": candidate_label,
-        "inclusion_policy": ("Preserved V8.2 source scope with independently reviewed V10 benchmark access overlay." if is_v10() else "Frozen V8.2 source scope and candidate-blind benchmark, preserved under V9." if percentage_native() else "Frozen current-V8 source scope and candidate-blind benchmark."),
+        "inclusion_policy": ("Preserved V8.2 source scope with independently reviewed V10 benchmark access amendment." if is_v10() else "Frozen V8.2 source scope and candidate-blind benchmark, preserved under V9." if percentage_native() else "Frozen current-V8 source scope and candidate-blind benchmark."),
         "uncertainty_policy": policy["audit_design"]["uncertainty_policy"],
         "critical_gates": gates,
         "gate_assessment": destination_evidence[2],
@@ -2431,6 +2435,11 @@ def command_register_structure(args: argparse.Namespace) -> None:
             core.require(structure["audit_mode"] == state["configuration"]["audit_mode"], "audit_mode_identity_mismatch", "Structure audit mode differs from canonical state.")
             core.require(candidate_record["sha256"] == state["candidate"]["normalized_sha256"] and inventory_record["path"] == state["candidate"]["item_inventory_path"], "candidate_identity_mismatch", "Canonical candidate artifact binding is inconsistent.")
             _validate_structure_inventory(structure, inventory)
+            if is_v10():
+                from v10_candidate_access import bound_review
+                benchmark, _ = study_comparison.registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
+                lock = study_comparison.load_study_binding(state, state_path)
+                bound_review(state, state_path, benchmark, lock, structure_path=structure_path)
             payload = structure_path.read_bytes()
             stamp = now()
             record = _artifact_record(state_path.parent, structure_path, payload, stage="structure_audit", artifact_type="structure_audit", schema_version="structure-audit-v6", stamp=stamp, input_sha256=(candidate_record["sha256"], inventory_record["sha256"]))
@@ -2512,6 +2521,11 @@ def _calculation_loaded_from_state(
         "config_path": config_path,
     }
     loaded["study_identity"] = study_identity
+    if is_v10():
+        from v10_candidate_access import bound_review
+        benchmark, _ = study_comparison.registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
+        lock = study_comparison.load_study_binding(state, state_path)
+        loaded["candidate_access_review"] = bound_review(state, state_path, benchmark, lock)
     return loaded, inventory, inventory_record, loaded["locator_documents"], loaded["missing_documents"], structure_record
 
 
@@ -2542,10 +2556,12 @@ def command_score_state(args: argparse.Namespace) -> None:
             calculation_payload = _json_bytes(calculation)
             items_payload = _json_bytes(items)
             input_hashes = [item["sha256"] for item in loaded["input_artifacts"]]
+            if loaded.get("candidate_access_review", {}).get("receipt_file_sha256"):
+                input_hashes.append(loaded["candidate_access_review"]["receipt_file_sha256"])
             input_record = _artifact_record(root, outputs["input"], input_payload, stage="scoring", artifact_type="dimension_calculation_input", schema_version=runtime_identity("subject-index-dimension-calculation-input-v2"), stamp=stamp, input_sha256=input_hashes)
             calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version=runtime_identity("subject-index-dimension-calculations-v6"), stamp=stamp, input_sha256=input_hashes)
             items_record = _artifact_record(root, outputs["items"], items_payload, stage="scoring", artifact_type="item_assessments", schema_version=runtime_identity("subject-index-item-assessments-v7"), stamp=stamp, input_sha256=(calculation_record["sha256"], inventory_record["sha256"], structure_record["sha256"]))
-            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, inventory=inventory)
+            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, inventory=inventory, candidate_access_review=loaded.get("candidate_access_review"))
             metadata_payload = _json_bytes(metadata)
             metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version=runtime_identity("subject-index-v8-projection-metadata-v2"), stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)

@@ -355,10 +355,18 @@ def preflight_state(state, state_path, *, require_density=False):
         if record.get('schema_version') == 'missing-access-audit-v1' and record['stage'] == 'missing_access_audit':
             document = bound_document(state_path.parent, record)
             require(document['benchmark_sha256'] == benchmark['benchmark_sha256'], 'Registered audit uses a different benchmark')
+    candidate_access_review = None
+    if is_v10() and (require_density or state['stages']['structure_audit']['status'] == 'completed'):
+        from v10_candidate_access import bound_review
+        candidate_access_review = bound_review(state, state_path, benchmark, lock)
     if require_density:
         structure, _ = registered_document(state, state_path, 'structure_audit', 'structure-audit-v6')
-        return evaluation_identity(benchmark=benchmark, policy=policy, structure=structure, manifest=manifest,
+        result = evaluation_identity(benchmark=benchmark, policy=policy, structure=structure, manifest=manifest,
             audit_mode=lock['audit_mode'], rubric=lock['rubric_version'], calculation_profile=lock['calculation_profile'], lock=lock)
+        if candidate_access_review is not None:
+            result['candidate_access_review'] = {key:candidate_access_review[key] for key in ('receipt_file_sha256','status','requirement_count')}
+            result['identity_sha256'] = digest({k:v for k,v in result.items() if k != 'identity_sha256'})
+        return result
     return lock
 
 

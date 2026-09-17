@@ -43,7 +43,7 @@ def pattern(data, count=10, denominator=200, sections=2, section_population=8):
         inventory['paths'].append({'path_id':row['path_id']})
     provenance['original_locator_denominator']=count
     row=defect('DEFECT-PATTERN','generic','LOC-0',code='LOC_POS')
-    row.update(dimension_owner='page_reference_reliability',affected_item_ids=[f'LOC-{i}' for i in range(count)],root_cause_family='ROOT-A',applicable_count=denominator,affected_source_sections=[f'CHUNK-{i}' for i in range(sections)],source_section_denominator=section_population,affected_structural_sections=[],structural_section_denominator=1)
+    row.update(severity='minor',severity_basis='localized_repairable_friction',retrieval_consequence='slows',dimension_owner='page_reference_reliability',affected_item_ids=[f'LOC-{i}' for i in range(count)],root_cause_family='ROOT-A',applicable_count=denominator,affected_source_sections=[f'CHUNK-{i}' for i in range(sections)],source_section_denominator=section_population,affected_structural_sections=[],structural_section_denominator=1)
     structure['defects']=[row]
     return data
 
@@ -145,6 +145,31 @@ class V10ConsequenceTests(unittest.TestCase):
         data=evidence(fit='material_partial_fit',judgment='partially_supported',treatment='mixed',resolution='valid_destination')
         data[0]['defects']=[defect('DEFECT-CMP','generic','LOC-ONE',code='CMP')]
         gates,_=outcomes(data);self.assertFalse(gates['GATE-COMPOUND']['triggered'])
+
+    def test_unresolved_access_review_scopes_linked_structure_gate_evidence(self):
+        data=evidence(fit='exact_fit',judgment='supported',treatment='substantive',resolution='valid_destination')
+        data[0]['candidate_denominator']['nodes']=[{'node_id':'NODE-001','heading_path':['A']}]
+        row=defect('DEFECT-STANCE','stance_reversal','NODE-001',code='STA')
+        row.update(severity_basis='materially_misleading',retrieval_consequence='misleads')
+        data[0]['defects']=[row]
+        before,_=outcomes(data);self.assertTrue(before['GATE-STANCE']['triggered'])
+        proof=scoring._destination_gate_evidence(*data)
+        proof[2]['status']='indeterminate';proof[2]['blockers'].append({'blocker_id':'GATE-ASSESSMENT-ACCESS-REVIEW','affected_item_ids':['SUBJ-ONE','PATH-ONE','NODE-001'],'reason':'Unresolved requirement linked to the structured finding.'})
+        policy={'critical_gates':[{'gate_id':k,'description':v} for k,v in CRITICAL_GATES]}
+        after={r['gate_id']:r for r in gate_outcomes(policy,data[0],data[1],proof,scoring._legacy_critical_gate_outcomes)}
+        self.assertFalse(after['GATE-STANCE']['triggered'])
+
+    def test_locator_severity_is_not_an_extra_individual_gate_threshold(self):
+        cases=[('GATE-SCOPE-LOCATOR','out_of_scope_locator','LOC_POS'),('GATE-COMPOUND','generic','CMP'),('GATE-GROUNDING','generic','LOC_POS')]
+        for gate,kind,code in cases:
+            for fit,expected in [('severe_mismatch',True),('material_mismatch',False),('material_partial_fit',False)]:
+                with self.subTest(gate=gate,fit=fit):
+                    data=evidence(fit=fit,judgment='partially_supported' if fit=='material_partial_fit' else 'unsupported',treatment='mixed',resolution='valid_destination')
+                    row=defect('DEFECT-MAJOR',kind,'LOC-ONE',code=code);data[0]['defects']=[row]
+                    gates,_=outcomes(data);self.assertEqual(expected,gates[gate]['triggered'])
+                    if expected:self.assertEqual('minor',gates[gate]['qualifying_locator_evidence'][0]['locator_severity'])
+                    row.update(severity='minor',severity_basis='localized_repairable_friction',retrieval_consequence='slows')
+                    gates,_=outcomes(data);self.assertFalse(gates[gate]['triggered'])
 
     def test_reference_and_clutter_systemic_thresholds(self):
         for gate,family,kind,code in [('GATE-CROSS-REFERENCE','XREF','unsupported_reference','XRF'),('GATE-CLUTTER','NODE','clutter_pattern','SEL')]:

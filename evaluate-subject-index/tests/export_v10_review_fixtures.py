@@ -29,8 +29,12 @@ def main():
         first=case.complete_fixture(evaluation_id='EVAL-V10-FIRST')
         second=case.complete_fixture(evaluation_id='EVAL-V10-SECOND',source_fixture=first)
         gated=case.complete_fixture(evaluation_id='EVAL-V10-GATED',source_fixture=first,broken_reference=True)
-        for label,f in [('native-first',first),('native-second',second),('native-gated',gated)]:
+        unresolved=case.complete_fixture(evaluation_id='EVAL-V10-UNRESOLVED',source_fixture=first,unresolved_access=True)
+        for label,f in [('native-first',first),('native-second',second),('native-gated',gated),('native-unresolved',unresolved)]:
             shutil.copytree(f.root/'scoring-v10',output/label)
+        first_identity=study.read(first.root/'scoring-v10/evaluation-result.v14.json')['comparison_key']['study_identity']
+        second_identity=study.read(second.root/'scoring-v10/evaluation-result.v14.json')['comparison_key']['study_identity']
+        assert first_identity['candidate_access_review']['receipt_file_sha256'] != second_identity['candidate_access_review']['receipt_file_sha256']
         result=v10('study','assemble-comparison','--state',first.state_path,'--state',second.state_path,'--output-dir',output/'comparison')
         if result.returncode:raise RuntimeError(result.stdout+result.stderr)
         shutil.copytree(first.root,output/'synthetic-evaluation')
@@ -53,7 +57,7 @@ def main():
         validate_decision(decision,native,decision['result_file_sha256']);emit(output/'human-decision.separate.json',decision)
         files=[{'path':p.relative_to(output).as_posix(),'sha256':study.file_digest(p)} for p in sorted(output.rglob('*')) if p.is_file()]
         head=subprocess.run(['git','rev-parse','HEAD'],cwd=Path(__file__).resolve().parents[2],capture_output=True,text=True,check=True).stdout.strip()
-        emit(output/'fixture-manifest.json',{'schema_version':'subject-index-v10-consumer-review-fixture-manifest-v1','runtime_commit':head,'synthetic_only':True,'native_bundles':['native-first/v10-canonical-projection','native-second/v10-canonical-projection','native-gated/v10-canonical-projection'],'assembled_comparison':'comparison/comparison.json','outcome_units':'outcome-matrix.unit.json','separate_human_decision':'human-decision.separate.json','files':files})
+        emit(output/'fixture-manifest.json',{'schema_version':'subject-index-v10-consumer-review-fixture-manifest-v1','runtime_commit':head,'synthetic_only':True,'native_bundles':['native-first/v10-canonical-projection','native-second/v10-canonical-projection','native-gated/v10-canonical-projection','native-unresolved/v10-canonical-projection'],'assembled_comparison':'comparison/comparison.json','outcome_units':'outcome-matrix.unit.json','separate_human_decision':'human-decision.separate.json','files':files})
         print(json.dumps({'manifest':str(output/'fixture-manifest.json'),'sha256':study.file_digest(output/'fixture-manifest.json'),'files':len(files)}))
     finally:case.doCleanups()
 

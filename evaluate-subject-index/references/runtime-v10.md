@@ -3,7 +3,7 @@
 V10 is implemented for review only. The adopted boundary is the byte-preserved
 [decision contract](consequence-policy-v10.md), SHA-256
 `f812eae0d09b60a4c1e74b1b6b9e6dd5850e088f9f9bb583152e9559f6ee07a9`.
-Do not activate the runtime, select a real lock, freeze an actual access overlay,
+Do not activate the runtime, select a real lock, freeze an actual access amendment,
 migrate/evaluate candidates, or deploy a consumer until coordinated review.
 
 Use `scripts/v10_cli.py TOOL ...`; ordinary entrypoints remain V8.2 and
@@ -28,7 +28,7 @@ prior bytes. It does not relabel V9 state or old candidate audits.
 Artifact version suffixes are sequential schema versions, not rubric names.
 V10 inherits V9's exact decimal strings, percentages, operation order, weights,
 formulas, caps, density bands and rounding. No five-point aliases are accepted.
-Diagnostic representation overlays remain separate from benchmark access overlays;
+Diagnostic representation overlays remain separate from benchmark access amendments;
 they cannot create an adjusted score or erase a quality gate.
 
 ## Immutable source proof and explicit access delta
@@ -38,6 +38,11 @@ policy identities, exact core register and adopted consequence-policy contract.
 All other source-policy fields, including extensions, remain fingerprinted.
 The unchanged V9 semantic-equality migration is never widened.
 
+The older schema identifier `subject-index-benchmark-access-overlay-v10` and
+lock fields such as `benchmark_access.overlay` and `overlay_sha256` remain stable
+technical identifiers. Human-facing text calls this a benchmark-access amendment;
+“representation-correction overlay” refers only to candidate display corrections.
+
 Lock v3 retains `release` as the exact V8.2 base freeze and adds:
 
 - `source_benchmark_semantic_sha256`: preserved base content;
@@ -46,7 +51,7 @@ Lock v3 retains `release` as the exact V8.2 base freeze and adds:
 - `benchmark_access.overlay_sha256`, `.effective_benchmark_semantic_sha256`, and
   `.frozen_at`.
 
-The overlay records the preserved source scope, source methodology/policy proof,
+The benchmark-access amendment records the preserved source scope, source methodology/policy proof,
 base benchmark bytes and independent base review. The author and independent
 reviewer both attest candidate blindness. Review binds exact proposal bytes,
 every delta ID and before/after population accounting; freeze follows review.
@@ -62,7 +67,7 @@ Replacement evidence must be declared by that delta and match preserved rows
 exactly. Source pages must be backed by those declared rows. Subject facets are
 unweighted; task facets name only their parent's required subjects. Facet identity is parent-qualified: historical task facets may retain different
 parts of one original task under different parents. IDs cannot repeat within
-a parent. Overlay delta IDs remain globally unique.
+a parent. Amendment delta IDs remain globally unique.
 
 Populations record each subject ID/priority and each task ID/unit weight. Source
 pages, measured words, scope and page map remain fixed. Source scope changes,
@@ -74,11 +79,57 @@ successor migration requires fresh benchmark-dependent review. Any later reuse
 of locator audits needs separately documented validation and authorization;
 this CLI provides no automatic audit-transfer shortcut.
 
+## Required factual candidate review
+
+V10 enforces a separate private factual receipt through
+`v10_cli.py access-review --state STATE --input RECEIPT`. Register it after
+missing-access audits and before structure registration. The receipt binds the
+exact proposed structure bytes; subsequent scoring requires that file to be the
+registered structure audit. This is a V10 study requirement, not a change to the
+generic V8/V9 missing-access audit schemas.
+
+The exact review set includes every parent-qualified facet, scope rule and
+retained distinction, plus every non-retirement amendment delta. Term aliases,
+acceptable access, task questions and newly added parents therefore require
+review even when there are no nested facets. Each record binds requirement
+content, concrete candidate paths, known evidence IDs, relevant structure
+findings, reviewer identity and the resulting registered parent judgment. The
+receipt also binds the candidate, effective benchmark, amendment, study lock,
+and complete registered missing-access audit file set.
+
+Review completion (`reviewed` or `unresolved`) is separate from factual outcome
+(`satisfied`, `partially_satisfied`, `not_satisfied`, `uninspectable`). The reviewer
+names the existing parent judgment fields actually assessed: subject coverage,
+stance preservation or first-lookup success, or reader-task result. A confirmed
+partial/unsatisfied outcome cannot be paired with a fully positive value in
+those declared fields. This check never turns a failed alternative route into
+coverage loss automatically. All-satisfied does not force a positive parent
+judgment; no facet count, minimum or sum determines a score. Claimed fidelity or
+navigation findings require relevant bound structure evidence.
+
+Missing/stale/foreign/duplicate requirements and inconsistent bindings block
+structure registration/scoring. Unresolved/uninspectable review produces
+`GATE-ASSESSMENT-ACCESS-REVIEW` with explicit parent/path/node/linked-defect scope;
+that uncertain evidence cannot support quality gates. It does not invent a
+negative parent judgment. Recorded expert judgments remain inputs to the
+unchanged formulas. Resolve or revise a frozen receipt through ordinary audit
+invalidation and a new review, preserving the old evidence.
+
+The result's study identity contains per-candidate `candidate_access_review`:
+`receipt_file_sha256` (or null when no requirements exist), `status`, and
+`requirement_count`. Its hash also participates in scoring artifact input
+bindings. Receipt hashes differ across candidates and are not a common-benchmark
+comparison criterion. Authoritative V10 scoring/reporting always validates the
+bound receipt; no-requirement benchmarks retain existing numerical behavior.
+
 ## Independent outcomes and public contract
 
 The twelve quality gates use structured registered evidence and deterministic
 ownership: direct destinations, specific semantics, scope, grounding fallback,
-then qualifying systemic groups. Direct-owned or uncertain items cannot be
+then qualifying systemic groups. For SCOPE, COMPOUND and GROUNDING, the
+major/critical requirement applies to the defect consequence; delivered severe
+mismatch/no-fit evidence has no additional locator-severity threshold. This
+V10-only helper does not change score or cap arithmetic. Direct-owned or uncertain items cannot be
 subtracted from a group to infer residual spread. No format, delivery,
 accessibility or data-profile gates exist. Depth is review-only.
 
@@ -117,7 +168,7 @@ validated; they must not replace the native readiness field.
 
 ## Verification
 
-Synthetic tests cover a nonempty facet overlay through migration, scoring,
+Synthetic tests cover a nonempty facet amendment through migration, scoring,
 report/projection and portable checkpoint; added weighted parents and exact
 populations; altered review/source/scope/evidence/facets; strict validity shapes;
 direct and systemic gate boundaries; ownership; and immutable human decisions.
