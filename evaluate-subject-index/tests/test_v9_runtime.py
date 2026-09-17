@@ -61,6 +61,10 @@ class V9RuntimeTests(unittest.TestCase):
         for stage in ('locator_chunk_preparation','locator_audit','missing_access_audit','structure_audit','scoring','web_report'):
             self.assertEqual('not_started',state['stages'][stage]['status'])
         self.assertEqual(old_state,(f.root/state['study_comparison']['prior_state']['path']).read_bytes())
+        next_action=v9('state','next','--state',f.state_path)
+        self.assertEqual(0,next_action.returncode,next_action.stdout+next_action.stderr)
+        self.assertEqual('v9_cli.py page-chunks prepare-locator-chunks',json.loads(next_action.stdout)['next_actions'][0]['command'])
+        self.assertTrue(all(row['command'].startswith('v9_cli.py ') for row in json.loads(next_action.stdout)['parallel_actions']))
         self.assertEqual(before,{p:p.read_bytes() for p in proof_paths})
         check=v9('study','preflight','--state',f.state_path)
         self.assertEqual(0,check.returncode,check.stdout+check.stderr)

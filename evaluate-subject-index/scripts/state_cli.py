@@ -34,11 +34,11 @@ COMMANDS = {
     "benchmark_synthesis": "synthesize-source-benchmark",
     "benchmark_review": "benchmark_review_cli.py freeze",
     "benchmark_freeze": "benchmark_review_cli.py freeze",
-    "candidate_normalization": "normalize-index", "locator_chunk_preparation": "prepare-locator-chunks",
+    "candidate_normalization": "normalize-index", "locator_chunk_preparation": ("v9_cli.py page-chunks prepare-locator-chunks" if is_v9() else "prepare-locator-chunks"),
     "locator_audit": "audit-locators", "missing_access_audit": "audit-missing-access",
-    "structure_audit": "dimension_score_v8_cli.py register-structure",
-    "scoring": "dimension_score_v8_cli.py score",
-    "web_report": "dimension_score_v8_cli.py build-report",
+    "structure_audit": ("v9_cli.py score register-structure" if is_v9() else "dimension_score_v8_cli.py register-structure"),
+    "scoring": ("v9_cli.py score score" if is_v9() else "dimension_score_v8_cli.py score"),
+    "web_report": ("v9_cli.py score build-report" if is_v9() else "dimension_score_v8_cli.py build-report"),
 }
 
 REQUIRED_INPUTS = {
@@ -275,7 +275,7 @@ def candidate_preparation_action(state: dict[str, Any]) -> dict[str, Any]:
     missing = [name for name in dependencies if stages.get(name, {}).get("status") != "completed"]
     integrated = stages.get("candidate_normalization", {}).get("status") == "completed"
     return {
-        "command": "candidate_preparation_cli.py register",
+        "command": ("v9_cli.py prepare-candidate register" if is_v9() else "candidate_preparation_cli.py register"),
         "status": "completed" if integrated else "available" if not missing else "blocked",
         "available": not missing and not integrated,
         "unmet_dependencies": missing,
@@ -288,8 +288,8 @@ def candidate_audit_parallel_actions(state: dict[str, Any]) -> list[dict[str, An
     locator_done = stages.get("locator_audit", {}).get("status") == "completed"
     missing_done = stages.get("missing_access_audit", {}).get("status") == "completed"
     return [
-        {"command": "parallel_candidate_audit_cli.py register-audits --audit-kind locator", "status": "completed" if locator_done else "available" if locator_ready else "blocked", "available": locator_ready and not locator_done},
-        {"command": "parallel_candidate_audit_cli.py register-audits --audit-kind missing_access", "status": "completed" if missing_done else "available" if locator_done else "blocked", "available": locator_done and not missing_done},
+        {"command": ("v9_cli.py audit-candidate register-audits --audit-kind locator" if is_v9() else "parallel_candidate_audit_cli.py register-audits --audit-kind locator"), "status": "completed" if locator_done else "available" if locator_ready else "blocked", "available": locator_ready and not locator_done},
+        {"command": ("v9_cli.py audit-candidate register-audits --audit-kind missing_access" if is_v9() else "parallel_candidate_audit_cli.py register-audits --audit-kind missing_access"), "status": "completed" if missing_done else "available" if locator_done else "blocked", "available": locator_done and not missing_done},
     ]
 
 
@@ -371,9 +371,9 @@ def command_set_stage(args: argparse.Namespace) -> None:
     typed_commands = {
         "benchmark_review": "benchmark_review_cli.py freeze",
         "benchmark_freeze": "benchmark_review_cli.py freeze",
-        "structure_audit": "dimension_score_v8_cli.py register-structure",
-        "scoring": "dimension_score_v8_cli.py score",
-        "web_report": "dimension_score_v8_cli.py build-report",
+        "structure_audit": ("v9_cli.py score register-structure" if is_v9() else "dimension_score_v8_cli.py register-structure"),
+        "scoring": ("v9_cli.py score score" if is_v9() else "dimension_score_v8_cli.py score"),
+        "web_report": ("v9_cli.py score build-report" if is_v9() else "dimension_score_v8_cli.py build-report"),
     }
     if args.status == "completed" and args.stage in typed_commands:
         fail(
