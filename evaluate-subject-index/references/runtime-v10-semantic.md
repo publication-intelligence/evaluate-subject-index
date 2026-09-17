@@ -60,6 +60,14 @@ blocker. Known independent quality gates and invalidity retain precedence.
 Public rows use “Semantically unresolved after inspection”; authored semantic
 rationale remains in private evidence.
 
+Inspected parent access uses `missing-access-audit-v2` when coverage, stance
+preservation, realistic first-lookup success, or a dependent reader-task result
+cannot be resolved from the inspected locator evidence. Each parent axis is
+declared independently as known or unresolved. Only an unresolved axis is null;
+known axes retain their observed values. These rows contribute neutral bounded
+evidence, remain distinct from physical uninspectability, and make the affected
+assessment gate indeterminate.
+
 Identical retained distinctions are canonicalized only in the derived review
 inventory, under the same parent/key and equal whole canonical value. Source
 positions and multiplicity remain recorded. Conflicting duplicates and duplicate

@@ -502,7 +502,11 @@ def validate_locator_audit(artifact: dict[str, Any], frozen: dict[str, Any], pac
 
 
 def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, Any], workset: dict[str, Any], chunk_id: str) -> dict[str, Any]:
-    errors = schema_errors(artifact, "missing-access-audit.schema.json")
+    from runtime_profile import semantic_uncertainty
+    semantic_parent = artifact.get("schema_version") == "missing-access-audit-v2"
+    require(not semantic_parent or semantic_uncertainty(), "unsupported_missing_access_schema", "Semantic parent uncertainty requires the V10 semantic runtime.")
+    schema = "missing-access-audit-v2.schema.json" if semantic_parent else "missing-access-audit.schema.json"
+    errors = schema_errors(artifact, schema, profile="v10s" if semantic_parent else None)
     require(not errors, "schema_validation_failed", "Missing-access audit is structurally invalid.", errors)
     require(artifact.get("evaluation_id") == frozen["state"].get("evaluation_id"), "audit_identity_mismatch", "Missing-access audit evaluation ID differs.")
     require(artifact.get("candidate_sha256") == frozen["candidate_sha256"], "audit_identity_mismatch", "Missing-access audit candidate hash differs.")
@@ -536,6 +540,13 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
         expected_subject = subject_index[subject_id]
         require(judgment.get("priority") == expected_subject.get("priority"), "subject_identity_mismatch", f"Subject {subject_id} priority differs from benchmark.")
         coverage = judgment["coverage"]
+        if semantic_parent:
+            axes = judgment["axis_resolution"]
+            uncertainty_fields = [row["field"] for row in judgment["semantic_uncertainties"]]
+            for field in ("coverage", "stance_preserved", "realistic_first_lookup_success"):
+                require((judgment[field] is None) == (axes[field] == "unresolved"), "semantic_parent_axis_mismatch", f"Subject {subject_id} field {field} value and resolution disagree.")
+            expected_unknown = sorted(field for field, status in axes.items() if status == "unresolved")
+            require(sorted(uncertainty_fields) == expected_unknown and not duplicate_values(uncertainty_fields), "semantic_parent_axis_mismatch", f"Subject {subject_id} semantic uncertainty evidence does not match its unresolved axes.")
         matched = judgment["matched_path_ids"]
         require(set(matched).issubset(candidate_path_ids), "matched_path_mismatch", f"Subject {subject_id} matched paths are invalid.")
         expected_pages = sorted({item["document_page"] for item in workset_treatments_by_subject.get(subject_id, [])})
@@ -572,7 +583,7 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
             missed_keys.add(key)
         reported_missed_treatments[subject_id] = missed_keys
         codes = judgment["error_codes"]
-        coverage_counts[coverage] += 1
+        coverage_counts["semantic_unresolved" if coverage is None else coverage] += 1
         severity_counts[judgment["severity"]] += 1
         error_code_counts.update(codes)
         direct = judgment["direct_access"]
@@ -581,6 +592,9 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
         subject_recall_records[subject_id] = treatment_recall
     require(not duplicate_values(subject_ids), "duplicate_subject_judgment", "Missing-access audit repeats subject judgments.")
     require(set(subject_ids) == set(expected_subjects), "missing_subject_judgment", "Missing-access audit does not contain the exact owned subject set.")
+    subject_semantic_count = sum(any(status == "unresolved" for status in row.get("axis_resolution", {}).values()) for row in subject_judgments)
+    if semantic_parent:
+        require(artifact["completion"].get("semantic_unresolved") == subject_semantic_count, "audit_completion", "Subject semantic-unresolved completion count does not recompute.")
 
     task_results = artifact["reader_task_results"]
     task_ids: list[str] = []
@@ -591,14 +605,22 @@ def validate_missing_access_audit(artifact: dict[str, Any], frozen: dict[str, An
         task_ids.append(task_id)
         require(task_id in expected_tasks, "foreign_chunk_reader_task", f"Missing-access audit contains foreign reader task {task_id}.")
         status = result["result"]
+        if semantic_parent:
+            axes = result["axis_resolution"]
+            uncertainties = result["semantic_uncertainties"]
+            require((status is None) == (axes["result"] == "unresolved"), "semantic_parent_axis_mismatch", f"Reader task {task_id} result value and resolution disagree.")
+            require(([row["field"] for row in uncertainties] == ["result"]) == (status is None), "semantic_parent_axis_mismatch", f"Reader task {task_id} semantic uncertainty evidence does not match its result axis.")
         require(result.get("subject_ids") == task_index[task_id].get("subject_ids"), "reader_task_identity_mismatch", f"Reader task {task_id} subject order differs from the frozen benchmark.")
         require(result.get("access_mode") in ACCESS_MODES, "audit_judgment", f"Reader task {task_id} must record its tested access mode.")
         matched = result["matched_path_ids"]
         require(set(matched).issubset(candidate_path_ids), "matched_path_mismatch", f"Reader task {task_id} matched paths are invalid.")
         severity_counts[result["severity"]] += 1
-        task_counts[status] += 1
+        task_counts["semantic_unresolved" if status is None else status] += 1
     require(not duplicate_values(task_ids), "duplicate_reader_task_judgment", "Missing-access audit repeats reader tasks.")
     require(set(task_ids) == set(expected_tasks), "missing_reader_task_judgment", "Missing-access audit does not contain the exact owned reader-task set.")
+    task_semantic_count = sum(row.get("axis_resolution", {}).get("result") == "unresolved" for row in task_results)
+    if semantic_parent:
+        require(artifact["reader_task_completion"].get("semantic_unresolved") == task_semantic_count, "audit_completion", "Reader-task semantic-unresolved completion count does not recompute.")
 
     expected_treatment_index = {item["treatment_id"]: item for item in workset["treatments"]}
     treatment_judgments = artifact["treatment_judgments"]
@@ -835,7 +857,7 @@ def _replace_complete_batch(
         chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
         require(chunk_id not in seen, "duplicate_chunk", f"More than one replacement audit was supplied for {chunk_id}.")
         seen.add(chunk_id)
-        suffix = "v3" if audit.get("schema_version") == "locator-audit-v3" else "v2" if args.audit_kind == "locator" else "v1"
+        suffix = "v3" if audit.get("schema_version") == "locator-audit-v3" else "v2" if args.audit_kind == "locator" or audit.get("schema_version") == "missing-access-audit-v2" else "v1"
         destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
         require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")
         record = artifact_record(destination, frozen["root"], stage_name, artifact_type, "private", stamp, digest)
@@ -904,7 +926,7 @@ def command_register_local(args: argparse.Namespace) -> None:
                 source = Path(raw_path).resolve()
                 audit, payload, digest = load_json_snapshot(source, "Candidate audit")
                 chunk_id, result = validate_local_audit(audit, frozen, args.audit_kind, packets, locator_set)
-                suffix = "v3" if audit.get("schema_version") == "locator-audit-v3" else "v2" if args.audit_kind == "locator" else "v1"
+                suffix = "v3" if audit.get("schema_version") == "locator-audit-v3" else "v2" if args.audit_kind == "locator" or audit.get("schema_version") == "missing-access-audit-v2" else "v1"
                 stem = "locator-audit" if args.audit_kind == "locator" else "missing-access-audit"
                 destination = parent / f"{stem}.{chunk_id}.{suffix}.json"
                 require_safe_output_path(destination, frozen["root"], "Canonical candidate audit")

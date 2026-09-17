@@ -89,7 +89,8 @@ def validate_review(document, *, state, state_path, benchmark, lock, structure_p
             study.require(document.get('requirement_inventory_provenance')==provenance,'Derived access inventory requires exact multiplicity/provenance without source mutation')
     rows=document['requirements'];keys=[key(row) for row in rows]
     study.require(len(keys)==len(set(keys)) and set(keys)==set(expected), 'Access review requires the exact parent-qualified requirement set without omissions, foreign IDs or duplicates')
-    audits=[r for r in state['artifacts'] if r['stage']=='missing_access_audit' and r.get('schema_version')=='missing-access-audit-v1']
+    allowed_audits={'missing-access-audit-v1','missing-access-audit-v2'} if semantic_uncertainty() else {'missing-access-audit-v1'}
+    audits=[r for r in state['artifacts'] if r['stage']=='missing_access_audit' and r.get('schema_version') in allowed_audits]
     expected_bindings=sorted([{'path':r['path'],'sha256':r['sha256']} for r in audits],key=lambda r:r['path'])
     study.require(sorted(document['audit_bindings'],key=lambda r:r['path'])==expected_bindings, 'Access review does not bind the exact registered audit bytes')
     subjects={};tasks={};known_evidence=evidence_universe(benchmark)

@@ -361,7 +361,7 @@ def preflight_state(state, state_path, *, require_density=False):
     if state.get('candidate'):
         require(state['candidate']['benchmark_sha256'] == benchmark['benchmark_sha256'], 'Candidate benchmark binding is stale')
     for record in state['artifacts']:
-        if record.get('schema_version') == 'missing-access-audit-v1' and record['stage'] == 'missing_access_audit':
+        if record.get('schema_version') in ({'missing-access-audit-v1','missing-access-audit-v2'} if __import__('runtime_profile').semantic_uncertainty() else {'missing-access-audit-v1'}) and record['stage'] == 'missing_access_audit':
             document = bound_document(state_path.parent, record)
             require(document['benchmark_sha256'] == benchmark['benchmark_sha256'], 'Registered audit uses a different benchmark')
     candidate_access_review = None

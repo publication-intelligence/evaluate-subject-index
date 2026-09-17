@@ -179,13 +179,16 @@ def public_subject_access(judgment: Mapping[str, Any]) -> dict[str, Any]:
     public["missing_routes"] = [_public_access_fields(row, ("route_type", "reason_code", "evidence_ids")) for row in judgment.get("missing_routes", [])]
     public["missed_treatments"] = [_public_access_fields(row, ("treatment_id", "document_page", "locator_class", "reason_code", "evidence_ids")) for row in judgment.get("missed_treatments", [])]
     public["dependency_defects"] = []
+    if "axis_resolution" in judgment:
+        public["axis_resolution"] = deepcopy(judgment["axis_resolution"])
+        public["semantic_uncertainties"] = [_public_access_fields(row, ("field", "reason_category", "evidence_ids", "locator_ids")) for row in judgment.get("semantic_uncertainties", [])]
     for row in judgment.get("dependency_defects", []):
         defect = _public_access_fields(row, ("defect_id", "dependency_type", "disposition", "locator_id", "coverage_subject_ids", "confidence", "evidence_ids"))
         defect["observed_conflict"] = f"Structured locator dependency defect {row['defect_id']} was reported."
         defect["required_adjudication"] = "Review the registered dependency defect and evidence identifiers."
         defect["summary"] = defect["observed_conflict"]
         public["dependency_defects"].append(defect)
-    details = [f"Coverage is {judgment['coverage']}"]
+    details = ["Coverage is semantically unresolved after inspection" if judgment.get("coverage") is None else f"Coverage is {judgment['coverage']}"]
     if "direct_access" in judgment:
         details.append(f"direct access is {judgment['direct_access']}")
     if "cross_reference_access" in judgment:
@@ -197,7 +200,11 @@ def public_subject_access(judgment: Mapping[str, Any]) -> dict[str, Any]:
 def public_reader_task_result(result: Mapping[str, Any]) -> dict[str, Any]:
     public = _public_access_fields(result, ("task_id", "subject_ids", "result", "access_mode", "matched_path_ids", "severity", "confidence", "evidence_ids"))
     access_mode = f" through {result['access_mode']} access" if "access_mode" in result else ""
-    public["access_rationale"] = f"Reader task result is {result['result']}{access_mode}."
+    if "axis_resolution" in result:
+        public["axis_resolution"] = deepcopy(result["axis_resolution"])
+        public["semantic_uncertainties"] = [_public_access_fields(row, ("field", "reason_category", "evidence_ids", "locator_ids")) for row in result.get("semantic_uncertainties", [])]
+    label = "semantically unresolved after inspection" if result.get("result") is None else result["result"]
+    public["access_rationale"] = f"Reader task result is {label}{access_mode}."
     return public
 
 

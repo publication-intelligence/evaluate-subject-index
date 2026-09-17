@@ -407,11 +407,8 @@ def load_v8_inputs(config_path: Path) -> dict[str, Any]:
         path, document, artifact = core.resolve_input(
             config_path, record, f"missing_access_audit[{index}]"
         )
-        core.validate_schema_document(
-            document,
-            "missing-access-audit.schema.json",
-            f"missing_access_audit[{index}]",
-        )
+        missing_schema = "missing-access-audit-v2.schema.json" if semantic_uncertainty() and document.get("schema_version") == "missing-access-audit-v2" else "missing-access-audit.schema.json"
+        core.validate_schema_document(document, missing_schema, f"missing_access_audit[{index}]")
         missing_entries.append((document, artifact, path))
     locator_entries.sort(key=lambda item: str(item[0].get("chunk_id", "")))
     missing_entries.sort(key=lambda item: str(item[0].get("chunk_id", "")))
@@ -1204,7 +1201,7 @@ def _registered_documents(
 ) -> list[tuple[dict[str, Any], dict[str, Any], Path]]:
     records = [
         item for item in state.get("artifacts", [])
-        if item.get("stage") == stage and (item.get("schema_version") == schema_version or (semantic_uncertainty() and schema_version == "locator-audit-v2" and item.get("schema_version") == "locator-audit-v3"))
+        if item.get("stage") == stage and (item.get("schema_version") == schema_version or (semantic_uncertainty() and ((schema_version == "locator-audit-v2" and item.get("schema_version") == "locator-audit-v3") or (schema_version == "missing-access-audit-v1" and item.get("schema_version") == "missing-access-audit-v2"))))
         and (sha256 is None or item.get("sha256") == sha256)
     ]
     core.require(bool(records), "registered_artifact_missing", f"No registered {schema_version} artifact exists for {stage}.")
@@ -1216,7 +1213,8 @@ def _registered_documents(
         actual = core.sha256_file(path)
         core.require(actual == record["sha256"], "registered_artifact_hash_mismatch", f"Registered artifact bytes changed: {record['path']}", {"expected_sha256": record["sha256"], "actual_sha256": actual})
         document = core.load_json(path, schema_version)
-        core.validate_schema_document(document, schema_name, schema_version)
+        selected_schema = "missing-access-audit-v2.schema.json" if semantic_uncertainty() and document.get("schema_version") == "missing-access-audit-v2" else schema_name
+        core.validate_schema_document(document, selected_schema, schema_version)
         result.append((document, deepcopy(record), path))
     return result
 
@@ -1583,16 +1581,18 @@ def _current_item_assessments(
     subject_assessments = []
     for subject_id in sorted(subject_by_id):
         judgment = subject_by_id[subject_id]
+        unknown_axes = [field for field, status in judgment.get("axis_resolution", {}).items() if status == "unresolved"]
         subject_assessments.append(_assessed_item(
             f"Source subject {subject_id}",
             "access_to_one_frozen_source_subject",
             coverage_score.get(judgment["coverage"]),
             confidence=judgment["confidence"],
             evidence_ids=judgment["evidence_ids"],
-            summary=f"Frozen benchmark subject access is {judgment['coverage']}.",
+            summary="Frozen benchmark subject access is semantically unresolved after inspection." if judgment.get("coverage") is None else f"Frozen benchmark subject access is {judgment['coverage']}.",
             navigation={"matched_path_ids": judgment["matched_path_ids"]},
             subject_id=subject_id,
             coverage=judgment["coverage"],
+            **({"semantic_unknown_axes": unknown_axes, "axis_resolution": deepcopy(judgment["axis_resolution"])} if unknown_axes else {}),
             matched_path_ids=judgment["matched_path_ids"],
         ))
 
@@ -2270,6 +2270,7 @@ def _projection_metadata(
     structure_record: Mapping[str, Any],
     candidate_label: str,
     locator_documents: Sequence[Mapping[str, Any]],
+    missing_access_documents: Sequence[Mapping[str, Any]],
     inventory: Mapping[str, Any],
     candidate_access_review=None,
 ) -> dict[str, Any]:
@@ -2277,6 +2278,25 @@ def _projection_metadata(
     if candidate_access_review and candidate_access_review['blockers']:
         destination_evidence[2]['blockers'].extend(deepcopy(candidate_access_review['blockers']))
         destination_evidence[2]['status'] = 'indeterminate'
+    if semantic_uncertainty():
+        parent_unknown = []
+        for document in missing_access_documents:
+            for row in document.get("subject_judgments", []):
+                axes = sorted(field for field, status in row.get("axis_resolution", {}).items() if status == "unresolved")
+                if axes:
+                    parent_unknown.append({"subject_id": row["subject_id"], "axes": axes})
+            for row in document.get("reader_task_results", []):
+                axes = sorted(field for field, status in row.get("axis_resolution", {}).items() if status == "unresolved")
+                if axes:
+                    parent_unknown.append({"task_id": row["task_id"], "axes": axes})
+        if parent_unknown:
+            destination_evidence[2]['blockers'].append({
+                'blocker_id':'GATE-ASSESSMENT-ACCESS-PARENT-UNCERTAIN',
+                'affected_item_ids':sorted({row.get('subject_id') or row.get('task_id') for row in parent_unknown}),
+                'semantic_unknown_axes':sorted({axis for row in parent_unknown for axis in row['axes']}),
+                'reason':'Inspected parent access depends on an unresolved semantic premise; no resolved access outcome is inferred.',
+            })
+            destination_evidence[2]['status'] = 'indeterminate'
     gates = _critical_gate_outcomes(policy, structure, calculation, destination_evidence=destination_evidence)
     limitations = [item["summary"] for item in structure["uncertainties"]]
     metadata = {
@@ -2626,7 +2646,7 @@ def command_score_state(args: argparse.Namespace) -> None:
             input_record = _artifact_record(root, outputs["input"], input_payload, stage="scoring", artifact_type="dimension_calculation_input", schema_version=runtime_identity("subject-index-dimension-calculation-input-v2"), stamp=stamp, input_sha256=input_hashes)
             calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version=runtime_identity("subject-index-dimension-calculations-v6"), stamp=stamp, input_sha256=input_hashes)
             items_record = _artifact_record(root, outputs["items"], items_payload, stage="scoring", artifact_type="item_assessments", schema_version=runtime_identity("subject-index-item-assessments-v7"), stamp=stamp, input_sha256=(calculation_record["sha256"], inventory_record["sha256"], structure_record["sha256"]))
-            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, inventory=inventory, candidate_access_review=loaded.get("candidate_access_review"))
+            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, missing_access_documents=loaded["missing_documents"], inventory=inventory, candidate_access_review=loaded.get("candidate_access_review"))
             metadata_payload = _json_bytes(metadata)
             metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version=runtime_identity("subject-index-v8-projection-metadata-v2"), stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)
