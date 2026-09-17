@@ -1916,6 +1916,17 @@ def _presentation_calculation_basis(dimension: Mapping[str, Any]) -> list[dict[s
     return lines
 
 
+def _presentation_subject_is_measured(row: Mapping[str, Any], optional_scored: Mapping[str, bool]) -> bool:
+    return (
+        row["coverage"] in core.COVERAGE_CREDIT
+        and (
+            row["priority"] != "optional"
+            or optional_scored.get(row["subject_id"], True)
+            or core.material_optional_failure(row)
+        )
+    )
+
+
 def _presentation_summary(
     *,
     calculation: Mapping[str, Any],
@@ -1934,10 +1945,7 @@ def _presentation_summary(
     }
 
     optional_scored = {row["subject_id"]: row["scored"] for row in structure["scoring_context"].get("optional_subject_scoring", [])}
-    measured_subjects = [
-        row for row in subject_rows
-        if row["coverage"] in core.COVERAGE_CREDIT and (row["priority"] != "optional" or optional_scored.get(row["subject_id"], True))
-    ]
+    measured_subjects = [row for row in subject_rows if _presentation_subject_is_measured(row, optional_scored)]
     complete_weight = sum((core.PRIORITY_CREDIT[row["priority"]] for row in measured_subjects if row["coverage"] == "complete"), ZERO)
     partial_weight = sum((core.PRIORITY_CREDIT[row["priority"]] for row in measured_subjects if row["coverage"] == "partial"), ZERO)
     missing_weight = sum((core.PRIORITY_CREDIT[row["priority"]] for row in measured_subjects if row["coverage"] == "missing"), ZERO)

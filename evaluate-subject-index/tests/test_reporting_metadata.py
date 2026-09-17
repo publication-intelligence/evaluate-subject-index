@@ -14,6 +14,18 @@ import web_projection  # noqa: E402
 
 
 class ReportingMetadataTests(unittest.TestCase):
+    def test_material_optional_failure_remains_in_presentation_denominator(self) -> None:
+        row = {
+            "subject_id": "SUBJ-OPTIONAL",
+            "priority": "optional",
+            "coverage": "missing",
+            "severity": "major",
+            "stance_preserved": "not_applicable",
+            "realistic_first_lookup_success": "no",
+        }
+
+        self.assertTrue(score_cli._presentation_subject_is_measured(row, {row["subject_id"]: False}))
+
     def test_projection_preserves_ordered_canonical_limitations_before_unique_cautions(self) -> None:
         canonical = [
             "Source-span limitation.",
