@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Explicit retrospective benchmark migration and fail-closed study comparison."""
+from runtime_profile import identity as runtime_identity, is_v9
 import argparse
 import hashlib
 from copy import deepcopy
@@ -44,10 +45,11 @@ def migrate(args):
     state_path = Path(args.state).resolve()
     with evaluation_mutation_lock(state_path):
         state = study.read(state_path)
-        errors, _ = validate_state(state, state_path=state_path)
+        prior_profile = "v8" if is_v9() else None
+        errors, _ = validate_state(state, state_path=state_path, profile=prior_profile)
         study.require(not errors, f'Invalid canonical state: {errors}')
         study.require(state.get('candidate') is not None, 'Retrospective migration requires an existing candidate; use the candidate-blind workflow for new evaluations')
-        policy, _ = study.registered_document(state, state_path, 'define_policy', 'subject-index-evaluation-policy-v4')
+        policy, _ = study.registered_document(state, state_path, 'define_policy', runtime_identity('subject-index-evaluation-policy-v4', profile=prior_profile))
         previous, _ = study.registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
         study.require(previous['benchmark_sha256'] == study.digest({k:v for k,v in previous.items() if k != 'benchmark_sha256'}), 'Previous benchmark self-hash mismatch')
         lock_path = Path(args.study_lock).resolve()
@@ -70,8 +72,9 @@ def migrate(args):
         inventory_path = Path(args.release_review_inventory) if args.release_review_inventory else None
         draft_path = Path(args.release_draft) if args.release_draft else None
         release_state_path = Path(args.release_state) if args.release_state else None
+        release_policy_path = Path(args.release_policy) if getattr(args, "release_policy", None) else None
         if lock['release']['lineage']['kind'] in ('native_source_freeze', 'current_source_freeze'):
-            study.validate_native_lineage(lock,release,release_state_path,draft_path,review_path,inventory_path)
+            study.validate_native_lineage(lock,release,release_state_path,draft_path,review_path,inventory_path,policy_path=release_policy_path)
         else:
             study.require(inventory_path is not None, 'Git release requires --release-review-inventory')
             validate_release_review(release, descriptor, release_path, review_path, inventory_path, draft_path)
@@ -80,7 +83,7 @@ def migrate(args):
         study.require(approval['previous_policy_sha256'] == policy['policy_sha256'], 'Approval does not bind the previous policy')
         study.require(approval['target_policy_semantic_sha256'] == lock['policy_semantic_sha256'], 'Approval does not bind the target policy settings')
         from dimension_score_v8_cli import validate_v8_policy
-        validate_v8_policy(policy)
+        validate_v8_policy(policy, profile=prior_profile)
         prior_policy = deepcopy(policy)
         template_path = Path(args.study_policy) if args.study_policy else None
         template = study.read(template_path) if template_path else None
@@ -126,6 +129,9 @@ def migrate(args):
             selected['benchmark_sha256'] = study.digest({k: v for k, v in selected.items() if k != 'benchmark_sha256'})
         study.require(not final_benchmark_structure_errors(selected), 'Selected benchmark wrapper is invalid')
         updated = deepcopy(state)
+        if is_v9():
+            from v9_migration import migrate_state_identity
+            migrate_state_identity(updated)
         if policy_changed:
             updated['configuration']['intended_readership'] = policy['audience']['label']
             updated['configuration']['readership_provenance'] = {k: policy['audience'][k] for k in ('basis','confidence','rationale')}
@@ -164,13 +170,15 @@ def migrate(args):
             writes[output/'release-state.json'] = release_state_path.read_bytes()
         if draft_path is not None:
             writes[output/'release-draft.json'] = draft_path.read_bytes()
+        if release_policy_path is not None:
+            writes[output/'release-policy.json'] = release_policy_path.read_bytes()
         for row in lock['density_basis']['chunks']:
             target = (output / row['source_artifact']['path']).resolve()
             content = (lock_path.parent / row['source_artifact']['path']).read_bytes()
             study.require(target.is_relative_to(output) and (target not in writes or writes[target] == content), 'Density evidence path collision')
             writes[target] = content
         if policy_changed:
-            previous_policy_record = next(r for r in state['artifacts'] if r['stage']=='define_policy' and r.get('schema_version')=='subject-index-evaluation-policy-v4')
+            previous_policy_record = next(r for r in state['artifacts'] if r['stage']=='define_policy' and r.get('schema_version')==runtime_identity('subject-index-evaluation-policy-v4', profile=prior_profile))
             writes[output/'previous-policy.json'] = (root / previous_policy_record['path']).read_bytes()
             policy['retrospective_study_migration']['previous_policy']['artifact']['sha256'] = hashlib.sha256(writes[output/'previous-policy.json']).hexdigest()
             policy['policy_sha256'] = study.digest({k:v for k,v in policy.items() if k != 'policy_sha256'})
@@ -189,12 +197,14 @@ def migrate(args):
                    'audit_transfer_authorized': False, 'historical_freeze': deepcopy(release['freeze']),
                    'prior_state': {'path': backup.name, 'sha256': study.file_digest(state_path)}}
         names = {'lock':'study-benchmark-lock.v1.json', 'release_benchmark':'release-benchmark.json', 'approval':'approval.json', 'release_review':'release-review.json'}
-        for name in ('release-descriptor','release-draft','release-state','release-review-inventory'):
+        for name in ('release-descriptor','release-draft','release-state','release-review-inventory','release-policy'):
             if output/(name+'.json') in writes:
                 names[name.replace('-','_')] = name+'.json'
         for name, filename in names.items():
             path = output/filename
             binding[name] = {'path': path.relative_to(root).as_posix(), 'sha256': hashlib.sha256(writes[path]).hexdigest()}
+        if is_v9():
+            binding['methodology_migration'] = {'source_rubric':'subject-index-rubric-v8.2','target_rubric':'subject-index-rubric-v9','source_proof_rewritten':False,'scoring_semantics_changed':False}
         updated['study_comparison'] = binding
         for path, content in writes.items():
             stage = 'benchmark_freeze'
@@ -255,7 +265,7 @@ def assemble(args):
             study.require(study.file_digest(path) == r['file_sha256'], 'Public collection bytes changed')
             collections[r['collection_id']] = study.read(path)
         web_projection.validate_bundle(projection,collections)
-        report, report_record = study.registered_document(state,state_path,'web_report','subject-index-web-report-v10')
+        report, report_record = study.registered_document(state,state_path,'web_report',runtime_identity('subject-index-web-report-v10'))
         study.require(report_record['visibility'] == 'public', 'Comparison requires a registered public web report')
         report_bytes = (state_path.parent/report_record['path']).read_bytes()
         study.require(hashlib.sha256(report_bytes).hexdigest() == report_record['sha256'], 'Registered web report bytes changed')
@@ -290,11 +300,11 @@ def assemble(args):
         for i,(projection,collections,report_bytes,report_sha) in enumerate(bundles):
             directory=temporary/str(i+1);directory.mkdir()
             (directory/'projection.v1.json').write_bytes(payload(projection))
-            (directory/'web-report.v10.json').write_bytes(report_bytes)
+            (directory/('web-report.v11.json' if is_v9() else 'web-report.v10.json')).write_bytes(report_bytes)
             for name,value in collections.items():
                 target=directory/web_projection.COLLECTION_PATHS[name];target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(web_projection.json_bytes(value))
             members.append({'evaluation_id':projection['evaluation_id'],'projection_path':f'{i+1}/projection.v1.json','projection_sha256':projection['projection_sha256'],
-                            'web_report_path':f'{i+1}/web-report.v10.json','web_report_file_sha256':report_sha})
+                            'web_report_path':f'{i+1}/' + ('web-report.v11.json' if is_v9() else 'web-report.v10.json'),'web_report_file_sha256':report_sha})
         manifest={'schema_version':'subject-index-study-comparison-v1','comparison_identity':common,'members':members}
         (temporary/'comparison.json').write_bytes(payload(manifest));temporary.rename(output)
     finally:
@@ -304,7 +314,7 @@ def assemble(args):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='command',required=True)
-    policy_template=sub.add_parser('policy-template');policy_template.add_argument('--input',required=True);policy_template.add_argument('--output',required=True)
+    policy_template=sub.add_parser('policy-template');policy_template.add_argument('--input',required=True);policy_template.add_argument('--output',required=True);policy_template.add_argument('--from-source-policy', action='store_true')
     fingerprint=sub.add_parser('fingerprint');fingerprint.add_argument('--benchmark',required=True);fingerprint.add_argument('--policy',required=True)
     check=sub.add_parser('preflight');check.add_argument('--state',action='append',required=True);check.add_argument('--require-density',action='store_true')
     migration=sub.add_parser('migrate-benchmark')
@@ -313,6 +323,7 @@ def main():
     migration.add_argument('--release-descriptor', help='Required for a Git-bound reviewed release')
     migration.add_argument('--release-state', help='Required preserved source-only state for native release lineage')
     migration.add_argument('--release-draft', help='Required preserved draft for native V8 reviewed releases')
+    migration.add_argument('--release-policy', help='V9: unchanged V8.2 policy registered by the source-only freeze')
     migration.add_argument('--study-policy', help='Explicitly approved shared unfrozen policy template')
     assembly=sub.add_parser('assemble-comparison');assembly.add_argument('--state',action='append',required=True);assembly.add_argument('--output-dir',required=True)
     args=parser.parse_args()
@@ -321,7 +332,15 @@ def main():
             import policy_cli
             source=study.read(args.input)
             study.require('retrospective_migration' not in source, 'A study policy template is unfrozen, not a migrated evaluation')
-            policy=policy_cli.build_policy(source)
+            if args.from_source_policy:
+                study.require(is_v9(), '--from-source-policy requires the explicit V9 runtime')
+                from dimension_score_v8_cli import validate_v8_policy
+                from v9_migration import policy_content
+                validate_v8_policy(source, profile='v8')
+                policy=policy_content(source)
+            else:
+                study.require(not is_v9(), 'V9 study template requires --from-source-policy to preserve source semantics')
+                policy=policy_cli.build_policy(source)
             template={'schema_version':'subject-index-study-policy-template-v1','policy_semantic_content':{k:v for k,v in policy.items() if k not in study.POLICY_WRAPPERS}}
             template['template_sha256']=study.digest(template)
             output=Path(args.output);study.require(not output.exists(),'Policy template output exists');output.parent.mkdir(parents=True,exist_ok=True);output.write_bytes(payload(template))

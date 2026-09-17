@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from runtime_profile import identity as runtime_identity, is_v9
+
 import argparse
 import fcntl
 import hashlib
@@ -32,11 +34,11 @@ COMMANDS = {
     "benchmark_synthesis": "synthesize-source-benchmark",
     "benchmark_review": "benchmark_review_cli.py freeze",
     "benchmark_freeze": "benchmark_review_cli.py freeze",
-    "candidate_normalization": "normalize-index", "locator_chunk_preparation": "prepare-locator-chunks",
+    "candidate_normalization": "normalize-index", "locator_chunk_preparation": ("v9_cli.py page-chunks prepare-locator-chunks" if is_v9() else "prepare-locator-chunks"),
     "locator_audit": "audit-locators", "missing_access_audit": "audit-missing-access",
-    "structure_audit": "dimension_score_v8_cli.py register-structure",
-    "scoring": "dimension_score_v8_cli.py score",
-    "web_report": "dimension_score_v8_cli.py build-report",
+    "structure_audit": ("v9_cli.py score register-structure" if is_v9() else "dimension_score_v8_cli.py register-structure"),
+    "scoring": ("v9_cli.py score score" if is_v9() else "dimension_score_v8_cli.py score"),
+    "web_report": ("v9_cli.py score build-report" if is_v9() else "dimension_score_v8_cli.py build-report"),
 }
 
 REQUIRED_INPUTS = {
@@ -63,12 +65,12 @@ COMPLETION_TESTS["initialize"] = "The state file and source identity are recorde
 VALID_STATUSES = {"not_started", "in_progress", "completed", "blocked"}
 VALID_VISIBILITY = {"public", "private", "restricted"}
 VALID_RETENTION = {"required", "cache"}
-STATE_SCHEMA_VERSION = "subject-index-evaluation-state-v6"
-SCORE_RUBRIC_VERSION = "subject-index-rubric-v8.2"
-DIMENSION_CALCULATION_PROFILE = "subject-index-dimension-calculation-v7"
+STATE_SCHEMA_VERSION = runtime_identity("subject-index-evaluation-state-v6")
+SCORE_RUBRIC_VERSION = runtime_identity("subject-index-rubric-v8.2")
+DIMENSION_CALCULATION_PROFILE = runtime_identity("subject-index-dimension-calculation-v7")
 STRUCTURE_AUDIT_COMPLETION_SCHEMA = "structure-audit-v6"
-SCORING_COMPLETION_SCHEMA = "subject-index-evaluation-result-v12"
-WEB_REPORT_COMPLETION_SCHEMA = "subject-index-web-report-v10"
+SCORING_COMPLETION_SCHEMA = runtime_identity("subject-index-evaluation-result-v12")
+WEB_REPORT_COMPLETION_SCHEMA = runtime_identity("subject-index-web-report-v10")
 
 
 def now() -> str:
@@ -164,18 +166,18 @@ def stage_dependencies(stage: str, stage_order: list[str]) -> list[str]:
     return stage_order[:stage_order.index(stage)]
 
 
-def _completion_schema(stage: str) -> str | None:
+def _completion_schema(stage: str, *, profile: str | None = None) -> str | None:
     return {
         "structure_audit": STRUCTURE_AUDIT_COMPLETION_SCHEMA,
-        "scoring": SCORING_COMPLETION_SCHEMA,
-        "web_report": WEB_REPORT_COMPLETION_SCHEMA,
+        "scoring": runtime_identity("subject-index-evaluation-result-v12", profile=profile),
+        "web_report": runtime_identity("subject-index-web-report-v10", profile=profile),
     }.get(stage)
 
 
-def artifact_is_active_for_stage(state: dict[str, Any], artifact: dict[str, Any], stage: str) -> bool:
+def artifact_is_active_for_stage(state: dict[str, Any], artifact: dict[str, Any], stage: str, *, profile: str | None = None) -> bool:
     if artifact.get("stage") != stage:
         return False
-    required_schema = _completion_schema(stage)
+    required_schema = _completion_schema(stage, profile=profile)
     return required_schema is None or artifact.get("schema_version") == required_schema
 
 
@@ -183,16 +185,17 @@ def validate_state(
     state: dict[str, Any],
     state_path: Path | None = None,
     check_files: bool = True,
+    profile: str | None = None,
 ) -> tuple[list[str], list[str]]:
     """Validate the single current state document and its accessible artifacts."""
     errors: list[str] = []
     warnings: list[str] = []
-    structural = schema_errors(state, "evaluation-state.schema.json")
+    structural = schema_errors(state, "evaluation-state.schema.json", profile=profile)
     if structural:
         return [f"State schema: {error}" for error in structural], warnings
 
     configuration = state["configuration"]
-    expected_identity = {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE}
+    expected_identity = {"rubric_version": runtime_identity("subject-index-rubric-v8.2", profile=profile), "dimension_calculation_profile": runtime_identity("subject-index-dimension-calculation-v7", profile=profile)}
     if configuration.get("scoring_identity") != expected_identity:
         errors.append("configuration.scoring_identity must select the current V8 profile.")
 
@@ -245,7 +248,7 @@ def validate_state(
 
     for name in STAGES[1:]:
         if stages.get(name, {}).get("status") == "completed" and not any(
-            artifact_is_active_for_stage(state, item, name) for item in artifacts if isinstance(item, dict)
+            artifact_is_active_for_stage(state, item, name, profile=profile) for item in artifacts if isinstance(item, dict)
         ):
             errors.append(f"Completed stage has no current artifact: {name}")
     return errors, warnings
@@ -272,7 +275,7 @@ def candidate_preparation_action(state: dict[str, Any]) -> dict[str, Any]:
     missing = [name for name in dependencies if stages.get(name, {}).get("status") != "completed"]
     integrated = stages.get("candidate_normalization", {}).get("status") == "completed"
     return {
-        "command": "candidate_preparation_cli.py register",
+        "command": ("v9_cli.py prepare-candidate register" if is_v9() else "candidate_preparation_cli.py register"),
         "status": "completed" if integrated else "available" if not missing else "blocked",
         "available": not missing and not integrated,
         "unmet_dependencies": missing,
@@ -285,8 +288,8 @@ def candidate_audit_parallel_actions(state: dict[str, Any]) -> list[dict[str, An
     locator_done = stages.get("locator_audit", {}).get("status") == "completed"
     missing_done = stages.get("missing_access_audit", {}).get("status") == "completed"
     return [
-        {"command": "parallel_candidate_audit_cli.py register-audits --audit-kind locator", "status": "completed" if locator_done else "available" if locator_ready else "blocked", "available": locator_ready and not locator_done},
-        {"command": "parallel_candidate_audit_cli.py register-audits --audit-kind missing_access", "status": "completed" if missing_done else "available" if locator_done else "blocked", "available": locator_done and not missing_done},
+        {"command": ("v9_cli.py audit-candidate register-audits --audit-kind locator" if is_v9() else "parallel_candidate_audit_cli.py register-audits --audit-kind locator"), "status": "completed" if locator_done else "available" if locator_ready else "blocked", "available": locator_ready and not locator_done},
+        {"command": ("v9_cli.py audit-candidate register-audits --audit-kind missing_access" if is_v9() else "parallel_candidate_audit_cli.py register-audits --audit-kind missing_access"), "status": "completed" if missing_done else "available" if locator_done else "blocked", "available": locator_done and not missing_done},
     ]
 
 
@@ -311,6 +314,8 @@ def state_summary(state: dict[str, Any], state_path: Path | None = None) -> dict
 
 
 def command_init(args: argparse.Namespace) -> None:
+    if is_v9():
+        fail("v9_migration_required", "V9 requires an explicit study migration preserving the V8.2 source freeze; initialize and freeze source policy under V8.2.")
     output = Path(args.output).resolve()
     if output.exists() and not args.force:
         fail("state_exists", f"Refusing to overwrite existing state: {output}")
@@ -335,7 +340,7 @@ def command_init(args: argparse.Namespace) -> None:
             "intended_readership": args.intended_readership,
             "readership_provenance": {"basis": args.readership_basis, "confidence": args.readership_confidence, "rationale": args.readership_rationale},
             "output_format": "json", "storage_mode": args.storage_mode,
-            "policy_profile": "subject-index-standard-policy-v8.2", "rubric_version": SCORE_RUBRIC_VERSION,
+            "policy_profile": runtime_identity("subject-index-standard-policy-v8.2"), "rubric_version": SCORE_RUBRIC_VERSION,
             "scoring_identity": {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE},
         },
         "stages": stages, "artifacts": [], "blockers": [],
@@ -368,9 +373,9 @@ def command_set_stage(args: argparse.Namespace) -> None:
     typed_commands = {
         "benchmark_review": "benchmark_review_cli.py freeze",
         "benchmark_freeze": "benchmark_review_cli.py freeze",
-        "structure_audit": "dimension_score_v8_cli.py register-structure",
-        "scoring": "dimension_score_v8_cli.py score",
-        "web_report": "dimension_score_v8_cli.py build-report",
+        "structure_audit": ("v9_cli.py score register-structure" if is_v9() else "dimension_score_v8_cli.py register-structure"),
+        "scoring": ("v9_cli.py score score" if is_v9() else "dimension_score_v8_cli.py score"),
+        "web_report": ("v9_cli.py score build-report" if is_v9() else "dimension_score_v8_cli.py build-report"),
     }
     if args.status == "completed" and args.stage in typed_commands:
         fail(
@@ -440,6 +445,8 @@ def command_validate(args: argparse.Namespace) -> None:
 
 
 def command_adopt_standard_policy(args: argparse.Namespace) -> None:
+    if is_v9():
+        fail("v9_migration_required", "V9 requires an explicit study migration preserving the V8.2 source freeze; initialize and freeze source policy under V8.2.")
     state_path = Path(args.state)
     state = load_state(state_path)
     if state.get("stages", {}).get("define_policy", {}).get("status") == "completed":
@@ -448,7 +455,7 @@ def command_adopt_standard_policy(args: argparse.Namespace) -> None:
     if args.intended_readership:
         configuration["intended_readership"] = args.intended_readership
     configuration["readership_provenance"] = {"basis": args.readership_basis, "confidence": args.readership_confidence, "rationale": args.readership_rationale}
-    configuration["policy_profile"] = "subject-index-standard-policy-v8.2"
+    configuration["policy_profile"] = runtime_identity("subject-index-standard-policy-v8.2")
     configuration["rubric_version"] = SCORE_RUBRIC_VERSION
     configuration["scoring_identity"] = {"rubric_version": SCORE_RUBRIC_VERSION, "dimension_calculation_profile": DIMENSION_CALCULATION_PROFILE}
     state["updated_at"] = now()

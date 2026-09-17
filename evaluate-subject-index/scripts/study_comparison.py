@@ -1,4 +1,5 @@
 """Study identities derived from evidence, never from displayed methodology labels."""
+from runtime_profile import identity as runtime_identity, is_v9
 from copy import deepcopy
 import hashlib
 import json
@@ -19,7 +20,16 @@ POLICY_WRAPPERS = {'policy_id', 'policy_sha256', 'freeze', 'retrospective_migrat
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    # Scoring reads JSON decimals exactly; study files historically use JSON
+    # numbers. Preserve that canonical encoding and reject lossy conversions.
+    from decimal import Decimal
+    def number(item):
+        if isinstance(item, Decimal) and item.is_finite():
+            result = float(item)
+            if Decimal(str(result)) == item:
+                return result
+        raise TypeError("Study identity contains an unsupported or lossy JSON number")
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), default=number).encode()).hexdigest()
 
 
 def file_digest(path):
@@ -60,6 +70,8 @@ def policy_semantic_hash(policy):
 
 def validate_lock(lock):
     require(not schema_errors(lock, 'study-benchmark-lock.schema.json'), 'Invalid study lock schema')
+    if is_v9():
+        require(lock['release']['lineage']['kind'] == 'current_source_freeze', 'V9 cutover requires the reviewed current V8.2 source freeze')
     require(lock['lock_sha256'] == digest({k: v for k, v in lock.items() if k != 'lock_sha256'}), 'Study lock self-hash mismatch')
     chunks = lock['density_basis']['chunks']
     require(len({r['chunk_id'] for r in chunks}) == len(chunks), 'Duplicate density chunk')
@@ -138,6 +150,8 @@ def evaluation_identity(*, benchmark, policy, structure, manifest, audit_mode, r
             require(identity[key] == lock[key], f'Study comparison mismatch: {key}')
         expected = [{k: r[k] for k in ('chunk_id', 'indexable_source_words')} for r in lock['density_basis']['chunks']]
         require(measurements == expected, 'Study comparison mismatch: exact density measurement map')
+        if is_v9():
+            identity['source_methodology'] = deepcopy(lock['source_methodology'])
         identity['release'] = public_release_identity(lock['release'])
         identity['density_basis'] = public_density_identity(lock['density_basis'])
     identity['identity_sha256'] = digest(identity)
@@ -150,6 +164,9 @@ def compare_identities(identities):
         require(identity.get('identity_sha256') == digest({k: v for k, v in identity.items() if k != 'identity_sha256'}), 'Comparison identity self-hash mismatch')
         require(identity.get('release') is not None and identity.get('density_basis') is not None, 'Comparison requires verified study release lineage and density basis')
     keys = ('source_scope', 'benchmark_semantic_sha256', 'release', 'policy_semantic_sha256', 'policy_profile', 'audit_mode', 'rubric_version', 'calculation_profile', 'density_basis', 'density_measurements_sha256')
+    if is_v9():
+        require(all('source_methodology' in row for row in identities), 'V9 comparison requires preserved source methodology')
+        keys += ('source_methodology',)
     mismatches = [key for key in keys if any(row[key] != identities[0][key] for row in identities[1:])]
     require(not mismatches, 'Incomparable evaluations: ' + ', '.join(mismatches))
     return deepcopy(identities[0])
@@ -253,7 +270,7 @@ def load_study_binding(state, state_path):
     if lock['release']['lineage']['kind'] in ('native_source_freeze', 'current_source_freeze'):
         for name in ('release_state','release_draft'):
             bound_document(root,binding[name])
-        validate_native_lineage(lock,release,*[(root/binding[name]['path']) for name in ('release_state','release_draft','release_review')],inventory_path)
+        validate_native_lineage(lock,release,*[(root/binding[name]['path']) for name in ('release_state','release_draft','release_review')],inventory_path,policy_path=(root/binding['release_policy']['path']) if is_v9() else None)
     else:
         from study_cli import validate_release_review
         validate_release_review(release,descriptor,root/binding['release_benchmark']['path'],root/binding['release_review']['path'],root/binding['release_review_inventory']['path'],root/binding['release_draft']['path'] if 'release_draft' in binding else None)
@@ -263,7 +280,12 @@ def load_study_binding(state, state_path):
     require(binding['historical_freeze']==release['freeze'], 'Historical release freeze differs from preserved binding')
     prior = bound_document(root, binding['prior_state'])
     require(prior.get('candidate') is not None and approval['previous_state_sha256'] == binding['prior_state']['sha256'], 'Retrospective approval/state lineage mismatch')
-    previous_policy, _ = registered_document(prior, root / binding['prior_state']['path'], 'define_policy', 'subject-index-evaluation-policy-v4')
+    if is_v9():
+        from state_cli import validate_state
+        errors, _ = validate_state(prior, check_files=False, profile='v8')
+        require(not errors, 'Invalid preserved V8 prior state')
+        bound_document(root, binding['release_policy'])
+    previous_policy, _ = registered_document(prior, root / binding['prior_state']['path'], 'define_policy', runtime_identity('subject-index-evaluation-policy-v4', profile='v8' if is_v9() else None))
     previous_benchmark, _ = registered_document(prior, root / binding['prior_state']['path'], 'benchmark_freeze', 'source-subject-benchmark-v2')
     require(approval['previous_policy_sha256']==previous_policy['policy_sha256'] and approval['previous_benchmark_sha256']==previous_benchmark['benchmark_sha256'], 'Approval historical identities differ')
     require(approval['target_policy_semantic_sha256']==lock['policy_semantic_sha256'], 'Approval target policy differs from study lock')
@@ -275,15 +297,17 @@ def load_study_binding(state, state_path):
 
 
 def preflight_state(state, state_path, *, require_density=False):
+    if is_v9():
+        require(state.get("study_comparison") is not None, "V9 requires a preserved V8.2 source/methodology binding")
     lock = load_study_binding(state, state_path)
     if lock is None:
-        for stage, schema, field in (('define_policy','subject-index-evaluation-policy-v4','retrospective_study_migration'), ('benchmark_freeze','source-subject-benchmark-v2','retrospective_benchmark_migration')):
+        for stage, schema, field in (('define_policy',runtime_identity('subject-index-evaluation-policy-v4'),'retrospective_study_migration'), ('benchmark_freeze','source-subject-benchmark-v2','retrospective_benchmark_migration')):
             rows = [r for r in state.get('artifacts', []) if r['stage']==stage and r.get('schema_version')==schema]
             if len(rows)==1:
                 require(field not in bound_document(state_path.parent,rows[0]), 'Study binding is missing from a retrospectively migrated evaluation')
         return None
     benchmark, _ = registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
-    policy, _ = registered_document(state, state_path, 'define_policy', 'subject-index-evaluation-policy-v4')
+    policy, _ = registered_document(state, state_path, 'define_policy', runtime_identity('subject-index-evaluation-policy-v4'))
     manifest, _ = registered_document(state, state_path, 'chunk_definition', 'chunk-manifest-v1')
     require(benchmark['benchmark_sha256'] == digest({k:v for k,v in benchmark.items() if k != 'benchmark_sha256'}), 'Current benchmark self-hash mismatch')
     require(policy['policy_sha256'] == digest({k:v for k,v in policy.items() if k != 'policy_sha256'}), 'Current policy self-hash mismatch')
@@ -328,7 +352,7 @@ def preflight_state(state, state_path, *, require_density=False):
     return lock
 
 
-def validate_native_lineage(lock, release, state_path, draft_path, review_path, inventory_path=None):
+def validate_native_lineage(lock, release, state_path, draft_path, review_path, inventory_path=None, *, policy_path=None):
     from benchmark_review_cli import build_inventory, json_bytes, legacy_registered_hash, native_v8_review_errors, validate_final_data
     lineage=lock['release']['lineage']
     require(lineage['kind'] in ('native_source_freeze', 'current_source_freeze'),'Expected native source-only lineage')
@@ -341,6 +365,10 @@ def validate_native_lineage(lock, release, state_path, draft_path, review_path, 
     for path,key in proofs:
         require(path is not None and file_digest(path)==lineage[key],f'Native release {key} mismatch')
     state=read(state_path)
+    if is_v9():
+        require(current, 'V9 cutover requires the reviewed current V8.2 source freeze')
+        from v9_migration import validate_source_policy
+        validate_source_policy(lock, release, state, policy_path)
     require(state.get('candidate') is None and not any(r.get('stage')=='candidate_normalization' for r in state['artifacts']), 'Native historical state contains candidate exposure')
     for stage in ('candidate_normalization','locator_chunk_preparation','locator_audit','missing_access_audit','structure_audit','scoring','web_report'):
         require(state['stages'][stage]['status']=='not_started',f'Native historical candidate-era stage is active: {stage}')
@@ -353,7 +381,7 @@ def validate_native_lineage(lock, release, state_path, draft_path, review_path, 
         require(state['stages'][stage]['status']=='completed' and legacy_registered_hash(state,stage,sha),f'Native historical registration mismatch: {stage}')
     if current:
         from state_cli import validate_state
-        state_errors, _ = validate_state(state, check_files=False)
+        state_errors, _ = validate_state(state, check_files=False, profile="v8")
         require(not state_errors, f'Current source freeze state is invalid: {state_errors}')
         require(not any(r.get('schema_version')=='source-benchmark-review-inventory-v1' for r in state['artifacts']), 'Current screening inventory must not be registered')
         for (stage, sha), schema in zip(registrations, ('source-subject-benchmark-draft-v1','source-benchmark-review-v1','source-subject-benchmark-v2')):

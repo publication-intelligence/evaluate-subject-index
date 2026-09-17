@@ -9,6 +9,10 @@ Current methodology: **V8.2**. Read [Consequence policy and targeted migration](
 
 Evaluate one finished subject index against its source and a frozen policy. Use the current V8.2 workflow and create current-schema artifacts.
 
+## Explicit V9 cutover
+
+V9 is available through `scripts/v9_cli.py TOOL ...`; existing entrypoints retain V8.2. Read [V9 percentage runtime and migration](references/percentage-runtime-v9.md) when V9 is explicitly selected. V9 changes representation and provenance only. It preserves the reviewed V8.2 source freeze, validates its unchanged state/policy/draft/review/final bytes, and creates separately identified candidate artifacts. Do not relabel or edit source proof, activate an unreviewed runtime, or reuse invalidated candidate audits by copying registrations. This feature does not itself authorize a study cutover.
+
 ## Method
 
 1. Map one-based document pages to source page labels. Store labels as strings and require the user to approve chunk boundaries.

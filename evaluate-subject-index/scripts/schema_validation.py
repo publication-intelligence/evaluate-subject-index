@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
+import runtime_profile
 
 
 SCHEMA_ROOT = Path(__file__).resolve().parents[1] / "references" / "schemas"
@@ -35,8 +36,10 @@ def _schema_store() -> dict[str, dict[str, Any]]:
     return store
 
 
-def schema_errors(document: Any, schema_name: str) -> list[str]:
+def schema_errors(document: Any, schema_name: str, *, profile: str | None = None) -> list[str]:
     """Return deterministic, path-qualified structural errors."""
+    requested_schema = schema_name
+    schema_name = runtime_profile.schema_name(schema_name, profile=profile)
     schema_path = SCHEMA_ROOT / schema_name
     schema = _schema_store()[schema_name]
     resolver = jsonschema.RefResolver(
@@ -54,10 +57,13 @@ def schema_errors(document: Any, schema_name: str) -> list[str]:
         f"{'.'.join(map(str, error.absolute_path)) or '<root>'}: {error.message}"
         for error in errors
     ]
-    if not messages and schema_name == "evaluation-state.schema.json" and "study_comparison" in document:
-        messages.extend("study_comparison." + message for message in schema_errors(document["study_comparison"], "retrospective-study-binding.schema.json"))
-    if not messages and schema_name == "evaluation-policy-v4.schema.json":
+    if not messages and requested_schema in {"evaluation-state.schema.json", "evaluation-state-v7.schema.json"} and "study_comparison" in document:
+        messages.extend("study_comparison." + message for message in schema_errors(document["study_comparison"], "retrospective-study-binding.schema.json", profile=profile))
+    if not messages and requested_schema in {"evaluation-policy-v4.schema.json", "evaluation-policy-v5.schema.json"}:
         messages.extend(policy_migration_errors(document))
+    if not messages and schema_name in runtime_profile.SCHEMAS.values():
+        from v9_contract import contract_errors
+        messages.extend(contract_errors(document))
     return messages
 
 

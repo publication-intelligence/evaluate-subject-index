@@ -1,6 +1,6 @@
 # Evaluate Subject Index
 
-Current methodology: **V8.1**, with consequence-aware ceilings and publication gates. See [the revision and targeted migration guide](evaluate-subject-index/references/consequence-policy-v8.1.md). Frozen V8 evaluations retain their original meaning and require explicit migration.
+Default entrypoints retain **V8.2**, including direct wrong-locator and broken-reference publication gates. An additive **V9 percentage runtime** is available through `v9_cli.py`; see [the explicit cutover contract](evaluate-subject-index/references/percentage-runtime-v9.md). Frozen evaluations retain their original meaning and require explicit migration.
 
 A source-grounded, current-V8 workflow for evaluating a finished subject index.
 

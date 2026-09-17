@@ -1,0 +1,644 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "V9 scored result with heading-access causal provenance",
+  "type": "object",
+  "required": [
+    "gate_assessment",
+    "schema_version",
+    "evaluation_id",
+    "candidate",
+    "provenance",
+    "audit_scope",
+    "dimension_calculations",
+    "scorecard",
+    "overall_percentage",
+    "interpretation",
+    "metrics",
+    "item_assessments",
+    "heading_access_causal_provenance",
+    "structure_audit",
+    "projection_metadata",
+    "critical_gates",
+    "defect_counts",
+    "comparison_key",
+    "limitations"
+  ],
+  "properties": {
+    "gate_assessment": {
+      "type": "object",
+      "required": [
+        "status",
+        "blockers"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "sufficient",
+            "indeterminate"
+          ]
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "blocker_id",
+              "affected_item_ids",
+              "reason"
+            ],
+            "properties": {
+              "blocker_id": {
+                "type": "string"
+              },
+              "affected_item_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "review_signals": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "evaluation_validity": {
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "subject-index-evaluation-result-v13"
+    },
+    "evaluation_id": {
+      "$ref": "#/$defs/inherited_1"
+    },
+    "candidate": {
+      "$ref": "#/$defs/inherited_2"
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source_sha256",
+        "judgment_policy_sha256",
+        "benchmark_sha256",
+        "rubric_version",
+        "dimension_calculation_profile"
+      ],
+      "properties": {
+        "source_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "judgment_policy_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "benchmark_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "rubric_version": {
+          "const": "subject-index-rubric-v9"
+        },
+        "dimension_calculation_profile": {
+          "const": "subject-index-dimension-calculation-v8"
+        }
+      },
+      "additionalProperties": true
+    },
+    "audit_scope": {
+      "$ref": "#/$defs/inherited_4"
+    },
+    "dimension_calculations": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/inherited_5"
+        },
+        {
+          "required": [
+            "calculation_profile"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "subject-index-dimension-calculations-v7"
+            },
+            "calculation_profile": {
+              "const": "subject-index-dimension-calculation-v8"
+            }
+          }
+        }
+      ]
+    },
+    "scorecard": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": [
+          "dimension_id",
+          "weight",
+          "dimension_percentage",
+          "weighted_contribution",
+          "formula_id"
+        ],
+        "properties": {
+          "dimension_id": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "dimension_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "weighted_contribution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "formula_id": {
+            "type": "string",
+            "pattern": "^subject-index-dimension-calculation-v8:"
+          },
+          "substantive_selectivity_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "density_fit_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "substantive_points_out_of_10": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "density_points_out_of_5": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "dimension_id": {
+                  "const": "editorial_selectivity"
+                }
+              },
+              "required": [
+                "dimension_id"
+              ]
+            },
+            "then": {
+              "required": [
+                "substantive_selectivity_percentage",
+                "density_fit_percentage",
+                "substantive_points_out_of_10",
+                "density_points_out_of_5"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "overall_percentage": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "interpretation": {
+      "$ref": "#/$defs/inherited_7"
+    },
+    "metrics": {
+      "$ref": "#/$defs/inherited_8"
+    },
+    "item_assessments": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/inherited_5"
+        },
+        {
+          "required": [
+            "grading_policy",
+            "summary"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "subject-index-item-assessments-v8"
+            },
+            "grading_policy": {
+              "const": "subject-index-item-grading-v4"
+            },
+            "summary": {
+              "type": "object"
+            }
+          }
+        }
+      ]
+    },
+    "heading_access_causal_provenance": {
+      "$ref": "#/$defs/inherited_9"
+    },
+    "structure_audit": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/inherited_5"
+        },
+        {
+          "properties": {
+            "schema_version": {
+              "const": "structure-audit-v6"
+            }
+          }
+        }
+      ]
+    },
+    "projection_metadata": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/inherited_5"
+        },
+        {
+          "required": [
+            "projection_metadata_sha256"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "subject-index-v9-projection-metadata-v1"
+            },
+            "projection_metadata_sha256": {
+              "$ref": "#/$defs/inherited_3"
+            }
+          }
+        }
+      ]
+    },
+    "critical_gates": {
+      "$ref": "#/$defs/inherited_15"
+    },
+    "defect_counts": {
+      "$ref": "#/$defs/inherited_16"
+    },
+    "comparison_key": {
+      "type": "object",
+      "required": [
+        "source_sha256",
+        "benchmark_sha256",
+        "judgment_policy_sha256",
+        "page_map_sha256",
+        "chunk_manifest_sha256",
+        "inclusion_policy",
+        "audit_mode",
+        "uncertainty_policy",
+        "rubric_version",
+        "dimension_calculation_profile"
+      ],
+      "properties": {
+        "source_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "benchmark_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "judgment_policy_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "page_map_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "chunk_manifest_sha256": {
+          "$ref": "#/$defs/inherited_3"
+        },
+        "inclusion_policy": {
+          "type": "string"
+        },
+        "audit_mode": {
+          "enum": [
+            "full",
+            "pilot"
+          ]
+        },
+        "uncertainty_policy": {
+          "type": "string"
+        },
+        "rubric_version": {
+          "const": "subject-index-rubric-v9"
+        },
+        "dimension_calculation_profile": {
+          "const": "subject-index-dimension-calculation-v8"
+        }
+      },
+      "additionalProperties": true
+    },
+    "limitations": {
+      "$ref": "#/$defs/inherited_17"
+    }
+  },
+  "additionalProperties": false,
+  "$id": "evaluation-result-v13.schema.json",
+  "$defs": {
+    "inherited_1": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inherited_3": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_2": {
+      "type": "object",
+      "required": [
+        "label",
+        "sha256"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "sha256": {
+          "$ref": "#/$defs/inherited_3"
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_4": {
+      "type": "object",
+      "required": [
+        "mode",
+        "complete"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "full",
+            "pilot"
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_6": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+    },
+    "inherited_5": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_path",
+        "sha256"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "artifact_path": {
+          "$ref": "#/$defs/inherited_6"
+        },
+        "sha256": {
+          "$ref": "#/$defs/inherited_3"
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_7": {
+      "type": "string"
+    },
+    "inherited_8": {
+      "type": "object",
+      "required": [
+        "keep_precision"
+      ],
+      "properties": {
+        "keep_precision": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_12": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "kind",
+        "source_ids",
+        "reason_codes",
+        "severity",
+        "evidence_ids",
+        "summary"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^HAF-"
+        },
+        "kind": {
+          "enum": [
+            "heading_fit",
+            "benchmark_access",
+            "cross_reference",
+            "confirmed_subdivision_architecture"
+          ]
+        },
+        "source_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:LOC|PATH|SUBJ|TASK|TREAT|XREF|NODE|DEFECT|ARCHREV)-"
+          },
+          "uniqueItems": true
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "severity": {
+          "enum": [
+            "minor",
+            "major",
+            "critical"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^EVID-"
+          },
+          "uniqueItems": true
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_11": {
+      "$ref": "#/$defs/inherited_12"
+    },
+    "inherited_14": {
+      "type": "object",
+      "required": [
+        "basis",
+        "basis_id"
+      ],
+      "properties": {
+        "basis": {
+          "enum": [
+            "deterministic_rule",
+            "explicit_adjudication"
+          ]
+        },
+        "basis_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_13": {
+      "$ref": "#/$defs/inherited_14"
+    },
+    "inherited_10": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "status",
+        "causal_findings"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^NODE-"
+        },
+        "status": {
+          "enum": [
+            "passes",
+            "minor_issues",
+            "major_issues",
+            "fails",
+            "uninspectable",
+            "not_applicable",
+            "not_measured"
+          ]
+        },
+        "causal_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inherited_11"
+          }
+        },
+        "primary_finding_id": {
+          "type": "string",
+          "pattern": "^HAF-"
+        },
+        "primary_basis": {
+          "$ref": "#/$defs/inherited_13"
+        }
+      },
+      "dependentRequired": {
+        "primary_finding_id": [
+          "primary_basis"
+        ],
+        "primary_basis": [
+          "primary_finding_id"
+        ]
+      },
+      "additionalProperties": false
+    },
+    "inherited_9": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/inherited_10"
+      }
+    },
+    "inherited_15": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "inherited_16": {
+      "type": "object"
+    },
+    "inherited_17": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ]
+}
