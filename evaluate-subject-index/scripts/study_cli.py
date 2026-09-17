@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Explicit retrospective benchmark migration and fail-closed study comparison."""
-from runtime_profile import identity as runtime_identity, is_v9
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
 import argparse
 import hashlib
 from copy import deepcopy
@@ -45,7 +45,7 @@ def migrate(args):
     state_path = Path(args.state).resolve()
     with evaluation_mutation_lock(state_path):
         state = study.read(state_path)
-        prior_profile = "v8" if is_v9() else None
+        prior_profile = "v8" if percentage_native() else None
         errors, _ = validate_state(state, state_path=state_path, profile=prior_profile)
         study.require(not errors, f'Invalid canonical state: {errors}')
         study.require(state.get('candidate') is not None, 'Retrospective migration requires an existing candidate; use the candidate-blind workflow for new evaluations')
@@ -96,6 +96,10 @@ def migrate(args):
         if not policy_changed:
             policy = deepcopy(prior_policy)
         study.require(study.policy_semantic_hash(policy) == lock['policy_semantic_sha256'], 'Study semantic policy mismatch; supply explicitly approved --study-policy')
+        effective_release = release
+        if is_v10():
+            from v10_access import validate_access
+            effective_release = validate_access(lock, release, lock_path.parent)
         same_content = study.benchmark_semantic_hash(previous) == lock['benchmark_semantic_sha256']
         root = state_path.parent
         output = (root / args.output_dir).resolve()
@@ -119,7 +123,7 @@ def migrate(args):
                 'original_freeze': deepcopy(original_freeze), 'audit_transfer_authorized': False}
             policy['policy_sha256'] = study.digest({k:v for k,v in policy.items() if k != 'policy_sha256'})
             validate_v8_policy(policy)
-        selected = deepcopy(previous) if same_content else study.normalized_benchmark(release)
+        selected = deepcopy(previous) if same_content else study.normalized_benchmark(effective_release)
         if not same_content or policy_changed:
             selected.update(evaluation_id=state['evaluation_id'], policy_sha256=policy['policy_sha256'])
             # The freeze remains the historical release's freeze. The new wrapper is openly retrospective.
@@ -129,9 +133,8 @@ def migrate(args):
             selected['benchmark_sha256'] = study.digest({k: v for k, v in selected.items() if k != 'benchmark_sha256'})
         study.require(not final_benchmark_structure_errors(selected), 'Selected benchmark wrapper is invalid')
         updated = deepcopy(state)
-        if is_v9():
-            from v9_migration import migrate_state_identity
-            migrate_state_identity(updated)
+        if percentage_native():
+            migration_module().migrate_state_identity(updated)
         if policy_changed:
             updated['configuration']['intended_readership'] = policy['audience']['label']
             updated['configuration']['readership_provenance'] = {k: policy['audience'][k] for k in ('basis','confidence','rationale')}
@@ -177,6 +180,13 @@ def migrate(args):
             content = (lock_path.parent / row['source_artifact']['path']).read_bytes()
             study.require(target.is_relative_to(output) and (target not in writes or writes[target] == content), 'Density evidence path collision')
             writes[target] = content
+        if is_v10():
+            for name in ('overlay', 'review'):
+                reference = lock['benchmark_access'][name]
+                target = (output/reference['path']).resolve()
+                content = (lock_path.parent/reference['path']).read_bytes()
+                study.require(target.is_relative_to(output) and (target not in writes or writes[target] == content), 'Access proof path collision')
+                writes[target] = content
         if policy_changed:
             previous_policy_record = next(r for r in state['artifacts'] if r['stage']=='define_policy' and r.get('schema_version')==runtime_identity('subject-index-evaluation-policy-v4', profile=prior_profile))
             writes[output/'previous-policy.json'] = (root / previous_policy_record['path']).read_bytes()
@@ -203,8 +213,8 @@ def migrate(args):
         for name, filename in names.items():
             path = output/filename
             binding[name] = {'path': path.relative_to(root).as_posix(), 'sha256': hashlib.sha256(writes[path]).hexdigest()}
-        if is_v9():
-            binding['methodology_migration'] = {'source_rubric':'subject-index-rubric-v8.2','target_rubric':'subject-index-rubric-v9','source_proof_rewritten':False,'scoring_semantics_changed':False}
+        if percentage_native():
+            binding['methodology_migration'] = {'source_rubric':'subject-index-rubric-v8.2','target_rubric':runtime_identity('subject-index-rubric-v8.2'),'source_proof_rewritten':False,'scoring_semantics_changed':is_v10()}
         updated['study_comparison'] = binding
         for path, content in writes.items():
             stage = 'benchmark_freeze'
@@ -300,11 +310,11 @@ def assemble(args):
         for i,(projection,collections,report_bytes,report_sha) in enumerate(bundles):
             directory=temporary/str(i+1);directory.mkdir()
             (directory/'projection.v1.json').write_bytes(payload(projection))
-            (directory/('web-report.v11.json' if is_v9() else 'web-report.v10.json')).write_bytes(report_bytes)
+            (directory/('web-report.v12.json' if is_v10() else 'web-report.v11.json' if percentage_native() else 'web-report.v10.json')).write_bytes(report_bytes)
             for name,value in collections.items():
                 target=directory/web_projection.COLLECTION_PATHS[name];target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(web_projection.json_bytes(value))
             members.append({'evaluation_id':projection['evaluation_id'],'projection_path':f'{i+1}/projection.v1.json','projection_sha256':projection['projection_sha256'],
-                            'web_report_path':f'{i+1}/' + ('web-report.v11.json' if is_v9() else 'web-report.v10.json'),'web_report_file_sha256':report_sha})
+                            'web_report_path':f'{i+1}/' + ('web-report.v12.json' if is_v10() else 'web-report.v11.json' if percentage_native() else 'web-report.v10.json'),'web_report_file_sha256':report_sha})
         manifest={'schema_version':'subject-index-study-comparison-v1','comparison_identity':common,'members':members}
         (temporary/'comparison.json').write_bytes(payload(manifest));temporary.rename(output)
     finally:
@@ -323,7 +333,7 @@ def main():
     migration.add_argument('--release-descriptor', help='Required for a Git-bound reviewed release')
     migration.add_argument('--release-state', help='Required preserved source-only state for native release lineage')
     migration.add_argument('--release-draft', help='Required preserved draft for native V8 reviewed releases')
-    migration.add_argument('--release-policy', help='V9: unchanged V8.2 policy registered by the source-only freeze')
+    migration.add_argument('--release-policy', help='Percentage runtime: unchanged V8.2 policy registered by the source-only freeze')
     migration.add_argument('--study-policy', help='Explicitly approved shared unfrozen policy template')
     assembly=sub.add_parser('assemble-comparison');assembly.add_argument('--state',action='append',required=True);assembly.add_argument('--output-dir',required=True)
     args=parser.parse_args()
@@ -333,13 +343,12 @@ def main():
             source=study.read(args.input)
             study.require('retrospective_migration' not in source, 'A study policy template is unfrozen, not a migrated evaluation')
             if args.from_source_policy:
-                study.require(is_v9(), '--from-source-policy requires the explicit V9 runtime')
+                study.require(percentage_native(), '--from-source-policy requires the explicit percentage runtime')
                 from dimension_score_v8_cli import validate_v8_policy
-                from v9_migration import policy_content
                 validate_v8_policy(source, profile='v8')
-                policy=policy_content(source)
+                policy=migration_module().policy_content(source)
             else:
-                study.require(not is_v9(), 'V9 study template requires --from-source-policy to preserve source semantics')
+                study.require(not percentage_native(), 'Percentage-runtime study template requires --from-source-policy to preserve source semantics')
                 policy=policy_cli.build_policy(source)
             template={'schema_version':'subject-index-study-policy-template-v1','policy_semantic_content':{k:v for k,v in policy.items() if k not in study.POLICY_WRAPPERS}}
             template['template_sha256']=study.digest(template)

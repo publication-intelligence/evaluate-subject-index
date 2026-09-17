@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-human-release-decision-v10"
+    },
+    "decision_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "evaluation_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "result_file_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "machine_facts_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "approved",
+        "approved_with_deviation",
+        "withheld"
+      ]
+    },
+    "decided_by": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "decided_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "authorization_reference": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "acknowledged_gate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "uniqueItems": true
+    },
+    "machine_outcomes_changed": {
+      "const": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "decision_id",
+    "evaluation_id",
+    "result_file_sha256",
+    "machine_facts_sha256",
+    "status",
+    "decided_by",
+    "decided_at",
+    "authorization_reference",
+    "rationale",
+    "acknowledged_gate_ids",
+    "machine_outcomes_changed"
+  ]
+}

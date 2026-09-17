@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from runtime_profile import is_v9
+from runtime_profile import percentage_native
 
 import hashlib
 import json
@@ -30,7 +30,7 @@ def grade(score: float | None, measured: bool = True) -> dict[str, Any]:
     if score is None or not measured:
         return {
             "score": None,
-            **({} if is_v9() else {"rating": None}),
+            **({} if percentage_native() else {"rating": None}),
             "band": "not_measured",
             "color_token": "grade_neutral",
             "status": "not_measured",
@@ -48,7 +48,7 @@ def grade(score: float | None, measured: bool = True) -> dict[str, Any]:
         band, token, status = "poor", "grade_poor", "fails"
     return {
         "score": bounded,
-        **({} if is_v9() else {"rating": round(bounded / 20.0, 3)}),
+        **({} if percentage_native() else {"rating": round(bounded / 20.0, 3)}),
         "band": band,
         "color_token": token,
         "status": status,

@@ -111,3 +111,13 @@ Represent `not_measured`, `uninspectable`, and `uncertain` explicitly rather tha
 - [structure-audit-v8.md](references/structure-audit-v8.md)
 - [customer-methodology-v8.md](references/customer-methodology-v8.md)
 - [json-contracts-v8.md](references/json-contracts-v8.md)
+
+## Explicit V10 review runtime
+
+For an explicitly authorized V10 implementation or migration, read
+`references/runtime-v10.md` and the adopted `references/consequence-policy-v10.md`.
+Use `scripts/v10_cli.py`; preserve the V8.2 source proof and require the separate
+independently reviewed, candidate-blind benchmark-access overlay and lock v3.
+Never infer activation, actual overlay freeze, candidate execution, or publication
+from implementation approval. Native V10 human release decisions remain separately
+bound artifacts and never change machine score, gate, validity, or readiness facts.

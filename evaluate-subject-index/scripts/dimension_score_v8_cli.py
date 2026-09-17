@@ -9,7 +9,7 @@ V8.2 adds direct destination gates without changing ordinary scores or ceilings.
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, is_v9
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
 
 import argparse
 import hashlib
@@ -1611,7 +1611,7 @@ def _scorecard(calculation: Mapping[str, Any]) -> list[dict[str, Any]]:
             "dimension_percentage": item["dimension_percentage"],
             "weighted_contribution": item["weighted_contribution"],
             "formula_id": item["formula_id"],
-            **({key: item[key] for key in ("substantive_selectivity_percentage", "density_fit_percentage", "substantive_points_out_of_10", "density_points_out_of_5")} if is_v9() and item["dimension_id"] == "editorial_selectivity" else {}),
+            **({key: item[key] for key in ("substantive_selectivity_percentage", "density_fit_percentage", "substantive_points_out_of_10", "density_points_out_of_5")} if percentage_native() and item["dimension_id"] == "editorial_selectivity" else {}),
         }
         for item in calculation["dimensions"]
     ]
@@ -1650,7 +1650,7 @@ def _public_density(structure: Mapping[str, Any], calculation: Mapping[str, Any]
         "Public density fit values must cover every and only canonical structure density chunk.",
     )
     density = deepcopy(structure["density"])
-    if is_v9():
+    if percentage_native():
         density.pop("fit_rating", None)
         detail = component["details"]
         density.update({key: detail[key] for key in ("total_weighted_percentage_numerator", "total_indexable_source_words")})
@@ -1679,8 +1679,8 @@ def _public_density(structure: Mapping[str, Any], calculation: Mapping[str, Any]
         }
     return {
         **density,
-        "density_fit_percentage": component["details"]["density_fit_percentage"] if is_v9() else component["percentage"],
-        **({"scoring_density_fit_percentage": component["percentage"]} if is_v9() else {}),
+        "density_fit_percentage": component["details"]["density_fit_percentage"] if percentage_native() else component["percentage"],
+        **({"scoring_density_fit_percentage": component["percentage"]} if percentage_native() else {}),
         "chapter_fit_by_chunk": chapter_fits,
     }
 
@@ -1984,7 +1984,7 @@ def _presentation_summary(
     }
 
 
-def _destination_gate_evidence(structure, calculation, locator_documents, inventory):
+def _destination_gate_evidence(structure, calculation, locator_documents, inventory, *, source_binding_valid=True):
     """Read finalized audit axes; never infer total wrongness from severity or prose."""
     reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
     expected = {row["locator_id"] for row in reliability.get("locator_utility_assignments", [])}
@@ -2025,12 +2025,16 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
     for reference_id in sorted(uncertain_references):
         block("GATE-ASSESSMENT-REFERENCE-UNCERTAIN", [reference_id], "Explicitly scoped uncertainty affects this delivered reference destination.")
 
-    if any(row["defect_kind"] == "scope_failure" for row in structure["defects"]):
+    if not is_v10() and any(row["defect_kind"] == "scope_failure" for row in structure["defects"]):
         block("GATE-ASSESSMENT-SOURCE", [], "Wrong-source evidence cannot establish candidate destination failures.")
         return [], [], {"status": "indeterminate", "blockers": blockers}
+    if is_v10() and not source_binding_valid:
+        block("GATE-ASSESSMENT-SOURCE", expected | locator_paths, "VALIDITY-SOURCE-SPAN: source-dependent judgments cannot be established from mismatched source evidence.")
     if expected - set(audited):
         block("GATE-ASSESSMENT-LOCATOR-EVIDENCE", expected - set(audited), "Finalized locator audit evidence is missing.")
     for locator_id in sorted(expected & set(audited)):
+        if is_v10() and not source_binding_valid:
+            continue
         row = audited[locator_id]
         if unknown_ids & {locator_id, row["path_id"]}:
             continue  # Already disclosed as an applicability gap, not a locator judgment.
@@ -2073,7 +2077,14 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
     return wrong_locators, broken_references, {"status": "indeterminate" if blockers else "sufficient", "blockers": blockers}
 
 
-def _critical_gate_outcomes(
+def _critical_gate_outcomes(policy, structure, calculation, *, destination_evidence=None):
+    if is_v10():
+        from v10_consequences import gate_outcomes
+        return gate_outcomes(policy, structure, calculation, destination_evidence, _legacy_critical_gate_outcomes)
+    return _legacy_critical_gate_outcomes(policy, structure, calculation, destination_evidence=destination_evidence)
+
+
+def _legacy_critical_gate_outcomes(
     policy: Mapping[str, Any], structure: Mapping[str, Any], calculation: Mapping[str, Any],
     *, destination_evidence: tuple | None = None,
 ) -> list[dict[str, Any]]:
@@ -2161,7 +2172,9 @@ def _evaluation_validity(policy, structure, calculation):
     blockers = []
     if value > tolerance:
         blockers.append({"blocker_id": "VALIDITY-UNINSPECTABLE", "outcome": "indeterminate", "count": count, "denominator": denominator, "rate": core.decimal_text(value), "threshold": core.decimal_text(tolerance), "reason": "Uninspectability exceeds frozen audit tolerance; index quality is undetermined."})
-    wrong_span = [row for row in structure["defects"] if row["defect_kind"] == "scope_failure"]
+    # V10 source identity/span mismatches are rejected by registered-input and
+    # study preflight. Candidate scope defects cannot establish invalid evidence.
+    wrong_span = [] if is_v10() else [row for row in structure["defects"] if row["defect_kind"] == "scope_failure"]
     if wrong_span:
         blockers.append({"blocker_id": "VALIDITY-SOURCE-SPAN", "outcome": "invalid", "evidence": deepcopy(wrong_span), "reason": "Evaluated source span is wrong; this audit cannot establish index quality."})
     if not structure["full_scope_attestation"]["complete"]:
@@ -2200,16 +2213,16 @@ def _projection_metadata(
     metadata = {
         "schema_version": runtime_identity("subject-index-v8-projection-metadata-v2"),
         "candidate_label": candidate_label,
-        "inclusion_policy": ("Frozen V8.2 source scope and candidate-blind benchmark, preserved under V9." if is_v9() else "Frozen current-V8 source scope and candidate-blind benchmark."),
+        "inclusion_policy": ("Preserved V8.2 source scope with independently reviewed V10 benchmark access overlay." if is_v10() else "Frozen V8.2 source scope and candidate-blind benchmark, preserved under V9." if percentage_native() else "Frozen current-V8 source scope and candidate-blind benchmark."),
         "uncertainty_policy": policy["audit_design"]["uncertainty_policy"],
         "critical_gates": gates,
         "gate_assessment": destination_evidence[2],
         "evaluation_validity": _evaluation_validity(policy, structure, calculation),
         "review_signals": _review_signals(structure, calculation),
-        "report_id": f"{calculation['evaluation_id']}-{'v9' if is_v9() else 'v8'}",
+        "report_id": f"{calculation['evaluation_id']}-{'v10' if is_v10() else 'v9' if percentage_native() else 'v8'}",
         "headline": "Subject-index evaluation",
-        "summary": ("V9 percentage evaluation from validated registered artifacts and preserved source proof." if is_v9() else "Current-V8 source-grounded evaluation from validated registered artifacts."),
-        "interpretation": f"The validated {'V9' if is_v9() else 'V8'} calculation produced an overall percentage of {calculation['overall_percentage']}%.",
+        "summary": ("V10 percentage evaluation from validated registered artifacts and independently reviewed benchmark access proof." if is_v10() else "V9 percentage evaluation from validated registered artifacts and preserved source proof." if percentage_native() else "Current-V8 source-grounded evaluation from validated registered artifacts."),
+        "interpretation": f"The validated {'V10' if is_v10() else 'V9' if percentage_native() else 'V8'} calculation produced an overall percentage of {calculation['overall_percentage']}%.",
         "defect_counts": dict(sorted(Counter(item["severity"] for item in structure["defects"]).items())),
         "strengths": deepcopy(structure["strengths"]),
         "defects": deepcopy(structure["defects"]),
@@ -2279,6 +2292,9 @@ def _evaluation_result(
         },
         "limitations": deepcopy(metadata["limitations"]),
     }
+    if is_v10():
+        from v10_consequences import outcome_fields
+        result.update(outcome_fields(result))
     core.validate_schema_document(result, "evaluation-result-v12.schema.json", "Generated V8 evaluation result")
     return result
 
@@ -2365,6 +2381,8 @@ def _web_report(
         "limitations": deepcopy(result["limitations"]),
         "evidence_index": {"calculation": calculation_ref, "structure_audit": structure_ref, "item_assessments": {"artifact_path": items_record["path"], "sha256": items_record["sha256"]}},
     }
+    if is_v10():
+        report.update({key: deepcopy(result[key]) for key in ("method_readiness", "authoritative_evaluation", "human_release_decision")})
     core.validate_schema_document(report, "web-report-v10.schema.json", "Generated V8 web report")
     return report
 
@@ -2506,11 +2524,11 @@ def command_score_state(args: argparse.Namespace) -> None:
             root = state_path.parent
             output_dir = _state_output_path(root, args.output_dir)
             outputs = {
-                "input": output_dir / ("dimension-calculation-input.v3.json" if is_v9() else "dimension-calculation-input.v2.json"),
-                "calculation": output_dir / ("dimension-calculations.v7.json" if is_v9() else "dimension-calculations.v6.json"),
-                "items": output_dir / ("item-assessments.v8.json" if is_v9() else "item-assessments.v7.json"),
-                "metadata": output_dir / ("projection-metadata.v9.json" if is_v9() else "projection-metadata.v2.json"),
-                "result": output_dir / ("evaluation-result.v13.json" if is_v9() else "evaluation-result.v12.json"),
+                "input": output_dir / ("dimension-calculation-input.v4.json" if is_v10() else "dimension-calculation-input.v3.json" if percentage_native() else "dimension-calculation-input.v2.json"),
+                "calculation": output_dir / ("dimension-calculations.v8.json" if is_v10() else "dimension-calculations.v7.json" if percentage_native() else "dimension-calculations.v6.json"),
+                "items": output_dir / ("item-assessments.v9.json" if is_v10() else "item-assessments.v8.json" if percentage_native() else "item-assessments.v7.json"),
+                "metadata": output_dir / ("projection-metadata.v10.json" if is_v10() else "projection-metadata.v9.json" if percentage_native() else "projection-metadata.v2.json"),
+                "result": output_dir / ("evaluation-result.v14.json" if is_v10() else "evaluation-result.v13.json" if percentage_native() else "evaluation-result.v12.json"),
             }
             collisions = [str(path) for path in outputs.values() if path.exists()]
             core.require(not collisions, "output_exists", "Refusing to overwrite scoring output.", collisions)
@@ -2536,7 +2554,7 @@ def command_score_state(args: argparse.Namespace) -> None:
             result_payload = _json_bytes(result)
             result_record = _artifact_record(root, outputs["result"], result_payload, stage="scoring", artifact_type="evaluation_result", schema_version=runtime_identity("subject-index-evaluation-result-v12"), stamp=stamp, visibility="public", input_sha256=(calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
             records = [input_record, calculation_record, items_record, metadata_record, result_record]
-            updated = _add_records_and_complete(state, state_path, "scoring", records, ("Assembled registered inputs, calculated V9 percentages, and registered the validated V13 result atomically." if is_v9() else "Assembled registered inputs, calculated V8 dimensions, and registered the validated V12 result atomically."))
+            updated = _add_records_and_complete(state, state_path, "scoring", records, ("Calculated V10 percentages and registered the validated V14 result atomically." if is_v10() else "Assembled registered inputs, calculated V9 percentages, and registered the validated V13 result atomically." if percentage_native() else "Assembled registered inputs, calculated V8 dimensions, and registered the validated V12 result atomically."))
             for path, payload in zip(outputs.values(), (input_payload, calculation_payload, items_payload, metadata_payload, result_payload), strict=True):
                 _atomic_write(path, payload)
             save_state(state_path, updated)
@@ -2576,8 +2594,8 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             core.require(result["dimension_calculations"]["sha256"] == calculation_record["sha256"] and result["item_assessments"]["sha256"] == items_record["sha256"] and result["structure_audit"]["sha256"] == structure_record["sha256"] and result["projection_metadata"]["sha256"] == metadata_record["sha256"], "result_artifact_binding_mismatch", "Registered result references do not match registered current artifacts.")
             study_identity = study_comparison.preflight_state(state, state_path, require_density=True)
             core.require(result["comparison_key"].get("study_identity") == study_identity, "study_comparison_stale", "Rescore after changing the study binding; report identity must match current evidence.")
-            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / ("web-report.v11.json" if is_v9() else "web-report.v10.json")))
-            bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / ("v9-canonical-projection" if is_v9() else "v8-canonical-projection")))
+            output = _state_output_path(state_path.parent, args.output or str(Path(result_record["path"]).parent / ("web-report.v12.json" if is_v10() else "web-report.v11.json" if percentage_native() else "web-report.v10.json")))
+            bundle_output = _state_output_path(state_path.parent, args.bundle_output or str(Path(result_record["path"]).parent / ("v10-canonical-projection" if is_v10() else "v9-canonical-projection" if percentage_native() else "v8-canonical-projection")))
             if not replacing:
                 core.require(not output.exists() and not bundle_output.exists(), "output_exists", "Refusing to overwrite web report or canonical web projection bundle.", [str(output), str(bundle_output)])
             report = _web_report(
@@ -2599,8 +2617,8 @@ def command_build_report_state(args: argparse.Namespace) -> None:
             payload = _json_bytes(report)
             stamp = now()
             record = _artifact_record(state_path.parent, output, payload, stage="web_report", artifact_type="web_report", schema_version=runtime_identity("subject-index-web-report-v10"), stamp=stamp, visibility="public", input_sha256=(result_record["sha256"], calculation_record["sha256"], items_record["sha256"], structure_record["sha256"], metadata_record["sha256"]))
-            if is_v9():
-                core.require(all(item.get("schema_version") == web_projection.OVERLAY_SCHEMA_VERSION for item in state["artifacts"] if item.get("artifact_type") == "correction_overlay"), "legacy_overlay_requires_rebinding", "V9 requires a native percentage-only overlay explicitly bound to this evaluation")
+            if percentage_native():
+                core.require(all(item.get("schema_version") == web_projection.OVERLAY_SCHEMA_VERSION for item in state["artifacts"] if item.get("artifact_type") == "correction_overlay"), "legacy_overlay_requires_rebinding", "The percentage runtime requires a native percentage-only overlay explicitly bound to this evaluation")
             overlay_entries = [item for item in state["artifacts"] if item.get("artifact_type") == "correction_overlay" and item.get("schema_version") == web_projection.OVERLAY_SCHEMA_VERSION]
             core.require(len(overlay_entries) <= 1, "duplicate_registered_artifact", "At most one confirmed correction overlay may apply.")
             overlay = overlay_record = None
@@ -2631,7 +2649,7 @@ def command_build_report_state(args: argparse.Namespace) -> None:
                 _validate_complete_web_bundle(state, state_path, records, output, bundle_output, current_inputs, calculation)
                 updated = _replace_records_and_complete(state, state_path, "web_report", records, "Rebuilt and replaced the complete canonical public web projection bundle atomically.")
             else:
-                updated = _add_records_and_complete(state, state_path, "web_report", records, ("Built and registered web-report.v11 and the complete V9 public web projection bundle atomically." if is_v9() else "Built and registered web-report.v10 and the complete canonical public web projection bundle atomically."))
+                updated = _add_records_and_complete(state, state_path, "web_report", records, ("Built and registered web-report.v12 and the V10 public projection bundle atomically." if is_v10() else "Built and registered web-report.v11 and the complete V9 public web projection bundle atomically." if percentage_native() else "Built and registered web-report.v10 and the complete canonical public web projection bundle atomically."))
             writes = [(output, payload), *[(row[0], row[1]) for row in generated]]
             _write_web_bundle_transaction(state_path, writes, updated, bundle_output=bundle_output)
         core.emit({"command": command, "ok": True, "evaluation_id": state["evaluation_id"], "report_id": report["report_id"], "projection_id": projection["projection_id"], "replacement": replacing, "artifacts_registered": [item["path"] for item in records], "artifacts_written": [str(output), *[str(row[0]) for row in generated], str(state_path)], "next_actions": [], "warnings": warnings})

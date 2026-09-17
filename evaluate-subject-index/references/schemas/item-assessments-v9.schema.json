@@ -1,0 +1,1561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "V10 item assessments with heading-access causal provenance",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "grading_policy",
+    "evaluation_id",
+    "candidate_id",
+    "candidate_sha256",
+    "item_inventory_sha256",
+    "item_inventory_artifact",
+    "evidence_identity",
+    "assessment_completeness",
+    "audit_mode",
+    "scope_complete",
+    "grade_disclosure",
+    "explanation_contract",
+    "locator_grading_provenance",
+    "structure_audit_binding",
+    "color_legend",
+    "locator_assessments",
+    "path_assessments",
+    "heading_node_assessments",
+    "cross_reference_assessments",
+    "source_subject_assessments",
+    "heading_access_causal_provenance",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-item-assessments-v9"
+    },
+    "grading_policy": {
+      "$ref": "#/$defs/inherited_1"
+    },
+    "evaluation_id": {
+      "$ref": "#/$defs/inherited_2"
+    },
+    "candidate_id": {
+      "$ref": "#/$defs/inherited_3"
+    },
+    "candidate_sha256": {
+      "$ref": "#/$defs/inherited_4"
+    },
+    "item_inventory_sha256": {
+      "$ref": "#/$defs/inherited_6"
+    },
+    "item_inventory_artifact": {
+      "$ref": "#/$defs/inherited_7"
+    },
+    "evidence_identity": {
+      "$ref": "#/$defs/inherited_8"
+    },
+    "assessment_completeness": {
+      "$ref": "#/$defs/inherited_11"
+    },
+    "audit_mode": {
+      "$ref": "#/$defs/inherited_13"
+    },
+    "scope_complete": {
+      "$ref": "#/$defs/inherited_14"
+    },
+    "grade_disclosure": {
+      "$ref": "#/$defs/inherited_15"
+    },
+    "explanation_contract": {
+      "type": "object",
+      "required": [
+        "contract_version",
+        "heading_access_causal_contract",
+        "authored_evidence_is_primary",
+        "prose_used_in_scoring",
+        "causal_provenance_used_in_scoring"
+      ],
+      "properties": {
+        "contract_version": {
+          "const": "locator-explanations-v2"
+        },
+        "heading_access_causal_contract": {
+          "const": "heading-access-causal-findings-v1"
+        },
+        "authored_evidence_is_primary": {
+          "const": true
+        },
+        "prose_used_in_scoring": {
+          "const": false
+        },
+        "causal_provenance_used_in_scoring": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "locator_grading_provenance": {
+      "$ref": "#/$defs/inherited_16"
+    },
+    "structure_audit_binding": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "candidate_sha256",
+        "node_id_set_sha256",
+        "cross_reference_id_set_sha256",
+        "locator_bearing_path_id_set_sha256"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "structure-audit-v6"
+        },
+        "candidate_sha256": {
+          "$ref": "#/$defs/inherited_21"
+        },
+        "node_id_set_sha256": {
+          "$ref": "#/$defs/inherited_21"
+        },
+        "cross_reference_id_set_sha256": {
+          "$ref": "#/$defs/inherited_21"
+        },
+        "locator_bearing_path_id_set_sha256": {
+          "$ref": "#/$defs/inherited_21"
+        }
+      },
+      "additionalProperties": false
+    },
+    "color_legend": {
+      "$ref": "#/$defs/inherited_22"
+    },
+    "locator_assessments": {
+      "$ref": "#/$defs/inherited_24"
+    },
+    "path_assessments": {
+      "$ref": "#/$defs/inherited_33"
+    },
+    "heading_node_assessments": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/inherited_25"
+          },
+          {
+            "type": "object",
+            "required": [
+              "node_id",
+              "heading_path",
+              "role",
+              "component_results",
+              "heading_access_status",
+              "heading_access_causal_findings"
+            ],
+            "properties": {
+              "node_id": {
+                "type": "string",
+                "pattern": "^NODE-"
+              },
+              "heading_access_status": {
+                "enum": [
+                  "passes",
+                  "minor_issues",
+                  "major_issues",
+                  "fails",
+                  "uninspectable",
+                  "not_applicable",
+                  "not_measured"
+                ]
+              },
+              "heading_access_causal_findings": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/causalFinding"
+                }
+              },
+              "heading_access_primary_finding_id": {
+                "type": "string",
+                "pattern": "^HAF-"
+              },
+              "heading_access_primary_basis": {
+                "$ref": "#/$defs/primaryBasis"
+              }
+            },
+            "dependentRequired": {
+              "heading_access_primary_finding_id": [
+                "heading_access_primary_basis"
+              ],
+              "heading_access_primary_basis": [
+                "heading_access_primary_finding_id"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "cross_reference_assessments": {
+      "$ref": "#/$defs/inherited_34"
+    },
+    "source_subject_assessments": {
+      "$ref": "#/$defs/inherited_36"
+    },
+    "heading_access_causal_provenance": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nodeCausalProvenance"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/inherited_38"
+    }
+  },
+  "$defs": {
+    "causalFinding": {
+      "$ref": "#/$defs/inherited_39"
+    },
+    "primaryBasis": {
+      "$ref": "#/$defs/inherited_40"
+    },
+    "nodeCausalProvenance": {
+      "type": "object",
+      "required": [
+        "node_id",
+        "status",
+        "causal_findings"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "pattern": "^NODE-"
+        },
+        "status": {
+          "enum": [
+            "passes",
+            "minor_issues",
+            "major_issues",
+            "fails",
+            "uninspectable",
+            "not_applicable",
+            "not_measured"
+          ]
+        },
+        "causal_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/causalFinding"
+          }
+        },
+        "primary_finding_id": {
+          "type": "string",
+          "pattern": "^HAF-"
+        },
+        "primary_basis": {
+          "$ref": "#/$defs/primaryBasis"
+        }
+      },
+      "dependentRequired": {
+        "primary_finding_id": [
+          "primary_basis"
+        ],
+        "primary_basis": [
+          "primary_finding_id"
+        ]
+      },
+      "additionalProperties": false
+    },
+    "locatorExplanation": {
+      "$ref": "#/$defs/inherited_31"
+    },
+    "inherited_1": {
+      "const": "subject-index-item-grading-v4"
+    },
+    "inherited_2": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inherited_3": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inherited_5": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_4": {
+      "$ref": "#/$defs/inherited_5"
+    },
+    "inherited_6": {
+      "$ref": "#/$defs/inherited_5"
+    },
+    "inherited_7": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "artifact_path",
+        "sha256"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "subject-index-item-inventory-v2"
+        },
+        "artifact_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/inherited_5"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_10": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_9": {
+      "type": "object",
+      "required": [
+        "candidate_sha256",
+        "source_sha256",
+        "benchmark_sha256",
+        "policy_sha256",
+        "page_map_sha256",
+        "chunk_manifest_sha256",
+        "structure_audit_file_sha256",
+        "locator_audit_set_sha256",
+        "missing_access_audit_set_sha256"
+      ],
+      "properties": {
+        "candidate_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "benchmark_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "policy_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "page_map_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "chunk_manifest_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "structure_audit_file_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "locator_audit_set_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        },
+        "missing_access_audit_set_sha256": {
+          "$ref": "#/$defs/inherited_10"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_8": {
+      "$ref": "#/$defs/inherited_9"
+    },
+    "inherited_12": {
+      "type": "object",
+      "required": [
+        "expected",
+        "assessed",
+        "unique",
+        "complete",
+        "id_set_sha256"
+      ],
+      "properties": {
+        "expected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assessed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unique": {
+          "const": true
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "id_set_sha256": {
+          "$ref": "#/$defs/inherited_5"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_11": {
+      "type": "object",
+      "required": [
+        "locators",
+        "paths",
+        "heading_nodes",
+        "cross_references",
+        "source_subjects"
+      ],
+      "properties": {
+        "locators": {
+          "$ref": "#/$defs/inherited_12"
+        },
+        "paths": {
+          "$ref": "#/$defs/inherited_12"
+        },
+        "heading_nodes": {
+          "$ref": "#/$defs/inherited_12"
+        },
+        "cross_references": {
+          "$ref": "#/$defs/inherited_12"
+        },
+        "source_subjects": {
+          "$ref": "#/$defs/inherited_12"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_13": {
+      "enum": [
+        "full",
+        "pilot"
+      ]
+    },
+    "inherited_14": {
+      "type": "boolean"
+    },
+    "inherited_15": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inherited_17": {
+      "type": "object",
+      "required": [
+        "substantive",
+        "mixed",
+        "weak_presence",
+        "absent",
+        "invalid_destination",
+        "uninspectable",
+        "not_measured"
+      ],
+      "properties": {
+        "substantive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mixed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "weak_presence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "absent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid_destination": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_measured": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_18": {
+      "type": "object",
+      "required": [
+        "exact_fit",
+        "material_partial_fit",
+        "material_mismatch",
+        "severe_mismatch",
+        "no_fit",
+        "uninspectable",
+        "not_measured"
+      ],
+      "properties": {
+        "exact_fit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "material_partial_fit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "material_mismatch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "severe_mismatch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "no_fit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_measured": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_19": {
+      "type": "object",
+      "required": [
+        "1",
+        "0.7",
+        "0.35",
+        "0.25",
+        "0.15",
+        "0",
+        "uninspectable",
+        "not_measured"
+      ],
+      "properties": {
+        "1": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "0.7": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "0.35": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "0.25": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "0.15": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "0": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_measured": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_20": {
+      "type": "object",
+      "required": [
+        "1",
+        "0",
+        "uninspectable",
+        "not_measured"
+      ],
+      "properties": {
+        "1": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "0": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_measured": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_16": {
+      "type": "object",
+      "required": [
+        "model",
+        "page_treatment_mapping",
+        "complete_path_fit_mapping",
+        "diagnostic_combination_rule",
+        "diagnostic_grade_rule",
+        "rating_credit_rule",
+        "calculation_locator_utility_ledger_sha256",
+        "diagnostic_grades_used_in_dimension_arithmetic",
+        "selectivity_mapping_unchanged",
+        "weak_presence_selectivity_credit",
+        "counts_by_treatment_tier",
+        "counts_by_fit_tier",
+        "counts_by_diagnostic_credit_value",
+        "counts_by_rating_credit_value"
+      ],
+      "properties": {
+        "model": {
+          "const": "two_axis_diagnostic_minimum_with_binary_keep_credit_v1"
+        },
+        "page_treatment_mapping": {
+          "type": "object"
+        },
+        "complete_path_fit_mapping": {
+          "type": "object"
+        },
+        "diagnostic_combination_rule": {
+          "const": "min(page_treatment_score, complete_path_fit_score)"
+        },
+        "diagnostic_grade_rule": {
+          "const": "100 * diagnostic_credit"
+        },
+        "rating_credit_rule": {
+          "const": "supported=1; partially_supported=0; unsupported=0; uninspectable/not_measured=null"
+        },
+        "calculation_locator_utility_ledger_sha256": {
+          "$ref": "#/$defs/inherited_5"
+        },
+        "diagnostic_grades_used_in_dimension_arithmetic": {
+          "const": false
+        },
+        "selectivity_mapping_unchanged": {
+          "const": true
+        },
+        "weak_presence_selectivity_credit": {
+          "const": 0
+        },
+        "counts_by_treatment_tier": {
+          "$ref": "#/$defs/inherited_17"
+        },
+        "counts_by_fit_tier": {
+          "$ref": "#/$defs/inherited_18"
+        },
+        "counts_by_diagnostic_credit_value": {
+          "$ref": "#/$defs/inherited_19"
+        },
+        "counts_by_rating_credit_value": {
+          "$ref": "#/$defs/inherited_20"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_21": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_23": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": [
+          "band",
+          "minimum_score",
+          "color_token"
+        ],
+        "properties": {
+          "band": {
+            "enum": [
+              "excellent",
+              "strong",
+              "mixed",
+              "weak",
+              "poor",
+              "not_measured"
+            ]
+          },
+          "minimum_score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "color_token": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "inherited_22": {
+      "$ref": "#/$defs/inherited_23"
+    },
+    "inherited_26": {
+      "type": "object",
+      "required": [
+        "score",
+        "band",
+        "color_token",
+        "status"
+      ],
+      "properties": {
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "band": {
+          "enum": [
+            "excellent",
+            "strong",
+            "mixed",
+            "weak",
+            "poor",
+            "not_measured"
+          ]
+        },
+        "color_token": {
+          "enum": [
+            "grade_excellent",
+            "grade_strong",
+            "grade_mixed",
+            "grade_weak",
+            "grade_poor",
+            "grade_neutral"
+          ]
+        },
+        "status": {
+          "enum": [
+            "passes",
+            "passes_with_issues",
+            "needs_review",
+            "needs_revision",
+            "fails",
+            "not_measured"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_28": {
+      "type": "object",
+      "required": [
+        "factor_id",
+        "label",
+        "status",
+        "score",
+        "explanation",
+        "evidence_ids"
+      ],
+      "properties": {
+        "factor_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "severity": {
+          "type": "string"
+        },
+        "applied_cap": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "severity_caps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "defect_id",
+              "severity",
+              "maximum_score",
+              "summary"
+            ],
+            "properties": {
+              "defect_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "severity": {
+                "enum": [
+                  "cosmetic",
+                  "minor",
+                  "major",
+                  "critical"
+                ]
+              },
+              "maximum_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "summary": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_27": {
+      "type": "object",
+      "required": [
+        "title",
+        "summary",
+        "grade",
+        "grade_scope",
+        "confidence",
+        "factors",
+        "evidence_ids",
+        "navigation"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "grade": {
+          "$ref": "#/$defs/inherited_26"
+        },
+        "grade_scope": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            null
+          ]
+        },
+        "factors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inherited_28"
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "navigation": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_25": {
+      "type": "object",
+      "required": [
+        "grade",
+        "grade_scope",
+        "confidence",
+        "evidence_ids",
+        "popover"
+      ],
+      "properties": {
+        "grade": {
+          "$ref": "#/$defs/inherited_26"
+        },
+        "grade_scope": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "high",
+            "medium",
+            "low",
+            null
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "popover": {
+          "$ref": "#/$defs/inherited_27"
+        }
+      },
+      "additionalProperties": true
+    },
+    "inherited_30": {
+      "type": "string",
+      "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+    },
+    "inherited_29": {
+      "type": "object",
+      "required": [
+        "locator_id",
+        "judgment",
+        "treatment_class",
+        "source_scope_status",
+        "inspectability_state",
+        "error_codes",
+        "applicable_structured_defect_ids",
+        "locator_severity",
+        "treatment_category",
+        "treatment_score",
+        "fit_category",
+        "fit_score",
+        "treatment_rule_id",
+        "fit_rule_id",
+        "mapping_rule_id",
+        "fit_classification_source",
+        "diagnostic_credit",
+        "diagnostic_grade",
+        "rating_credit",
+        "rating_rule_id",
+        "disposition",
+        "disposition_reason",
+        "rating_credit_uncertainty_bounds"
+      ],
+      "properties": {
+        "locator_id": {
+          "type": "string",
+          "pattern": "^LOC-"
+        },
+        "judgment": {
+          "enum": [
+            "supported",
+            "partially_supported",
+            "unsupported",
+            "uninspectable",
+            "not_measured"
+          ]
+        },
+        "treatment_class": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_scope_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inspectability_state": {
+          "enum": [
+            "inspectable",
+            "known_excluded_nonindexable",
+            "uninspectable_unavailable",
+            "uninspectable_ambiguous",
+            "not_measured"
+          ]
+        },
+        "error_codes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "SCP",
+              "COV",
+              "SEL",
+              "CON",
+              "STA",
+              "LOC_POS",
+              "LOC_NEG",
+              "CMP",
+              "HED",
+              "SUB",
+              "XRF",
+              "DEN",
+              "MEC"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "applicable_structured_defect_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^DEFECT-"
+          },
+          "uniqueItems": true
+        },
+        "locator_severity": {
+          "enum": [
+            "none",
+            "cosmetic",
+            "minor",
+            "major",
+            "critical",
+            null
+          ]
+        },
+        "treatment_category": {
+          "enum": [
+            "substantive",
+            "mixed",
+            "weak_presence",
+            "absent",
+            "invalid_destination",
+            "uninspectable",
+            "not_measured"
+          ]
+        },
+        "treatment_score": {
+          "enum": [
+            "1",
+            "0.7",
+            "0.25",
+            "0",
+            null
+          ]
+        },
+        "fit_category": {
+          "enum": [
+            "exact_fit",
+            "material_partial_fit",
+            "material_mismatch",
+            "severe_mismatch",
+            "no_fit",
+            "uninspectable",
+            "not_measured"
+          ]
+        },
+        "fit_score": {
+          "enum": [
+            "1",
+            "0.7",
+            "0.35",
+            "0.15",
+            "0",
+            null
+          ]
+        },
+        "treatment_rule_id": {
+          "type": "string",
+          "pattern": "^T-[A-Z0-9-]+$"
+        },
+        "fit_rule_id": {
+          "type": "string",
+          "pattern": "^F-[A-Z0-9-]+$"
+        },
+        "mapping_rule_id": {
+          "type": "string",
+          "pattern": "^T-[A-Z0-9-]+\\+F-[A-Z0-9-]+\\+MIN$"
+        },
+        "fit_classification_source": {
+          "enum": [
+            "native_complete_path_fit",
+            "not_measured"
+          ]
+        },
+        "diagnostic_credit": {
+          "enum": [
+            "1",
+            "0.7",
+            "0.35",
+            "0.25",
+            "0.15",
+            "0",
+            null
+          ]
+        },
+        "diagnostic_grade": {
+          "enum": [
+            100,
+            70,
+            35,
+            25,
+            15,
+            0,
+            null
+          ]
+        },
+        "rating_credit": {
+          "enum": [
+            "1",
+            "0",
+            null
+          ]
+        },
+        "rating_rule_id": {
+          "type": "string",
+          "pattern": "^R-[A-Z0-9-]+$"
+        },
+        "disposition": {
+          "enum": [
+            "assessable",
+            "bounded",
+            "not_measured"
+          ]
+        },
+        "disposition_reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rating_credit_uncertainty_bounds": {
+          "type": "object",
+          "required": [
+            "lower",
+            "upper"
+          ],
+          "properties": {
+            "lower": {
+              "$ref": "#/$defs/inherited_30"
+            },
+            "upper": {
+              "$ref": "#/$defs/inherited_30"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_32": {
+      "type": "object",
+      "required": [
+        "category",
+        "score",
+        "rule_id",
+        "rationale",
+        "rationale_source"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rule_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rationale_source": {
+          "enum": [
+            "authored_evidence_summary",
+            "authored_locator_audit",
+            "mechanical_structured_category_rule"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_31": {
+      "type": "object",
+      "required": [
+        "locator_id",
+        "path_id",
+        "evidence_summary",
+        "page_treatment",
+        "complete_path_fit",
+        "diagnostic_locator_grade",
+        "keep_rating_credit",
+        "evidence_ids",
+        "structured_defect_ids",
+        "fit_rationale_required"
+      ],
+      "properties": {
+        "locator_id": {
+          "type": "string",
+          "pattern": "^LOC-"
+        },
+        "path_id": {
+          "type": "string",
+          "pattern": "^PATH-"
+        },
+        "evidence_summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "page_treatment": {
+          "$ref": "#/$defs/inherited_32"
+        },
+        "complete_path_fit": {
+          "$ref": "#/$defs/inherited_32"
+        },
+        "diagnostic_locator_grade": {
+          "type": "object",
+          "required": [
+            "rule_id",
+            "calculation",
+            "score",
+            "credit"
+          ],
+          "properties": {
+            "rule_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "calculation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "score": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 100
+            },
+            "credit": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "keep_rating_credit": {
+          "type": "object",
+          "required": [
+            "keep_decision",
+            "rule_id",
+            "credit"
+          ],
+          "properties": {
+            "keep_decision": {
+              "type": "boolean"
+            },
+            "rule_id": {
+              "type": "string",
+              "pattern": "^R-[A-Z0-9-]+$"
+            },
+            "credit": {
+              "enum": [
+                "1",
+                "0",
+                null
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "structured_defect_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^DEFECT-"
+          },
+          "uniqueItems": true
+        },
+        "fit_rationale_required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_24": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/inherited_25"
+          },
+          {
+            "type": "object",
+            "required": [
+              "locator_id",
+              "path_id",
+              "dimension_reliability_credit",
+              "locator_utility",
+              "locator_explanation"
+            ],
+            "properties": {
+              "locator_id": {
+                "type": "string",
+                "pattern": "^LOC-"
+              },
+              "path_id": {
+                "type": "string",
+                "pattern": "^PATH-"
+              },
+              "dimension_reliability_credit": {
+                "enum": [
+                  "1",
+                  "0",
+                  null
+                ]
+              },
+              "locator_utility": {
+                "$ref": "#/$defs/inherited_29"
+              },
+              "locator_explanation": {
+                "$ref": "#/$defs/inherited_31"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "inherited_33": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/inherited_25"
+          },
+          {
+            "type": "object",
+            "required": [
+              "path_id",
+              "locator_ids"
+            ],
+            "properties": {
+              "path_id": {
+                "type": "string",
+                "pattern": "^PATH-"
+              },
+              "locator_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^LOC-"
+                },
+                "uniqueItems": true
+              },
+              "locator_architecture_review": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "inherited_35": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/inherited_25"
+          },
+          {
+            "type": "object",
+            "required": [
+              "reference_id",
+              "judgment"
+            ]
+          }
+        ]
+      }
+    },
+    "inherited_34": {
+      "$ref": "#/$defs/inherited_35"
+    },
+    "inherited_37": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/inherited_25"
+          },
+          {
+            "type": "object",
+            "required": [
+              "subject_id",
+              "coverage",
+              "matched_path_ids"
+            ]
+          }
+        ]
+      }
+    },
+    "inherited_36": {
+      "$ref": "#/$defs/inherited_37"
+    },
+    "inherited_38": {
+      "type": "object"
+    },
+    "inherited_39": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "kind",
+        "source_ids",
+        "reason_codes",
+        "severity",
+        "evidence_ids",
+        "summary"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "pattern": "^HAF-"
+        },
+        "kind": {
+          "enum": [
+            "heading_fit",
+            "benchmark_access",
+            "cross_reference",
+            "confirmed_subdivision_architecture"
+          ]
+        },
+        "source_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:LOC|PATH|SUBJ|TASK|TREAT|XREF|NODE|DEFECT|ARCHREV)-"
+          },
+          "uniqueItems": true
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "severity": {
+          "enum": [
+            "minor",
+            "major",
+            "critical"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^EVID-"
+          },
+          "uniqueItems": true
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_40": {
+      "type": "object",
+      "required": [
+        "basis",
+        "basis_id"
+      ],
+      "properties": {
+        "basis": {
+          "enum": [
+            "deterministic_rule",
+            "explicit_adjudication"
+          ]
+        },
+        "basis_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$id": "item-assessments-v9.schema.json",
+  "allOf": [
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ]
+}

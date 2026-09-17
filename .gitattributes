@@ -1,0 +1,2 @@
+# Preserve the adopted, hash-bound contract bytes, including Markdown hard breaks.
+evaluate-subject-index/references/consequence-policy-v10.md whitespace=-blank-at-eol

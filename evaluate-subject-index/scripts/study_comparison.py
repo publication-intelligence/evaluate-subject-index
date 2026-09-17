@@ -1,5 +1,5 @@
 """Study identities derived from evidence, never from displayed methodology labels."""
-from runtime_profile import identity as runtime_identity, is_v9
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
 from copy import deepcopy
 import hashlib
 import json
@@ -70,8 +70,8 @@ def policy_semantic_hash(policy):
 
 def validate_lock(lock):
     require(not schema_errors(lock, 'study-benchmark-lock.schema.json'), 'Invalid study lock schema')
-    if is_v9():
-        require(lock['release']['lineage']['kind'] == 'current_source_freeze', 'V9 cutover requires the reviewed current V8.2 source freeze')
+    if percentage_native():
+        require(lock['release']['lineage']['kind'] == 'current_source_freeze', 'Percentage-runtime cutover requires the reviewed current V8.2 source freeze')
     require(lock['lock_sha256'] == digest({k: v for k, v in lock.items() if k != 'lock_sha256'}), 'Study lock self-hash mismatch')
     chunks = lock['density_basis']['chunks']
     require(len({r['chunk_id'] for r in chunks}) == len(chunks), 'Duplicate density chunk')
@@ -97,7 +97,7 @@ def validate_release(lock, benchmark, benchmark_bytes_sha, descriptor=None, desc
         require(descriptor['release_id'] == release['release_id'] and descriptor['artifact_freeze']['commit'] == lineage['artifact_freeze_commit'], 'Release lineage mismatch')
         expected = descriptor['artifacts']['benchmark']
         require(expected['file_sha256'] == benchmark_bytes_sha and expected['canonical_sha256'] == benchmark['benchmark_sha256'], 'Descriptor benchmark mismatch')
-    require(benchmark_semantic_hash(benchmark) == lock['benchmark_semantic_sha256'], 'Mixed semantic benchmark family')
+    require(benchmark_semantic_hash(benchmark) == lock['source_benchmark_semantic_sha256' if is_v10() else 'benchmark_semantic_sha256'], 'Mixed semantic benchmark family')
     for key in ('source_sha256', 'page_map_sha256', 'chunk_manifest_sha256'):
         require(benchmark[key] == lock['source_scope'][key], f'Release {key} mismatch')
 
@@ -150,8 +150,12 @@ def evaluation_identity(*, benchmark, policy, structure, manifest, audit_mode, r
             require(identity[key] == lock[key], f'Study comparison mismatch: {key}')
         expected = [{k: r[k] for k in ('chunk_id', 'indexable_source_words')} for r in lock['density_basis']['chunks']]
         require(measurements == expected, 'Study comparison mismatch: exact density measurement map')
-        if is_v9():
+        if percentage_native():
             identity['source_methodology'] = deepcopy(lock['source_methodology'])
+            if is_v10():
+                identity['benchmark_access'] = {k: deepcopy(lock['benchmark_access'][k]) for k in ('overlay_sha256','effective_benchmark_semantic_sha256','frozen_at')}
+                identity['benchmark_access']['overlay_file_sha256'] = lock['benchmark_access']['overlay']['sha256']
+                identity['benchmark_access']['review_file_sha256'] = lock['benchmark_access']['review']['sha256']
         identity['release'] = public_release_identity(lock['release'])
         identity['density_basis'] = public_density_identity(lock['density_basis'])
     identity['identity_sha256'] = digest(identity)
@@ -164,9 +168,12 @@ def compare_identities(identities):
         require(identity.get('identity_sha256') == digest({k: v for k, v in identity.items() if k != 'identity_sha256'}), 'Comparison identity self-hash mismatch')
         require(identity.get('release') is not None and identity.get('density_basis') is not None, 'Comparison requires verified study release lineage and density basis')
     keys = ('source_scope', 'benchmark_semantic_sha256', 'release', 'policy_semantic_sha256', 'policy_profile', 'audit_mode', 'rubric_version', 'calculation_profile', 'density_basis', 'density_measurements_sha256')
-    if is_v9():
-        require(all('source_methodology' in row for row in identities), 'V9 comparison requires preserved source methodology')
+    if percentage_native():
+        require(all('source_methodology' in row for row in identities), 'Percentage-runtime comparison requires preserved source methodology')
         keys += ('source_methodology',)
+    if is_v10():
+        require(all('benchmark_access' in row for row in identities), 'V10 comparison requires independently reviewed access proof')
+        keys += ('benchmark_access',)
     mismatches = [key for key in keys if any(row[key] != identities[0][key] for row in identities[1:])]
     require(not mismatches, 'Incomparable evaluations: ' + ', '.join(mismatches))
     return deepcopy(identities[0])
@@ -270,7 +277,7 @@ def load_study_binding(state, state_path):
     if lock['release']['lineage']['kind'] in ('native_source_freeze', 'current_source_freeze'):
         for name in ('release_state','release_draft'):
             bound_document(root,binding[name])
-        validate_native_lineage(lock,release,*[(root/binding[name]['path']) for name in ('release_state','release_draft','release_review')],inventory_path,policy_path=(root/binding['release_policy']['path']) if is_v9() else None)
+        validate_native_lineage(lock,release,*[(root/binding[name]['path']) for name in ('release_state','release_draft','release_review')],inventory_path,policy_path=(root/binding['release_policy']['path']) if percentage_native() else None)
     else:
         from study_cli import validate_release_review
         validate_release_review(release,descriptor,root/binding['release_benchmark']['path'],root/binding['release_review']['path'],root/binding['release_review_inventory']['path'],root/binding['release_draft']['path'] if 'release_draft' in binding else None)
@@ -280,12 +287,12 @@ def load_study_binding(state, state_path):
     require(binding['historical_freeze']==release['freeze'], 'Historical release freeze differs from preserved binding')
     prior = bound_document(root, binding['prior_state'])
     require(prior.get('candidate') is not None and approval['previous_state_sha256'] == binding['prior_state']['sha256'], 'Retrospective approval/state lineage mismatch')
-    if is_v9():
+    if percentage_native():
         from state_cli import validate_state
         errors, _ = validate_state(prior, check_files=False, profile='v8')
         require(not errors, 'Invalid preserved V8 prior state')
         bound_document(root, binding['release_policy'])
-    previous_policy, _ = registered_document(prior, root / binding['prior_state']['path'], 'define_policy', runtime_identity('subject-index-evaluation-policy-v4', profile='v8' if is_v9() else None))
+    previous_policy, _ = registered_document(prior, root / binding['prior_state']['path'], 'define_policy', runtime_identity('subject-index-evaluation-policy-v4', profile='v8' if percentage_native() else None))
     previous_benchmark, _ = registered_document(prior, root / binding['prior_state']['path'], 'benchmark_freeze', 'source-subject-benchmark-v2')
     require(approval['previous_policy_sha256']==previous_policy['policy_sha256'] and approval['previous_benchmark_sha256']==previous_benchmark['benchmark_sha256'], 'Approval historical identities differ')
     require(approval['target_policy_semantic_sha256']==lock['policy_semantic_sha256'], 'Approval target policy differs from study lock')
@@ -293,12 +300,15 @@ def load_study_binding(state, state_path):
     page_map,_ = registered_document(state,state_path,'page_mapping','page-map-v1')
     manifest,_ = registered_document(state,state_path,'chunk_definition','chunk-manifest-v1')
     validate_density_evidence(lock, (root / binding['lock']['path']).parent, page_map, manifest)
+    if is_v10():
+        from v10_access import validate_access
+        validate_access(lock, release, (root / binding['lock']['path']).parent)
     return lock
 
 
 def preflight_state(state, state_path, *, require_density=False):
-    if is_v9():
-        require(state.get("study_comparison") is not None, "V9 requires a preserved V8.2 source/methodology binding")
+    if percentage_native():
+        require(state.get("study_comparison") is not None, "The percentage runtime requires a preserved V8.2 source/methodology binding")
     lock = load_study_binding(state, state_path)
     if lock is None:
         for stage, schema, field in (('define_policy',runtime_identity('subject-index-evaluation-policy-v4'),'retrospective_study_migration'), ('benchmark_freeze','source-subject-benchmark-v2','retrospective_benchmark_migration')):
@@ -365,10 +375,9 @@ def validate_native_lineage(lock, release, state_path, draft_path, review_path, 
     for path,key in proofs:
         require(path is not None and file_digest(path)==lineage[key],f'Native release {key} mismatch')
     state=read(state_path)
-    if is_v9():
-        require(current, 'V9 cutover requires the reviewed current V8.2 source freeze')
-        from v9_migration import validate_source_policy
-        validate_source_policy(lock, release, state, policy_path)
+    if percentage_native():
+        require(current, 'Percentage-runtime cutover requires the reviewed current V8.2 source freeze')
+        migration_module().validate_source_policy(lock, release, state, policy_path)
     require(state.get('candidate') is None and not any(r.get('stage')=='candidate_normalization' for r in state['artifacts']), 'Native historical state contains candidate exposure')
     for stage in ('candidate_normalization','locator_chunk_preparation','locator_audit','missing_access_audit','structure_audit','scoring','web_report'):
         require(state['stages'][stage]['status']=='not_started',f'Native historical candidate-era stage is active: {stage}')
