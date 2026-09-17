@@ -86,7 +86,9 @@ def main():
         with evaluation_mutation_lock(path):
             state=study.read(path)
             study.require(not state.get('execution_compatibility'),'Execution compatibility already adopted; do not replace it in place')
-            errors,_=validate_state(state,state_path=path,profile='v10')
+            errors,_=validate_state(state,state_path=path)
+            if errors:
+                errors,_=validate_state(state,state_path=path,profile='v10')
             study.require(not errors,'Adoption requires a valid preserved V10 state')
             study.load_study_binding(state,path)
             study.require(out.is_relative_to(root) and out!=root and not out.exists(),'Adoption output must be new inside the evaluation')

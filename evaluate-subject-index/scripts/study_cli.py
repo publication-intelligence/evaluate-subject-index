@@ -243,7 +243,7 @@ def migrate(args):
             output.parent.mkdir(parents=True, exist_ok=True)
             staged.rename(output)
             backup.write_bytes(state_path.read_bytes())
-            study.preflight_state(updated, state_path)
+            study.preflight_state(updated, state_path, allow_pending_execution=True)
             save_state(state_path, updated)
             committed = True
         finally:

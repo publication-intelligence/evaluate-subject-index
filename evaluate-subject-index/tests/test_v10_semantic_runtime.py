@@ -23,6 +23,32 @@ def compatibility(f,revision=None):
 
 
 class SemanticRuntimeTests(unittest.TestCase):
+    def test_public_v8_four_family_migration_then_decision_v3_adoption(self):
+        f=baseline.prepare_v10(self)
+        template=f.root/'release/public-v7-policy-template.json'
+        generated=command('study','policy-template','--input',f.args.release_policy,'--output',template,'--from-source-policy')
+        self.assertEqual(0,generated.returncode,generated.stdout+generated.stderr)
+        f.args.study_policy=str(template)
+        f.lock['policy_semantic_sha256']=study.policy_semantic_hash(study.read(template))
+        baseline.rebind(f)
+        arguments=['study','migrate-benchmark']
+        for name,value in vars(f.args).items():
+            if value is not None:arguments += ['--'+name.replace('_','-'),value]
+        migrated=command(*arguments)
+        self.assertEqual(0,migrated.returncode,migrated.stdout+migrated.stderr)
+        pending=study.read(f.state_path)
+        self.assertEqual('subject-index-evaluation-state-v9',pending['schema_version'])
+        self.assertNotIn('execution_compatibility',pending)
+        blocked=command('study','preflight','--state',f.state_path)
+        self.assertNotEqual(0,blocked.returncode);self.assertIn('explicit compatibility adoption',blocked.stdout+blocked.stderr)
+        approval,release=compatibility(f)
+        adopted=command('adopt','--state',f.state_path,'--compatibility',approval,'--source-release',release,'--output-dir','semantic-execution')
+        self.assertEqual(0,adopted.returncode,adopted.stdout+adopted.stderr)
+        current=study.read(f.state_path)
+        self.assertEqual(CONTRACT,study.read(f.root/current['execution_compatibility']['approval']['path'])['execution_contract_id'])
+        ready=command('study','preflight','--state',f.state_path)
+        self.assertEqual(0,ready.returncode,ready.stdout+ready.stderr)
+
     def test_completed_semantic_architecture_review_is_neutral_and_complete(self):
         code='''
 import json

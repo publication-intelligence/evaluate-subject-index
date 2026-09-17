@@ -53,6 +53,13 @@ can remain registered. New semantic rows require locator-audit-v3. Use normal
 replacement; it invalidates downstream audits and factual access receipts under
 the existing workflow. Rebuild those before scoring.
 
+For a preserved V8.2 state that does not yet carry the four-family study lock,
+the supported public sequence is `v10_cli.py study migrate-benchmark ...`
+followed immediately by `v10_cli.py adopt ...`. The migrated V9 state is a
+deliberate compatibility-pending transition: migration validates its complete
+lock and policy binding, but scoring, auditing, checkpointing, and ordinary
+study preflight remain unavailable until adoption binds decision v3.
+
 ## Native evidence
 
 `axis_resolution` declares treatment, complete_path_fit and keep as known or
