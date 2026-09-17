@@ -14,6 +14,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from internal_cli import run_internal_cli
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -73,12 +75,7 @@ class CurrentV8CompletionTests(unittest.TestCase):
         }
 
     def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, str(SCRIPTS / "dimension_score_v8_cli.py"), *arguments],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        return run_internal_cli("dimension_score_v8_cli", *arguments)
 
     def add_cross_reference_record_for_existing_heading(self) -> None:
         candidate_path = self.root / "candidate/candidate-index.json"
@@ -452,11 +449,10 @@ class CurrentV8CompletionTests(unittest.TestCase):
         self.assertIn("candidate_identity_mismatch", failed.stdout)
         self.assertEqual(original_state, self.state_path.read_bytes())
 
-        failed = subprocess.run(
-            [sys.executable, str(SCRIPTS / "state_cli.py"), "set-stage", "--state", str(self.state_path), "--stage", "structure_audit", "--status", "completed", "--artifact-path", str(self.structure_path)],
-            text=True,
-            capture_output=True,
-            check=False,
+        failed = run_internal_cli(
+            "state_cli", "set-stage", "--state", self.state_path,
+            "--stage", "structure_audit", "--status", "completed",
+            "--artifact-path", self.structure_path,
         )
         self.assertNotEqual(0, failed.returncode)
         self.assertIn("typed_transition_required", failed.stdout)

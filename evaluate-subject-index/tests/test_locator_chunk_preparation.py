@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from internal_cli import run_internal_cli
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -57,12 +59,7 @@ def artifact_record(root: Path, path: Path, stage: str, artifact_type: str, sche
 
 
 def run_cli(*arguments: object, ok: bool = True) -> tuple[dict, int]:
-    result = subprocess.run(
-        [sys.executable, str(SCRIPTS / "page_chunk_cli.py"), *(str(value) for value in arguments)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = run_internal_cli("page_chunk_cli", *arguments)
     if ok and result.returncode:
         raise AssertionError(result.stdout + result.stderr)
     if not ok and not result.returncode:
@@ -343,10 +340,7 @@ class LocatorChunkPreparationTests(unittest.TestCase):
             state = json.loads(fixture.state_path.read_text())
             state["candidate"]["normalized_sha256"] = "0" * 64
             write_json(fixture.state_path, state)
-            result = subprocess.run(
-                [sys.executable, str(SCRIPTS / "state_cli.py"), "validate", "--state", str(fixture.state_path), "--skip-files"],
-                text=True, capture_output=True, check=False,
-            )
+            result = run_internal_cli("state_cli", "validate", "--state", fixture.state_path, "--skip-files")
             self.assertNotEqual(0, result.returncode)
             self.assertTrue(any("canonical candidate" in error for error in json.loads(result.stdout)["errors"]))
 
@@ -357,10 +351,7 @@ class LocatorChunkPreparationTests(unittest.TestCase):
             self.assertTrue(registration["ok"])
             self.assertEqual("candidate-current", registration["candidate_id"])
             self.assertEqual(3, len(registration["artifacts_written"]))
-            before = subprocess.run(
-                [sys.executable, str(SCRIPTS / "state_cli.py"), "next", "--state", str(fixture.state_path)],
-                text=True, capture_output=True, check=True,
-            )
+            before = run_internal_cli("state_cli", "next", "--state", fixture.state_path, check=True)
             self.assertEqual("prepare-locator-chunks", json.loads(before.stdout)["next_actions"][0]["command"])
 
             result, _ = run_cli(*fixture.command())
@@ -386,10 +377,7 @@ class LocatorChunkPreparationTests(unittest.TestCase):
             registered = [item for item in state["artifacts"] if item["stage"] == "locator_chunk_preparation"]
             self.assertEqual(17, len(registered))
             self.assertTrue(all(item["frozen"] and item["retention"] == "required" and item["visibility"] == "private" for item in registered))
-            after = subprocess.run(
-                [sys.executable, str(SCRIPTS / "state_cli.py"), "next", "--state", str(fixture.state_path)],
-                text=True, capture_output=True, check=True,
-            )
+            after = run_internal_cli("state_cli", "next", "--state", fixture.state_path, check=True)
             next_action = json.loads(after.stdout)["next_actions"][0]
             self.assertEqual("locator_audit", next_action["stage"])
             self.assertEqual("audit-locators", next_action["command"])

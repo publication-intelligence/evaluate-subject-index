@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from internal_cli import run_internal_cli
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -142,15 +143,15 @@ class PolicyMigrationTests(unittest.TestCase):
                 (root/ref['path']).write_bytes(content)
                 ref['sha256'] = hashlib.sha256(content).hexdigest()
             (root/'input.json').write_text(json.dumps(source))
-            command = [sys.executable, str(Path(policy_cli.__file__)), 'build', '--input', str(root/'input.json'), '--original-policy', str(root/'original.json'), '--output']
-            good = subprocess.run(command+[str(root/'new.json')], capture_output=True, text=True)
+            arguments = ['build', '--input', root/'input.json', '--original-policy', root/'original.json', '--output']
+            good = run_internal_cli('policy_cli',*arguments,root/'new.json')
             self.assertEqual(0, good.returncode, good.stdout+good.stderr)
             original_bytes = (root/'original.json').read_bytes()
-            blocked = subprocess.run(command+[str(root/'original.json'),'--force'], capture_output=True, text=True)
+            blocked = run_internal_cli('policy_cli',*arguments,root/'original.json','--force')
             self.assertNotEqual(0, blocked.returncode)
             self.assertEqual(original_bytes, (root/'original.json').read_bytes())
             (root/'benchmark_review.json').write_text('{}')
-            bad = subprocess.run(command+[str(root/'bad.json')], capture_output=True, text=True)
+            bad = run_internal_cli('policy_cli',*arguments,root/'bad.json')
             self.assertNotEqual(0, bad.returncode)
             self.assertIn('evidence hash mismatch', bad.stdout)
             self.assertFalse((root/'bad.json').exists())

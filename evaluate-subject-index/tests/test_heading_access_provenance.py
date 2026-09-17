@@ -17,6 +17,7 @@ SCHEMAS = ROOT / "references" / "schemas"
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(ROOT / "tests"))
 
+from internal_cli import run_internal_cli  # noqa: E402
 from heading_access_provenance import (  # noqa: E402
     HeadingAccessProvenanceError,
     build_structure_causal_projection,
@@ -134,21 +135,15 @@ class HeadingAccessProvenanceTests(unittest.TestCase):
             projection_path.write_text(json.dumps(projection, indent=2) + "\n")
             output_path = root / "structure-audit.v6.json"
 
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    str(SCRIPTS / "item_grade_v8_cli.py"),
-                    "project-structure-causality",
-                    "--structure-audit",
-                    str(structure_path),
-                    "--projection-input",
-                    str(projection_path),
-                    "--output",
-                    str(output_path),
-                ],
-                text=True,
-                capture_output=True,
-                check=False,
+            result = run_internal_cli(
+                "item_grade_v8_cli",
+                "project-structure-causality",
+                "--structure-audit",
+                structure_path,
+                "--projection-input",
+                projection_path,
+                "--output",
+                output_path,
             )
 
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
