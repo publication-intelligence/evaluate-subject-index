@@ -144,11 +144,15 @@ def validate_review(document, *, state, state_path, benchmark, lock, structure_p
     for (kind,parent_id),parent_rows in rows_by_parent.items():
         if (kind=='subject' and subjects[parent_id].get('realistic_first_lookup_success')=='no'
                 and any('realistic_first_lookup_success' in row['judgment_fields'] for row in parent_rows)):
+            tested_paths={path_id for row in parent_rows
+                          if 'realistic_first_lookup_success' in row['judgment_fields']
+                          for path_id in row['tested_path_ids']}
             matches=[row for row in defects.values() if row.get('dimension_owner')=='findability_navigation'
-                     and parent_id in row.get('affected_item_ids',[])]
-            study.require(matches,'Failed realistic first lookup requires a subject-bound findability defect')
+                     and all(str(item_id).startswith('PATH-') for item_id in row.get('affected_item_ids',[]))
+                     and bool(set(row.get('affected_item_ids',[])) & tested_paths)]
+            study.require(matches,'Failed realistic first lookup requires a findability defect bound to its tested delivered PATH')
             if subjects[parent_id].get('severity') in {'major','critical'}:
-                study.require(any(row.get('severity') in {'major','critical'} and any(str(x).startswith('PATH-') for x in row.get('affected_item_ids',[])) for row in matches),
+                study.require(any(row.get('severity') in {'major','critical'} for row in matches),
                               'Material first-lookup failure requires a material findability defect bound to its delivered PATH')
         if kind!='subject' or len(parent_rows)<2:
             continue
