@@ -44,10 +44,10 @@ Import rejects unsafe member paths, duplicates, links, malformed inventory, and 
 
 After import:
 
-1. Run `state_cli.py validate`.
+1. Run `scripts/v10_cli.py state validate`.
 2. Review warnings for unavailable or changed artifacts.
 3. Reconnect any restricted source or candidate input needed by the next operation.
-4. Run `state_cli.py next` and continue.
+4. Run `scripts/v10_cli.py state next` and continue.
 
 An attachment, Library item, branch, or network transfer is simply a delivery route. Network failure is a reason to use another copy, not to abandon otherwise valid recoverable state.
 

@@ -26,6 +26,31 @@ def help_text(script: str, *arguments: str) -> str:
 
 
 class CurrentCommandSurfaceTests(unittest.TestCase):
+    def test_current_documentation_exposes_only_v10_dispatcher(self) -> None:
+        current_docs = [
+            ROOT.parent / "README.md",
+            ROOT / "SKILL.md",
+            ROOT / "references" / "workflow.md",
+            ROOT / "references" / "benchmark-review.md",
+            ROOT / "references" / "study-comparison.md",
+            ROOT / "references" / "storage-and-checkpoints.md",
+            ROOT / "references" / "candidate-preparation.md",
+        ]
+        text = "\n".join(path.read_text() for path in current_docs)
+        self.assertIn("scripts/v10_cli.py", text)
+        for legacy_entrypoint in (
+            "scripts/v9_cli.py",
+            "scripts/v10_semantic_cli.py",
+            "scripts/state_cli.py",
+            "scripts/study_cli.py",
+            "scripts/page_chunk_cli.py",
+            "scripts/benchmark_review_cli.py",
+            "scripts/dimension_score_v8_cli.py",
+            "scripts/item_grade_v8_cli.py",
+        ):
+            with self.subTest(legacy_entrypoint=legacy_entrypoint):
+                self.assertNotIn(legacy_entrypoint, text)
+
     def test_checkpoint_cli_has_no_migration_command(self) -> None:
         text = help_text("bundle_cli.py")
         self.assertIn("checkpoint", text)

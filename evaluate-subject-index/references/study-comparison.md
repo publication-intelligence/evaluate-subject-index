@@ -1,14 +1,15 @@
 # Retrospective study binding and comparison
 
-Use `scripts/study_cli.py` when already candidate-visible evaluations must adopt a
+Use `scripts/v10_cli.py study` when already candidate-visible evaluations must adopt a
 reviewed common benchmark, semantic policy, and density basis. This workflow is
 explicitly retrospective. It never selects a benchmark, performs fresh discovery
 or editorial review, or authorizes transfer of candidate judgments. Ordinary
 single-evaluation work does not require a study lock.
 
 The lock is an approved comparison contract, not another canonical evaluation
-state. Each evaluation keeps its own `evaluation-state.json`. The current V8.2
-policy, rubric, calculation profile, formulas, and publication gates are unchanged.
+state. Each evaluation keeps its own `evaluation-state.json`. The common V10
+policy, rubric, calculation profile, formulas, penalties, dimension caps, and
+publication gates are unchanged by the comparison binding.
 
 ## Prepare the reviewed inputs
 
@@ -28,7 +29,7 @@ policy, rubric, calculation profile, formulas, and publication gates are unchang
    current state bytes, previous policy/benchmark, target lock/release, and target
    semantic policy. Never invent an approval or reviewer identity.
 
-Use `study_cli.py fingerprint --benchmark RELEASE.json --policy POLICY.json` to
+Use `scripts/v10_cli.py study fingerprint --benchmark RELEASE.json --policy POLICY.json` to
 obtain semantic identities. Benchmark fingerprinting preserves ordered content,
 IDs, evidence, terminology, priorities, relationships, and reader tasks; it only
 normalizes legacy relationship `type` to `relationship_type` and removes the
@@ -65,7 +66,7 @@ The lock's `release.lineage` explicitly selects one review contract:
   `checkpoint_artifacts` records available transport provenance (it may be empty).
   A ZIP checksum is not a Git commit or a checkpoint-import gate.
 - `current_source_freeze`: exact `source_only_state_sha256`, `draft_file_sha256`,
-  and `review_file_sha256` from the current typed `benchmark_review_cli.py freeze`
+  and `review_file_sha256` from the current typed `scripts/v10_cli.py benchmark freeze`
   workflow. Supply `--release-state` and `--release-draft`; omit
   `--release-review-inventory`. The source-only state must register the actual
   typed draft, review, and final and preserve candidate blindness. Validation
