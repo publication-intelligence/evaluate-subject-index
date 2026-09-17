@@ -73,6 +73,23 @@ class SharedSchemaValidationTests(unittest.TestCase):
                     self.assertEqual(["field", "reason_category", "evidence_ids"], uncertainty["items"]["required"])
                     self.assertTrue(any(branch.get("if", {}).get("properties", {}).get("review_status", {}).get("const") == "semantic_unresolved" and "semantic_uncertainties" in branch.get("then", {}).get("required", []) for branch in definition.get("allOf", [])))
 
+    def test_v10_item_assessment_accepts_semantic_heading_access_status(self) -> None:
+        schema = json.loads((ROOT / "references" / "schemas" / "item-assessments-v10.schema.json").read_text())
+        statuses = []
+        def collect(value):
+            if isinstance(value, dict):
+                field = value.get("heading_access_status")
+                if isinstance(field, dict) and "enum" in field:
+                    statuses.append(field["enum"])
+                for child in value.values():
+                    collect(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect(child)
+        collect(schema)
+        self.assertEqual(1, len(statuses))
+        self.assertIn("semantic_unresolved", statuses[0])
+
     def test_current_worker_schemas_do_not_publish_redundant_provenance_contracts(self) -> None:
         schema_root = ROOT / "references" / "schemas"
         policy = json.loads((schema_root / "evaluation-policy-v4.schema.json").read_text())
