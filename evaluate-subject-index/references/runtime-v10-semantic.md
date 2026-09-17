@@ -60,6 +60,17 @@ blocker. Known independent quality gates and invalidity retain precedence.
 Public rows use “Semantically unresolved after inspection”; authored semantic
 rationale remains in private evidence.
 
+Candidate-intrinsic ambiguity is not an unknown source fact. After complete
+source inspection, a malformed, incomplete, polysemous, or under-specified
+delivered path is judged as delivered. When a reasonable reader cannot identify
+one supported complete concept at the cited passage, record known `no_fit`,
+`unsupported`, and `not_kept` axes with a candidate-defect rationale; do not
+invent the intended referent. Use a lesser fit only where the passage visibly
+supports a bounded part of the complete path. Resolve dependent access, task,
+reference, and architecture judgments from the actual usability of that route.
+See the controlling clarification in
+[consequence-policy-v10.md](consequence-policy-v10.md#candidate-intrinsic-ambiguity-clarification).
+
 Inspected parent access uses `missing-access-audit-v2` when coverage, stance
 preservation, realistic first-lookup success, or a dependent reader-task result
 cannot be resolved from the inspected locator evidence. Each parent axis is
