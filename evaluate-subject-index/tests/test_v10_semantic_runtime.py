@@ -70,13 +70,21 @@ d=audit();d['schema_version']='structure-audit-v6';r=triggered_review();r.update
         public=''.join(p.read_text() for p in (f.root/'scoring-semantic/v10-canonical-projection').rglob('*.json'))
         self.assertNotIn('PRIVATE-PARENT-TEST',public);self.assertIn('semantically unresolved after inspection',public.lower())
 
-    def test_native_adoption_preserves_source_and_resolved_scores(self):
+    def test_decision_v1_state_adopts_decision_v3_policy_and_preserves_source(self):
         case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups);f=case.complete_fixture()
         before=study.read(f.state_path);prior=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')
+        prior_policy_record=next(r for r in before['artifacts'] if r['stage']=='define_policy')
+        self.assertEqual('subject-index-evaluation-policy-v6',prior_policy_record['schema_version'])
+        active_template=f.root/'decision-v3-policy-template.json'
+        generated=command('study','policy-template','--input',f.args.release_policy,'--output',active_template,'--from-source-policy')
+        self.assertEqual(0,generated.returncode,generated.stdout+generated.stderr)
+        self.assertEqual('subject-index-evaluation-policy-v7',study.read(active_template)['policy_semantic_content']['schema_version'])
         approval,release=compatibility(f)
         adopted=command('adopt','--state',f.state_path,'--compatibility',approval,'--source-release',release,'--output-dir','semantic-execution')
         self.assertEqual(0,adopted.returncode,adopted.stdout+adopted.stderr)
         after=study.read(f.state_path)
+        self.assertEqual('subject-index-evaluation-state-v9',after['schema_version'])
+        self.assertEqual(CONTRACT,after['execution_compatibility'] and study.read(f.root/'semantic-execution/compatibility.json')['execution_contract_id'])
         for key in ('candidate','source','study_comparison','configuration'):self.assertEqual(before[key],after[key])
         self.assertEqual(before,study.read(f.root/'semantic-execution/previous-state.json'))
         output=command('score','score','--state',f.state_path,'--output-dir','scoring-semantic')
