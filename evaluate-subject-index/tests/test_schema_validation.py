@@ -59,6 +59,20 @@ class SharedSchemaValidationTests(unittest.TestCase):
         )
         self.assertIn("canonical_heading_access_source", schema["required"])
 
+    def test_v10_output_schemas_propagate_semantic_architecture_reviews(self) -> None:
+        """Calculation and report embeddings accept the native v6 semantic branch."""
+        schema_root = ROOT / "references" / "schemas"
+        for filename in ("dimension-calculations-v9.schema.json", "web-report-v13.schema.json"):
+            with self.subTest(filename=filename):
+                schema = json.loads((schema_root / filename).read_text())
+                definitions = [value for value in schema["$defs"].values() if "review_id" in value.get("required", []) and "path_id" in value.get("required", []) and "review_status" in value.get("properties", {})]
+                self.assertTrue(definitions)
+                for definition in definitions:
+                    self.assertIn("semantic_unresolved", definition["properties"]["review_status"]["enum"])
+                    uncertainty = definition["properties"]["semantic_uncertainties"]
+                    self.assertEqual(["field", "reason_category", "evidence_ids"], uncertainty["items"]["required"])
+                    self.assertTrue(any(branch.get("if", {}).get("properties", {}).get("review_status", {}).get("const") == "semantic_unresolved" and "semantic_uncertainties" in branch.get("then", {}).get("required", []) for branch in definition.get("allOf", [])))
+
     def test_current_worker_schemas_do_not_publish_redundant_provenance_contracts(self) -> None:
         schema_root = ROOT / "references" / "schemas"
         policy = json.loads((schema_root / "evaluation-policy-v4.schema.json").read_text())

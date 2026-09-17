@@ -2053,7 +2053,8 @@
           "enum": [
             "defect_confirmed",
             "reviewed_no_defect",
-            "not_reviewed"
+            "not_reviewed",
+            "semantic_unresolved"
           ]
         },
         "conceptually_distinguishable_treatments": {
@@ -2095,9 +2096,69 @@
             "pattern": "^DEFECT-"
           },
           "uniqueItems": true
+        },
+        "semantic_uncertainties": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "field",
+              "reason_category",
+              "evidence_ids"
+            ],
+            "properties": {
+              "field": {
+                "enum": [
+                  "conceptually_distinguishable_treatments",
+                  "meaningful_subheadings_or_access_routes",
+                  "material_scanning_or_retrieval_impairment",
+                  "subdivision_is_conceptual_not_trivial"
+                ]
+              },
+              "reason_category": {
+                "enum": [
+                  "unresolved_referent",
+                  "unresolved_relationship",
+                  "unresolved_scope",
+                  "dependent_semantic_uncertainty"
+                ]
+              },
+              "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^EVID-"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "uniqueItems": true
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "review_status": {
+                "const": "semantic_unresolved"
+              }
+            },
+            "required": [
+              "review_status"
+            ]
+          },
+          "then": {
+            "required": [
+              "semantic_uncertainties"
+            ]
+          }
+        }
+      ]
     },
     "inherited_7": {
       "type": "object",
