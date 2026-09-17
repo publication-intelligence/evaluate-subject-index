@@ -1706,6 +1706,7 @@ def node_component(ledgers: dict[str, Any], component: str, mapping: dict[str, D
     uninspectable: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     explicit_not_measured: list[dict[str, Any]] = []
+    semantic_unknown: list[dict[str, Any]] = []
     for node in ledgers["nodes"]:
         judgment = node.get("component_judgments", {}).get(component, {})
         status = judgment.get("status")
@@ -1714,6 +1715,8 @@ def node_component(ledgers: dict[str, Any], component: str, mapping: dict[str, D
             measured.append(decorated)
         elif status == "uninspectable":
             uninspectable.append(decorated)
+        elif status == "semantic_unresolved" and semantic_uncertainty():
+            semantic_unknown.append(decorated)
         elif status == "not_applicable":
             excluded.append(decorated)
         elif status == "not_measured" or status is None:
@@ -1722,9 +1725,9 @@ def node_component(ledgers: dict[str, Any], component: str, mapping: dict[str, D
             raise CalculationError("invalid_component_status", f"Unsupported {component_id} status: {status}")
     not_measured_ids = [item["node_id"] for item in explicit_not_measured] + ledgers["node_not_measured"]
     denominator = component_denominators(
-        component_id, ledgers["node_original"], ledgers["node_original"] - len(excluded), len(measured), len(uninspectable), len(not_measured_ids), {"not_applicable": len(excluded)}
+        component_id, ledgers["node_original"], ledgers["node_original"] - len(excluded), len(measured), len(uninspectable), len(not_measured_ids), {"not_applicable": len(excluded)}, semantic_unresolved=len(semantic_unknown)
     )
-    return measured, uninspectable, excluded, not_measured_ids, denominator
+    return measured, uninspectable + semantic_unknown, excluded, not_measured_ids, denominator
 
 
 def prevalence_caps(prefix: str, major_fail: int, denominator: int, evidence_ids: list[str], table: Sequence[tuple[Decimal, Decimal]]) -> list[dict[str, Any]]:
@@ -1976,6 +1979,8 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     task_central, task_lower, task_upper, task_denom, eligible_tasks, task_bounds = task_component(ledgers)
     architecture, arch_unknown, _, arch_not_measured, arch_denom = node_component(ledgers, "heading_access_architecture", NODE_CREDIT, "heading_access_architecture")
     arch_credit = sum((NODE_CREDIT[item["_status"]] for item in architecture), ZERO)
+    arch_semantic = [item for item in arch_unknown if item["_status"] == "semantic_unresolved"]
+    arch_physical_unknown = [item for item in arch_unknown if item["_status"] != "semantic_unresolved"]
     arch_central = arch_credit / Decimal(len(architecture)) if architecture else ZERO
     arch_applicable = len(architecture) + len(arch_unknown) + len(arch_not_measured)
     arch_lower = arch_credit / Decimal(arch_applicable) if arch_applicable else ZERO
@@ -2068,7 +2073,7 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     result["raw_status_counts"] = {
         "tasks": dict(Counter("semantic_unresolved" if item.get("result") is None and item.get("axis_resolution", {}).get("result") == "unresolved" else item.get("result") for item in ledgers["tasks"])),
         "tasks_excluded_due_to_coverage": task_denom["exclusion_reasons"].get("excluded_due_to_missing_access", 0),
-        "architecture": dict(Counter(item["_status"] for item in architecture)) | {"uninspectable": len(arch_unknown), "not_measured": len(arch_not_measured)},
+        "architecture": dict(Counter(item["_status"] for item in architecture)) | {"uninspectable": len(arch_physical_unknown), "semantic_unresolved": len(arch_semantic), "not_measured": len(arch_not_measured)},
         "cross_references": dict(Counter(item.get("judgment") for item in ledgers["references"])) | {"warranted_undelivered_zero": 0 if ref_inapplicable else obligation_zeros, "reference_defect_zero": 0 if ref_inapplicable else defect_zeros},
     }
     result["credit_mappings"] = {
@@ -2089,6 +2094,13 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
             "unknown_parent_axes": ([{"task_id": item["task_id"], "axes": ["result"]} for item in semantic_tasks] + [{"subject_id": item["subject_id"], "axes": ["coverage"]} for item in semantic_subjects]),
             "assessment_sufficiency_restored_by_numeric_invariance": False,
         }
+    if arch_semantic:
+        semantic = result.setdefault("semantic_uncertainty", {
+            "label": "Semantically unresolved after inspection",
+            "unknown_parent_axes": [],
+            "assessment_sufficiency_restored_by_numeric_invariance": False,
+        })
+        semantic["unknown_parent_axes"].extend({"node_id": item["node_id"], "axes": ["architecture"]} for item in arch_semantic)
     return result
 
 

@@ -23,6 +23,20 @@ def compatibility(f,revision=None):
 
 
 class SemanticRuntimeTests(unittest.TestCase):
+    def test_completed_semantic_architecture_review_is_neutral_and_complete(self):
+        code='''
+import json
+from runtime_profile import select_v10_semantic
+select_v10_semantic()
+from test_structure_audit import audit,component,triggered_review,SCHEMAS
+from schema_validation import schema_errors
+from structure_audit import materialize_structure_records,validate_structure_audit_semantics
+from scoring_core import NODE_CREDIT,node_component
+d=audit();d['schema_version']='structure-audit-v6';r=triggered_review();r.update(review_status='semantic_unresolved',meaningful_subheadings_or_access_routes=None,evidence_ids=['EVID-ARCH-0001'],semantic_uncertainties=[{'field':'meaningful_subheadings_or_access_routes','reason_category':'unresolved_scope','evidence_ids':['EVID-ARCH-0001']}]);d['locator_architecture'].update(triggered_path_ids=['PATH-00001'],triggered_reviews=[r]);h=component('semantic_unresolved');h.update(evidence_ids=['EVID-ARCH-0001'],causal_findings=[],semantic_uncertainties=r['semantic_uncertainties']);d['node_judgments']=[{'node_id':'NODE-00001','component_judgments':{'conceptual_stance_fidelity':component('passes'),'heading_access_architecture':h,'mechanics_consistency':component('passes')},'summary':'Semantic architecture premise unresolved.','confidence':'high','evidence_ids':['EVID-ARCH-0001']}];assert not schema_errors(d,'structure-audit-v6.schema.json',profile='v10s');validate_structure_audit_semantics(d);nodes,_,missing,_=materialize_structure_records(d);_,unknown,_,_,denom=node_component({'nodes':nodes,'node_not_measured':missing,'node_original':3},'heading_access_architecture',NODE_CREDIT,'heading_access_architecture');assert len(unknown)==1 and denom['semantic_unresolved']==1 and denom['uninspectable']==0
+'''
+        result=subprocess.run([sys.executable,'-c',code],cwd=Path(__file__).resolve().parents[1],env={**__import__('os').environ,'PYTHONPATH':'tests:scripts'},capture_output=True,text=True)
+        self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+
     def test_native_semantic_parent_axes_are_typed_and_neutral(self):
         case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups);f=case.complete_fixture()
         state=study.read(f.state_path)

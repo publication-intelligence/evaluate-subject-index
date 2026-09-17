@@ -2279,7 +2279,7 @@ def _projection_metadata(
         destination_evidence[2]['blockers'].extend(deepcopy(candidate_access_review['blockers']))
         destination_evidence[2]['status'] = 'indeterminate'
     if semantic_uncertainty():
-        parent_unknown = []
+        parent_unknown = [row for dimension in calculation["dimensions"] for row in dimension.get("semantic_uncertainty", {}).get("unknown_parent_axes", [])]
         for document in missing_access_documents:
             for row in document.get("subject_judgments", []):
                 axes = sorted(field for field, status in row.get("axis_resolution", {}).items() if status == "unresolved")
@@ -2292,7 +2292,7 @@ def _projection_metadata(
         if parent_unknown:
             destination_evidence[2]['blockers'].append({
                 'blocker_id':'GATE-ASSESSMENT-ACCESS-PARENT-UNCERTAIN',
-                'affected_item_ids':sorted({row.get('subject_id') or row.get('task_id') for row in parent_unknown}),
+                'affected_item_ids':sorted({row.get('subject_id') or row.get('task_id') or row.get('node_id') for row in parent_unknown}),
                 'semantic_unknown_axes':sorted({axis for row in parent_unknown for axis in row['axes']}),
                 'reason':'Inspected parent access depends on an unresolved semantic premise; no resolved access outcome is inferred.',
             })

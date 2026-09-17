@@ -7,6 +7,8 @@ import json
 from copy import deepcopy
 from typing import Any, Mapping
 
+from runtime_profile import semantic_uncertainty
+
 
 DISPLAYED_LOCATOR_THRESHOLD = 6
 CONTINUOUS_RANGE_SPAN_THRESHOLD = 10
@@ -102,6 +104,19 @@ def _validate_architecture_review(
             _require(defect is not None and defect.get("dimension_owner") == "findability_navigation" and defect.get("code") in {"HED", "SUB"} and bool({path_id, terminal_node_id} & set(defect.get("affected_item_ids", []))), "architecture_defect_binding_mismatch", "A confirmed architecture defect must bind this path or terminal node.", defect_id)
     elif status == "reviewed_no_defect":
         _require(not defect_ids and bool(review["evidence_ids"]) and not all(value is True for value in facts), "reviewed_no_defect_mismatch", "A passing review requires evidence, no defect, and at least one failed defect prerequisite.", path_id)
+    elif status == "semantic_unresolved" and semantic_uncertainty():
+        uncertainties = review.get("semantic_uncertainties", [])
+        unresolved_fields = [
+            field for field in (
+                "conceptually_distinguishable_treatments",
+                "meaningful_subheadings_or_access_routes",
+                "material_scanning_or_retrieval_impairment",
+                "subdivision_is_conceptual_not_trivial",
+            ) if review[field] is None
+        ]
+        _require(not defect_ids and bool(review["evidence_ids"]) and bool(unresolved_fields), "semantic_architecture_mismatch", "A semantic architecture review requires inspected evidence and at least one unresolved prerequisite.", path_id)
+        fields = [row.get("field") for row in uncertainties]
+        _require(sorted(fields) == sorted(unresolved_fields) and len(fields) == len(set(fields)), "semantic_architecture_mismatch", "Semantic architecture evidence must match the unresolved prerequisites exactly.", path_id)
     else:
         _require(not defect_ids and not review["evidence_ids"] and all(value is None for value in facts), "unreviewed_architecture_mismatch", "An unreviewed trigger must remain explicitly uncertain.", path_id)
 
@@ -212,6 +227,14 @@ def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
     if structure["audit_mode"] == "full":
         unresolved = sorted(path_id for path_id, review in reviews.items() if review["review_status"] == "not_reviewed")
         _require(not unresolved, "architecture_review_incomplete", "Full mode requires a decision for every triggered architecture review.", unresolved)
+        for path_id, review in reviews.items():
+            if review["review_status"] != "semantic_unresolved":
+                continue
+            component = node_exceptions.get(review["terminal_node_id"], {}).get("component_judgments", {}).get("heading_access_architecture", {})
+            _require(component.get("status") == "semantic_unresolved" and component.get("semantic_uncertainties") == review.get("semantic_uncertainties"), "semantic_architecture_parent_mismatch", "A semantic architecture review requires an exact neutral terminal-node judgment.", path_id)
+        semantic_review_nodes = {review["terminal_node_id"] for review in reviews.values() if review["review_status"] == "semantic_unresolved"}
+        semantic_component_nodes = {node_id for node_id, record in node_exceptions.items() if record["component_judgments"]["heading_access_architecture"]["status"] == "semantic_unresolved"}
+        _require(semantic_component_nodes == semantic_review_nodes, "semantic_architecture_parent_mismatch", "Semantic architecture node judgments and completed trigger reviews must match exactly.")
     else:
         for review in reviews.values():
             if review["review_status"] != "not_reviewed":
