@@ -1,6 +1,6 @@
 """Explicit semantic V10 migration over immutable V8.2 source proof."""
 from copy import deepcopy
-from runtime_profile import identity
+from runtime_profile import identity, semantic_uncertainty
 import v9_migration
 
 SOURCE_IDENTITIES = v9_migration.SOURCE_IDENTITIES
@@ -18,7 +18,7 @@ def policy_content(source):
     from study_comparison import require
     from policy_cli import CRITICAL_GATES
     value = v9_migration.policy_content(source)
-    value['schema_version'] = identity('subject-index-evaluation-policy-v4', profile='v10')
+    value['schema_version'] = identity('subject-index-evaluation-policy-v4', profile='v10s' if semantic_uncertainty() else 'v10')
     value['policy_profile']['id'] = identity(v9_migration.SOURCE_PROFILE, profile='v10')
     value['policy_profile']['consequence_policy_reference'] = 'consequence-policy-v10.2.md'
     for setting in value['content_policies'].values():
@@ -41,7 +41,15 @@ def validate_source_policy(lock, release, source_state, path):
     historical_lock = deepcopy(lock)
     historical_lock['policy_semantic_sha256'] = study.digest(v9_migration.policy_content(source))
     v9_migration.validate_source_policy(historical_lock, release, source_state, path)
-    study.require(study.digest(policy_content(source)) == lock['policy_semantic_sha256'], 'V10 target policy differs from the approved semantic amendment')
+    target = policy_content(source)
+    target_hashes = {study.digest(target)}
+    if semantic_uncertainty():
+        # Decision-v1 states retain their reviewed V6 policy identity; new
+        # decision-v3 amendments bind the active V7 identity.
+        legacy = deepcopy(target)
+        legacy['schema_version'] = identity('subject-index-evaluation-policy-v4', profile='v10')
+        target_hashes.add(study.digest(legacy))
+    study.require(lock['policy_semantic_sha256'] in target_hashes, 'V10 target policy differs from the approved semantic amendment')
     return source
 
 
