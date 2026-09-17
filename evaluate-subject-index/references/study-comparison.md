@@ -29,6 +29,13 @@ publication gates are unchanged by the comparison binding.
    current state bytes, previous policy/benchmark, target lock/release, and target
    semantic policy. Never invent an approval or reviewer identity.
 
+Package the common release, draft, review, policy template, study lock, density
+evidence, runtime revision/payload, schema bundle, and compatibility receipt as
+one shared execution kit with an exact file-hash manifest. Candidate-specific
+approvals are not part of the common kit. Copy the common files byte-for-byte;
+do not ask each candidate worker to regenerate a semantically similar lock,
+template, density document, or receipt.
+
 Use `scripts/v10_cli.py study fingerprint --benchmark RELEASE.json --policy POLICY.json` to
 obtain semantic identities. Benchmark fingerprinting preserves ordered content,
 IDs, evidence, terminology, priorities, relationships, and reader tasks; it only
@@ -152,6 +159,12 @@ binding. Structure/scoring/report checks require the exact ordered density map.
 Checkpoint import validates in a temporary directory and publishes the imported
 directory only on success. Transport checksums remain informational; approved
 study artifact/content identities are substantive comparison requirements.
+
+Run a multi-state preflight immediately after the first two candidates adopt the
+shared kit, then add each remaining candidate before any scoring fan-out. This
+early check is required even when every candidate passes its own single-state
+preflight. If a runtime or contract change occurs, stop the study, replace the
+common kit once, migrate every candidate, and repeat the complete preflight.
 
 ```sh
 python scripts/v10_cli.py study preflight --state first/evaluation-state.json --state second/evaluation-state.json
