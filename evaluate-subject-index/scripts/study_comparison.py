@@ -313,11 +313,12 @@ def load_study_binding(state, state_path):
     return lock
 
 
-def preflight_state(state, state_path, *, require_density=False):
+def preflight_state(state, state_path, *, require_density=False, allow_pending_execution=False):
     execution = None
     if semantic_uncertainty():
-        from v10_execution import bound_execution
-        execution=bound_execution(state,state_path)
+        if not allow_pending_execution or state.get('execution_compatibility'):
+            from v10_execution import bound_execution
+            execution=bound_execution(state,state_path)
     elif state.get('execution_compatibility'):
         require(False,'This state requires its explicitly adopted semantic execution runtime')
     if percentage_native():
