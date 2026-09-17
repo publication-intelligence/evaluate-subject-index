@@ -1,2 +1,6 @@
 # Preserve the adopted, hash-bound contract bytes, including Markdown hard breaks.
 evaluate-subject-index/references/consequence-policy-v10.md whitespace=-blank-at-eol
+evaluate-subject-index/references/semantic-uncertainty-addendum-v1.md whitespace=-blank-at-eol
+evaluate-subject-index/references/semantic-uncertainty-addendum-v2.md whitespace=-blank-at-eol
+evaluate-subject-index/references/semantic-uncertainty-addendum-v3.md whitespace=-blank-at-eol
+evaluate-subject-index/references/semantic-uncertainty-addendum-v4.md whitespace=-blank-at-eol

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "v10-execution-compatibility.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "compatibility_id",
+    "baseline_runtime_commit",
+    "successor_runtime_commit",
+    "execution_contract_id",
+    "contract_constituents",
+    "runtime_payload_sha256",
+    "common_lock_file_sha256",
+    "common_lock_sha256",
+    "source_release_file_sha256",
+    "source_release_sha256",
+    "authorized_by",
+    "authorization_reference",
+    "approved_at",
+    "compatibility_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-v10-execution-compatibility-v1"
+    },
+    "compatibility_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_runtime_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "successor_runtime_commit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "execution_contract_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract_constituents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "runtime_payload_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "common_lock_file_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "common_lock_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_release_file_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_release_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "authorized_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authorization_reference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "approved_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "compatibility_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}

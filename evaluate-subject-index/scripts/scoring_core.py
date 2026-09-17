@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, semantic_uncertainty, versioned_cli, migration_module
 
 import hashlib
 import json
@@ -755,7 +755,7 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
     structure = loaded["structure"]
     identity = validate_ledger_set_integrity(loaded)
     for label, documents, versions in (
-        ("locator audit", loc_docs, {"locator-audit-v1", "locator-audit-v2"}),
+        ("locator audit", loc_docs, {"locator-audit-v1", "locator-audit-v2"} | ({"locator-audit-v3"} if semantic_uncertainty() else set())),
         ("missing-access audit", missing_docs, {"missing-access-audit-v1"}),
     ):
         for document in documents:
@@ -1095,17 +1095,19 @@ def component_denominators(
     inapplicable: bool = False,
     zero_due_to_non_attempt: bool = False,
     defined_zero_rule: str | None = None,
+    *, semantic_unresolved: int = 0,
 ) -> dict[str, Any]:
     exclusions = {key: value for key, value in (exclusions or {}).items() if value}
     excluded = original - applicable
-    require(excluded >= 0 and measured + uninspectable + not_measured == applicable, "denominator_reconstruction_failed", f"{component_id} denominators do not reconstruct.")
+    require(excluded >= 0 and measured + uninspectable + not_measured + semantic_unresolved == applicable, "denominator_reconstruction_failed", f"{component_id} denominators do not reconstruct.")
     require(sum(exclusions.values()) == excluded, "denominator_reconstruction_failed", f"{component_id} exclusion reasons do not reconstruct.", {"excluded": excluded, "reasons": exclusions})
     coverage = rate(measured, applicable) if applicable else (ONE if inapplicable else ZERO)
-    small_exception = applicable < 20 and uninspectable == 1 and measured >= 1 and not_measured == 0
+    small_exception = applicable < 20 and uninspectable == 1 and measured >= 1 and not_measured == 0 and semantic_unresolved == 0
     if zero_due_to_non_attempt and defined_zero_rule is None:
         defined_zero_rule = "candidate_not_meaningfully_attempted"
     provisional = inapplicable or defined_zero_rule is not None or (applicable > 0 and (coverage >= Decimal("0.95") or small_exception))
     return {
+        **({"semantic_unresolved":semantic_unresolved} if semantic_unresolved else {}),
         "component_id": component_id,
         "original": original,
         "applicable": applicable,
@@ -1547,6 +1549,13 @@ def selectivity_cap(rate_value: Decimal, count: int, unit_rate: Decimal) -> tupl
 
 
 def calculate_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
+    if semantic_uncertainty() and any('axis_resolution' in row for row in ledgers['locators']):
+        from v10_semantic_scoring import selectivity
+        return selectivity(ledgers,audit_mode,_resolved_selectivity)
+    return _resolved_selectivity(ledgers,audit_mode)
+
+
+def _resolved_selectivity(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
     attempt = ledgers["context"]["candidate_attempt"]["status"]
     applicable_classes = set(SELECTIVITY_CREDIT)
     measured = [item for item in ledgers["locators"] if item.get("source_scope_status") == "indexable" and item.get("treatment_class") in applicable_classes and item.get("judgment") != "uninspectable"]

@@ -17,6 +17,7 @@ def contract_errors(document):
         if assessment['status'] != ('indeterminate' if assessment['blockers'] else 'sufficient'):
             errors.append('Gate assessment status contradicts its blockers')
     schema = document.get('schema_version')
+    schema = {'subject-index-evaluation-result-v15':'subject-index-evaluation-result-v14','subject-index-web-report-v13':'subject-index-web-report-v12','ohfr-v10-canonical-web-projection-v2':'ohfr-v10-canonical-web-projection-v1'}.get(schema,schema)
     if schema in {'subject-index-evaluation-result-v14','subject-index-web-report-v12','ohfr-v10-canonical-web-projection-v1'}:
         from v10_consequences import outcome_fields
         source = document
@@ -34,7 +35,7 @@ def contract_errors(document):
                 errors.append('Score-view readiness contradicts V10 readiness')
             from v9_contract import contract_errors as percentage_errors
             proxy = deepcopy(document);proxy['schema_version'] = 'ohfr-v9-canonical-web-projection-v1'
-            errors.extend(percentage_errors(proxy))
+            errors.extend(percentage_errors(proxy,allow_semantic=document.get('schema_version')=='ohfr-v10-canonical-web-projection-v2'))
     return errors
 
 

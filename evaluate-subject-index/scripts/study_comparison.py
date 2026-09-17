@@ -1,5 +1,5 @@
 """Study identities derived from evidence, never from displayed methodology labels."""
-from runtime_profile import identity as runtime_identity, percentage_native, is_v10, versioned_cli, migration_module
+from runtime_profile import identity as runtime_identity, percentage_native, is_v10, semantic_uncertainty, versioned_cli, migration_module
 from copy import deepcopy
 import hashlib
 import json
@@ -167,6 +167,9 @@ def compare_identities(identities):
     for identity in identities:
         require(identity.get('identity_sha256') == digest({k: v for k, v in identity.items() if k != 'identity_sha256'}), 'Comparison identity self-hash mismatch')
         require(identity.get('release') is not None and identity.get('density_basis') is not None, 'Comparison requires verified study release lineage and density basis')
+    if any('execution_contract' in identity for identity in identities):
+        require(all('execution_contract' in identity for identity in identities),'Corrected and baseline execution identities cannot mix')
+        require(all(identity['execution_contract']==identities[0]['execution_contract'] for identity in identities),'Mixed semantic execution compatibility')
     keys = ('source_scope', 'benchmark_semantic_sha256', 'release', 'policy_semantic_sha256', 'policy_profile', 'audit_mode', 'rubric_version', 'calculation_profile', 'density_basis', 'density_measurements_sha256')
     if percentage_native():
         require(all('source_methodology' in row for row in identities), 'Percentage-runtime comparison requires preserved source methodology')
@@ -307,6 +310,12 @@ def load_study_binding(state, state_path):
 
 
 def preflight_state(state, state_path, *, require_density=False):
+    execution = None
+    if semantic_uncertainty():
+        from v10_execution import bound_execution
+        execution=bound_execution(state,state_path)
+    elif state.get('execution_compatibility'):
+        require(False,'This state requires its explicitly adopted semantic execution runtime')
     if percentage_native():
         require(state.get("study_comparison") is not None, "The percentage runtime requires a preserved V8.2 source/methodology binding")
     lock = load_study_binding(state, state_path)
@@ -363,6 +372,8 @@ def preflight_state(state, state_path, *, require_density=False):
         structure, _ = registered_document(state, state_path, 'structure_audit', 'structure-audit-v6')
         result = evaluation_identity(benchmark=benchmark, policy=policy, structure=structure, manifest=manifest,
             audit_mode=lock['audit_mode'], rubric=lock['rubric_version'], calculation_profile=lock['calculation_profile'], lock=lock)
+        if execution is not None:
+            result['execution_contract']=execution
         if candidate_access_review is not None:
             result['candidate_access_review'] = {key:candidate_access_review[key] for key in ('receipt_file_sha256','status','requirement_count')}
             result['identity_sha256'] = digest({k:v for k,v in result.items() if k != 'identity_sha256'})

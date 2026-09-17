@@ -15,7 +15,9 @@ def machine_facts(result):
 
 
 def validate_decision(decision, result, result_file_sha256):
-    study.require(not schema_errors(result,'evaluation-result-v14.schema.json',profile='v10'), 'Invalid V10 result')
+    from runtime_profile import semantic_uncertainty
+    profile='v10s' if semantic_uncertainty() else 'v10'
+    study.require(not schema_errors(result,'evaluation-result-v14.schema.json',profile=profile), 'Invalid V10 result')
     study.require(not schema_errors(decision,'human-release-decision-v10.schema.json',profile='v10'), 'Invalid V10 human release decision')
     study.require(decision['result_file_sha256'] == result_file_sha256 and decision['machine_facts_sha256'] == study.digest(machine_facts(result)), 'Release decision is bound to different machine outcomes')
     study.require(decision['evaluation_id'] == result['evaluation_id'], 'Release decision evaluation differs')

@@ -39,6 +39,10 @@ def _schema_store() -> dict[str, dict[str, Any]]:
 def schema_errors(document: Any, schema_name: str, *, profile: str | None = None) -> list[str]:
     """Return deterministic, path-qualified structural errors."""
     requested_schema = schema_name
+    if requested_schema == 'locator-audit-v2.schema.json' and (profile or runtime_profile.ACTIVE) == 'v10s' and document.get('schema_version') == 'locator-audit-v2':
+        if any('axis_resolution' in row or row.get('judgment') in {'semantic_unresolved','not_kept_subtype_unresolved'} for row in document.get('judgments',[])):
+            return ['Semantic uncertainty requires the new locator-audit-v3 identity']
+        profile = 'v10'
     schema_name = runtime_profile.schema_name(schema_name, profile=profile)
     schema_path = SCHEMA_ROOT / schema_name
     schema = _schema_store()[schema_name]
@@ -61,15 +65,18 @@ def schema_errors(document: Any, schema_name: str, *, profile: str | None = None
         messages.extend("study_comparison." + message for message in schema_errors(document["study_comparison"], "retrospective-study-binding.schema.json", profile=profile))
     if not messages and requested_schema in {"evaluation-policy-v4.schema.json", "evaluation-policy-v5.schema.json", "evaluation-policy-v6.schema.json"}:
         messages.extend(policy_migration_errors(document))
-    if not messages and schema_name in (*runtime_profile.SCHEMAS.values(), *runtime_profile.V10_SCHEMAS.values()):
+    if not messages and schema_name in (*runtime_profile.SCHEMAS.values(), *runtime_profile.V10_SCHEMAS.values(), *runtime_profile.V10S_SCHEMAS.values()):
         from v9_contract import contract_errors
-        messages.extend(contract_errors(document))
-    if not messages and schema_name in runtime_profile.V10_SCHEMAS.values():
+        messages.extend(contract_errors(document, allow_semantic=schema_name in runtime_profile.V10S_SCHEMAS.values()))
+    if not messages and schema_name in (*runtime_profile.V10_SCHEMAS.values(), *runtime_profile.V10S_SCHEMAS.values()):
         from v10_contract import contract_errors
         messages.extend(contract_errors(document))
-    if not messages and (profile or runtime_profile.ACTIVE) == 'v10' and schema_name in {'structure-audit-v5.schema.json','structure-audit-v6.schema.json'}:
+    if not messages and (profile or runtime_profile.ACTIVE) in {'v10','v10s'} and schema_name in {'structure-audit-v5.schema.json','structure-audit-v6.schema.json'}:
         from v10_contract import candidate_defect_errors
         messages.extend(candidate_defect_errors(document))
+    if not messages and schema_name in runtime_profile.V10S_SCHEMAS.values():
+        from v10_semantic_contract import contract_errors
+        messages.extend(contract_errors(document))
     return messages
 
 

@@ -22,14 +22,36 @@ def requirements(benchmark, amendment=None):
                 entries.append(('retained_distinction',row['source_local_subject_id'],row))
             for requirement_kind, identity, value in entries:
                 key=(kind,parent[id_key],requirement_kind,identity)
-                study.require(key not in result,'Duplicate parent-qualified access requirement')
-                result[key]=study.digest(value)
+                from runtime_profile import semantic_uncertainty
+                value_hash=study.digest(value)
+                if key in result:
+                    study.require(semantic_uncertainty() and requirement_kind=='retained_distinction' and result[key]==value_hash,
+                                  'Duplicate parent-qualified access requirement conflicts or is not an identical retained distinction')
+                result[key]=value_hash
     for delta in (amendment or {}).get('deltas',[]):
         if delta['operation']=='retire':continue
         kind='subject' if delta['family']=='subjects' else 'reader_task'
         result[(kind,delta['item_id'],'amendment_delta',delta['delta_id'])]=study.digest(delta)
     return result
 
+
+
+def requirement_inventory_provenance(benchmark,amendment=None):
+    expected=requirements(benchmark,amendment)
+    duplicates=[]
+    for kind,family,id_key in [('subject','subjects','subject_id'),('reader_task','reader_tasks','task_id')]:
+        for parent in benchmark[family]:
+            occurrences={}
+            for index,row in enumerate(parent.get('retained_source_distinctions',[])):
+                occurrences.setdefault(row['source_local_subject_id'],[]).append(index)
+            for identity,positions in sorted(occurrences.items()):
+                if len(positions)>1:
+                    key=(kind,parent[id_key],'retained_distinction',identity)
+                    duplicates.append(dict(zip(('parent_kind','parent_id','requirement_kind','requirement_id'),key)) |
+                                      {'requirement_sha256':expected[key],'multiplicity':len(positions),'source_occurrence_indices':positions})
+    entries=[dict(zip(('parent_kind','parent_id','requirement_kind','requirement_id'),key)) | {'requirement_sha256':value} for key,value in sorted(expected.items())]
+    return {'canonical_requirement_count':len(entries),'source_requirement_occurrence_count':len(entries)+sum(r['multiplicity']-1 for r in duplicates),
+            'inventory_sha256':study.digest(entries),'duplicate_occurrences':duplicates}
 
 def bound_amendment(state,state_path,lock):
     root=(state_path.parent/state['study_comparison']['lock']['path']).parent
@@ -53,11 +75,18 @@ def key(row):
 
 def validate_review(document, *, state, state_path, benchmark, lock, structure_path):
     """Check exact factual provenance and recorded judgment agreement only."""
-    study.require(not schema_errors(document,'candidate-access-review-v10.schema.json',profile='v10'), 'GATE-ASSESSMENT-ACCESS-REVIEW: invalid factual review receipt')
+    from runtime_profile import semantic_uncertainty
+    schema='candidate-access-review-v10-semantic.schema.json' if document.get('schema_version')=='subject-index-v10-candidate-access-review-v2' and semantic_uncertainty() else 'candidate-access-review-v10.schema.json'
+    study.require(not schema_errors(document,schema,profile='v10'), 'GATE-ASSESSMENT-ACCESS-REVIEW: invalid factual review receipt')
     root=state_path.parent
     study.require(document['evaluation_id']==state['evaluation_id'] and document['candidate_sha256']==state['candidate']['candidate_sha256'], 'Access review candidate/evaluation differs')
     study.require(document['benchmark_sha256']==benchmark['benchmark_sha256'] and document['study_lock_sha256']==lock['lock_sha256'] and document['benchmark_access_sha256']==lock['benchmark_access']['overlay_sha256'], 'Access review benchmark/amendment binding is stale')
-    expected=requirements(benchmark,bound_amendment(state,state_path,lock))
+    amendment=bound_amendment(state,state_path,lock)
+    expected=requirements(benchmark,amendment)
+    if semantic_uncertainty():
+        provenance=requirement_inventory_provenance(benchmark,amendment)
+        if schema=='candidate-access-review-v10-semantic.schema.json' or provenance['duplicate_occurrences']:
+            study.require(document.get('requirement_inventory_provenance')==provenance,'Derived access inventory requires exact multiplicity/provenance without source mutation')
     rows=document['requirements'];keys=[key(row) for row in rows]
     study.require(len(keys)==len(set(keys)) and set(keys)==set(expected), 'Access review requires the exact parent-qualified requirement set without omissions, foreign IDs or duplicates')
     audits=[r for r in state['artifacts'] if r['stage']=='missing_access_audit' and r.get('schema_version')=='missing-access-audit-v1']
@@ -120,7 +149,7 @@ def bound_review(state,state_path,benchmark,lock,*,structure_path=None):
     records=[r for r in state['artifacts'] if r.get('artifact_type')==ARTIFACT]
     if not expected and not records:
         return {'status':'sufficient','blockers':[],'requirement_count':0,'receipt_file_sha256':None}
-    study.require(len(records)==1 and records[0].get('schema_version')==SCHEMA,'GATE-ASSESSMENT-ACCESS-REVIEW: one registered factual access review is required before an authoritative V10 evaluation')
+    study.require(len(records)==1 and records[0].get('schema_version') in ({SCHEMA,'subject-index-v10-candidate-access-review-v2'} if __import__('runtime_profile').semantic_uncertainty() else {SCHEMA}),'GATE-ASSESSMENT-ACCESS-REVIEW: one registered factual access review is required before an authoritative V10 evaluation')
     document=study.bound_document(state_path.parent,records[0])
     if structure_path is None:
         _,record=study.registered_document(state,state_path,'structure_audit','structure-audit-v6')
@@ -146,7 +175,7 @@ def main():
             benchmark,_=study.registered_document(state,path,'benchmark_freeze','source-subject-benchmark-v2')
             document=study.read(source)
             outcome=validate_review(document,state=state,state_path=path,benchmark=benchmark,lock=lock,structure_path=path.parent/document['structure_binding']['path'])
-            updated=deepcopy(state);updated['artifacts'].append(record(path.parent,source,source.read_bytes(),'missing_access_audit',ARTIFACT,SCHEMA))
+            updated=deepcopy(state);updated['artifacts'].append(record(path.parent,source,source.read_bytes(),'missing_access_audit',ARTIFACT,document['schema_version']))
             updated['updated_at']=now()
             save_state(path,updated)
         print(json.dumps({'ok':True,'review_status':outcome['status'],'requirement_count':outcome['requirement_count'],'quality_failure_inferred':False},indent=2))

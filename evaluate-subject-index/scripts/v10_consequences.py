@@ -31,9 +31,23 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
                  'v10_gate_register', 'V10 requires exactly its twelve core quality gates.')
     direct_locators, direct_references, assessment = destination_evidence or ([], [], {'blockers': []})
     invalid_source = any(row['blocker_id'] == 'GATE-ASSESSMENT-SOURCE' for row in assessment['blockers'])
-    blocked = {item for row in assessment['blockers'] for item in row['affected_item_ids']}
+    from runtime_profile import semantic_uncertainty
+    semantic_blocks=[row for row in assessment['blockers'] if semantic_uncertainty() and 'semantic_unknown_axes' in row]
+    general_blocked={item for row in assessment['blockers'] if row not in semantic_blocks for item in row['affected_item_ids']}
+    dependencies={'GATE-WRONG-LOCATOR':{'keep','complete_path_fit'},'GATE-SCOPE-LOCATOR':{'complete_path_fit'},
+                  'GATE-COMPOUND':{'complete_path_fit'},'GATE-GROUNDING':{'complete_path_fit'},
+                  'GATE-SYSTEMIC-UNSUPPORTED':{'complete_path_fit'},'GATE-CLUTTER':{'treatment'},
+                  'GATE-STRUCTURE':set(),'GATE-BROKEN-REFERENCE':set()}
+    def blocked_for(gate):
+        result=set(general_blocked)
+        needed=dependencies.get(gate,{'keep','complete_path_fit','treatment'})
+        for block in semantic_blocks:
+            result.update(block.get('dependent_reference_ids',[]))
+            if needed & set(block['semantic_unknown_axes']):result.update(block['affected_item_ids'])
+        return result
+    blocked = blocked_for('GATE-WRONG-LOCATOR')
     direct_locators=[row for row in direct_locators if not {row['locator_id'],row.get('path_id')} & blocked]
-    direct_references=[row for row in direct_references if row['reference_id'] not in blocked]
+    direct_references=[row for row in direct_references if row['reference_id'] not in blocked_for('GATE-BROKEN-REFERENCE')]
     direct_owned = {row['locator_id'] for row in direct_locators} | {row['reference_id'] for row in direct_references}
     provenance = next(d for d in calculation['dimensions'] if d['dimension_id'] == 'page_reference_reliability')['reliability_provenance']
     locators = [dict(row, path_id=provenance.get('locator_path_bindings', {}).get(row['locator_id'],row.get('path_id')))
@@ -61,6 +75,7 @@ def gate_outcomes(policy, structure, calculation, destination_evidence, legacy):
             return bool(row['affected_item_ids']) and bool(set(row['affected_item_ids']) & delivered)
         return True
     for gate in ORDER:
+        blocked = blocked_for(gate)
         filtered = deepcopy(structure)
         filtered['defects'] = [row for row in structure['defects'] if eligible(row,gate)]
         result = legacy({'critical_gates':[definitions[gate]]}, filtered, calculation,

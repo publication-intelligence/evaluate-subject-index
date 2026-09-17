@@ -56,15 +56,15 @@ def select_v10():
 
 
 def is_v10():
-    return ACTIVE == "v10"
+    return ACTIVE in ("v10", "v10s")
 
 
 def percentage_native():
-    return ACTIVE in ("v9", "v10")
+    return ACTIVE in ("v9", "v10", "v10s")
 
 
 def versioned_cli():
-    return "v10_cli.py" if is_v10() else "v9_cli.py"
+    return "v10_semantic_cli.py" if semantic_uncertainty() else "v10_cli.py" if is_v10() else "v9_cli.py"
 
 
 def migration_module():
@@ -74,16 +74,16 @@ def migration_module():
 
 def identity(value, *, profile=None):
     selected = ACTIVE if profile is None else profile
-    if selected not in ("v8", "v9", "v10"):
+    if selected not in ("v8", "v9", "v10", "v10s"):
         raise ValueError("Unknown runtime profile")
-    return V10_IDENTITIES.get(value, value) if selected == "v10" else IDENTITIES.get(value, value) if selected == "v9" else value
+    return V10S_IDENTITIES.get(value, V10_IDENTITIES.get(value,value)) if selected == "v10s" else V10_IDENTITIES.get(value, value) if selected == "v10" else IDENTITIES.get(value, value) if selected == "v9" else value
 
 
 def schema_name(value, *, profile=None):
     selected = ACTIVE if profile is None else profile
-    if selected not in ("v8", "v9", "v10"):
+    if selected not in ("v8", "v9", "v10", "v10s"):
         raise ValueError("Unknown runtime profile")
-    return V10_SCHEMAS.get(value, value) if selected == "v10" else SCHEMAS.get(value, value) if selected == "v9" else value
+    return V10S_SCHEMAS.get(value, V10S_SCHEMAS.get(V10_SCHEMAS.get(value,value), V10_SCHEMAS.get(value,value))) if selected == "v10s" else V10_SCHEMAS.get(value, value) if selected == "v10" else SCHEMAS.get(value, value) if selected == "v9" else value
 
 V10_IDENTITIES = {'ohfr-v8-representation-correction-overlay-v1': 'ohfr-v10-representation-correction-overlay-v1',
  'subject-index-standard-policy-v8.2': 'subject-index-standard-policy-v10',
@@ -114,3 +114,19 @@ V10_SCHEMAS = {'correction-overlay-v1.schema.json': 'correction-overlay-v10.sche
  'web-projection-v1.schema.json': 'web-projection-v10.schema.json',
  'web-collection-v1.schema.json': 'web-collection-v10.schema.json',
  'study-benchmark-lock.schema.json': 'study-benchmark-lock-v3.schema.json'}
+
+
+def select_v10_semantic():
+    select_v10()
+    global ACTIVE
+    ACTIVE = "v10s"
+
+
+def semantic_uncertainty():
+    return ACTIVE == "v10s"
+
+
+# Source policy, benchmark lock and candidate state keep their existing identity.
+# Only changed candidate/output contracts acquire a successor identity.
+V10S_IDENTITIES = {'subject-index-dimension-calculation-input-v4': 'subject-index-dimension-calculation-input-v5', 'subject-index-dimension-calculations-v8': 'subject-index-dimension-calculations-v9', 'subject-index-item-assessments-v9': 'subject-index-item-assessments-v10', 'subject-index-evaluation-result-v14': 'subject-index-evaluation-result-v15', 'subject-index-web-report-v12': 'subject-index-web-report-v13', 'subject-index-v10-projection-metadata-v1': 'subject-index-v10-projection-metadata-v2', 'ohfr-v10-canonical-web-projection-v1': 'ohfr-v10-canonical-web-projection-v2', 'ohfr-v10-web-collection-v1': 'ohfr-v10-web-collection-v2', 'subject-index-v8-locator-fit-preflight-v1': 'subject-index-v10-semantic-locator-fit-preflight-v1', 'subject-index-dimension-calculation-input-v2': 'subject-index-dimension-calculation-input-v5', 'subject-index-dimension-calculations-v6': 'subject-index-dimension-calculations-v9', 'subject-index-item-assessments-v7': 'subject-index-item-assessments-v10', 'subject-index-evaluation-result-v12': 'subject-index-evaluation-result-v15', 'subject-index-web-report-v10': 'subject-index-web-report-v13', 'subject-index-v8-projection-metadata-v2': 'subject-index-v10-projection-metadata-v2', 'ohfr-v8-canonical-web-projection-v1': 'ohfr-v10-canonical-web-projection-v2', 'ohfr-v8-web-collection-v1': 'ohfr-v10-web-collection-v2'}
+V10S_SCHEMAS = {'dimension-calculation-input-v4.schema.json': 'dimension-calculation-input-v5.schema.json', 'dimension-calculations-v8.schema.json': 'dimension-calculations-v9.schema.json', 'item-assessments-v9.schema.json': 'item-assessments-v10.schema.json', 'evaluation-result-v14.schema.json': 'evaluation-result-v15.schema.json', 'web-report-v12.schema.json': 'web-report-v13.schema.json', 'v10-projection-metadata-v1.schema.json': 'v10-projection-metadata-v2.schema.json', 'web-projection-v10.schema.json': 'web-projection-v10-semantic.schema.json', 'web-collection-v10.schema.json': 'web-collection-v10-semantic.schema.json', 'v8-locator-fit-preflight.schema.json': 'v10-semantic-locator-fit-preflight.schema.json', 'locator-audit-v2.schema.json': 'locator-audit-v3.schema.json'}

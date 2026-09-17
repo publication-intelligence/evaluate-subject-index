@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-v10-candidate-access-review-v2"
+    },
+    "review_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "reviewed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "candidate_seen": {
+      "const": true
+    },
+    "evaluation_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "candidate_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "benchmark_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "study_lock_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "benchmark_access_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "audit_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "structure_binding": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "parent_kind": {
+            "enum": [
+              "subject",
+              "reader_task"
+            ]
+          },
+          "parent_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "requirement_kind": {
+            "enum": [
+              "facet",
+              "scope_rule",
+              "retained_distinction",
+              "amendment_delta"
+            ]
+          },
+          "requirement_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "requirement_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "disposition": {
+            "enum": [
+              "reviewed",
+              "unresolved"
+            ]
+          },
+          "tested_path_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uniqueItems": true
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uniqueItems": true,
+            "minItems": 1
+          },
+          "structure_finding_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uniqueItems": true
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "resulting_parent_judgment": {
+            "type": "object"
+          },
+          "factual_status": {
+            "enum": [
+              "satisfied",
+              "partially_satisfied",
+              "not_satisfied",
+              "uninspectable"
+            ]
+          },
+          "judgment_fields": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "coverage",
+                "stance_preserved",
+                "realistic_first_lookup_success",
+                "result"
+              ]
+            }
+          }
+        },
+        "required": [
+          "parent_kind",
+          "parent_id",
+          "requirement_kind",
+          "requirement_id",
+          "requirement_sha256",
+          "disposition",
+          "tested_path_ids",
+          "evidence_ids",
+          "structure_finding_ids",
+          "rationale",
+          "resulting_parent_judgment",
+          "factual_status",
+          "judgment_fields"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "requirement_inventory_provenance": {
+      "type": "object",
+      "required": [
+        "canonical_requirement_count",
+        "source_requirement_occurrence_count",
+        "inventory_sha256",
+        "duplicate_occurrences"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "canonical_requirement_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_requirement_occurrence_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inventory_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "duplicate_occurrences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "parent_kind",
+              "parent_id",
+              "requirement_kind",
+              "requirement_id",
+              "requirement_sha256",
+              "multiplicity",
+              "source_occurrence_indices"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "parent_kind": {
+                "enum": [
+                  "subject",
+                  "reader_task"
+                ]
+              },
+              "parent_id": {
+                "type": "string"
+              },
+              "requirement_kind": {
+                "const": "retained_distinction"
+              },
+              "requirement_id": {
+                "type": "string"
+              },
+              "requirement_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "multiplicity": {
+                "type": "integer",
+                "minimum": 2
+              },
+              "source_occurrence_indices": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "review_id",
+    "reviewer_id",
+    "reviewed_at",
+    "candidate_seen",
+    "evaluation_id",
+    "candidate_sha256",
+    "benchmark_sha256",
+    "study_lock_sha256",
+    "benchmark_access_sha256",
+    "audit_bindings",
+    "structure_binding",
+    "requirements",
+    "requirement_inventory_provenance"
+  ],
+  "additionalProperties": false,
+  "$id": "candidate-access-review-v10-semantic.schema.json"
+}
