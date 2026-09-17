@@ -649,13 +649,13 @@ def calculate_reliability(
         severities={"critical"},
         kinds={"fabricated_locator", "nonexistent_locator", "out_of_scope_locator"},
     )
-    # Only severe/no-fit delivered evidence participates in consequence ceilings.
+    # Every binary rating-zero locator participates in the distributed pattern
+    # ceiling; limiting prevalence to only severe/no-fit rows hides widespread
+    # ordinary reliability failures.
     pattern = [
         item
         for item in measured_locators
-        if item.get("judgment") == "unsupported"
-        and item.get("complete_path_fit") in {"severe_mismatch", "no_fit"}
-        and set(item.get("error_codes", [])) & core.RELIABILITY_CODES
+        if by_id[item["locator_id"]].get("rating_credit") == "0"
     ]
     delivered_major = [row for row in ledgers["defects"] if core.material_consequence(row) and core.delivered_bad_locators(row, measured_locators)]
     critical = [row for row in critical if core.material_consequence(row) and core.delivered_bad_locators(row, measured_locators)]
@@ -700,7 +700,7 @@ def calculate_reliability(
                 "reliability.distributed_unsupported_pattern",
                 pattern_max,
                 pattern_triggered,
-                {"minimum_count": 3, "fit": ["severe_mismatch", "no_fit"], "minimum_source_unit_rate": "0.25", "rate_table": "reliability_owned_unsupported_v1", "band": pattern_band},
+                {"minimum_count": 3, "rating_credit": "0", "minimum_source_unit_rate": "0.25", "rate_table": "reliability_zero_rating_v1", "band": pattern_band},
                 {
                     "unsupported_count": pattern_count,
                     "assessable_locator_denominator": locator_total,
@@ -718,13 +718,14 @@ def calculate_reliability(
         from v10_semantic import resolved_possibilities
         for row in semantic_rows:
             worlds=resolved_possibilities(row)
-            def adverse(value):return value['complete_path_fit'] in {'severe_mismatch','no_fit'}
+            def adverse(value):return value['judgment']!='supported'
             semantic_low.append(max(worlds,key=lambda value:(value['judgment']=='unsupported',adverse(value))))
             semantic_high.append(min(worlds,key=lambda value:(value['judgment']=='unsupported',adverse(value))))
     semantic_ids={row['locator_id'] for row in semantic_rows}
     factual=[row for row in measured_locators if row['locator_id'] not in semantic_ids]
     def patterns(rows):
-        return [r for r in rows if r['judgment']=='unsupported' and r['complete_path_fit'] in {'severe_mismatch','no_fit'} and set(r.get('error_codes',[])) & core.RELIABILITY_CODES]
+        return [r for r in rows if r['judgment']!='supported'
+                and (r['locator_id'] not in semantic_ids or set(r.get('error_codes',[])) & core.RELIABILITY_CODES)]
     low_pattern=patterns(factual+semantic_low) if semantic_rows else pattern
     high_pattern=patterns(factual+semantic_high) if semantic_rows else pattern
     physical_unknown=len(uninspectable_locators)+len(locator_not_measured)
@@ -2079,6 +2080,13 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
         # destination support; independent source/audit safeguards still apply.
     for reference_id in sorted(uncertain_references):
         block("GATE-ASSESSMENT-REFERENCE-UNCERTAIN", [reference_id], "Explicitly scoped uncertainty affects this delivered reference destination.")
+    explicit_references={row['reference_id'] for row in structure.get('cross_reference_judgments',[])}
+    unresolved_attested={identity for identity,row in references.items()
+                         if identity in delivered and row.get('target_path_id') is None
+                         and identity not in explicit_references and identity not in uncertain_references}
+    if unresolved_attested:
+        block('GATE-ASSESSMENT-REFERENCE-RESOLUTION',unresolved_attested,
+              'A delivered reference with no resolved inventory target cannot be treated as supported by an unlisted-reference attestation; record an exact destination judgment.')
 
     if not is_v10() and any(row["defect_kind"] == "scope_failure" for row in structure["defects"]):
         block("GATE-ASSESSMENT-SOURCE", [], "Wrong-source evidence cannot establish candidate destination failures.")
@@ -2803,4 +2811,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    __import__('runtime_profile').require_public_cli()
     main()

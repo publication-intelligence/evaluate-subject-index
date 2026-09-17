@@ -40,7 +40,7 @@ historical release.
 A shared policy reference must be unfrozen. Generate it with:
 
 ```sh
-python scripts/study_cli.py policy-template --input study-policy-input.json --output study-policy-template.json
+python scripts/v10_cli.py study policy-template --input study-policy-input.json --output study-policy-template.json
 ```
 
 The input uses the standard policy build fields. This emits
@@ -107,7 +107,7 @@ measurement never pretends to be new source discovery.
 ## Migrate an authorized evaluation
 
 ```sh
-python scripts/study_cli.py migrate-benchmark \
+python scripts/v10_cli.py study migrate-benchmark \
   --state evaluation/evaluation-state.json \
   --study-lock reviewed/study-benchmark-lock.v1.json \
   --release-benchmark reviewed/benchmark.json \
@@ -153,8 +153,8 @@ directory only on success. Transport checksums remain informational; approved
 study artifact/content identities are substantive comparison requirements.
 
 ```sh
-python scripts/study_cli.py preflight --state first/evaluation-state.json --state second/evaluation-state.json
-python scripts/study_cli.py assemble-comparison --state first/evaluation-state.json --state second/evaluation-state.json --output-dir comparison
+python scripts/v10_cli.py study preflight --state first/evaluation-state.json --state second/evaluation-state.json
+python scripts/v10_cli.py study assemble-comparison --state first/evaluation-state.json --state second/evaluation-state.json --output-dir comparison
 ```
 
 Multi-evaluation preflight and assembly require at least two comparable identities

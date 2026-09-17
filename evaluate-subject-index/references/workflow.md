@@ -53,9 +53,9 @@ The command generates the current benchmark rather than accepting a caller-autho
 The final transitions use one current command surface:
 
 ```bash
-python scripts/dimension_score_v8_cli.py register-structure --state evaluation-state.json --input structure-audit.v6.json
-python scripts/dimension_score_v8_cli.py score --state evaluation-state.json
-python scripts/dimension_score_v8_cli.py build-report --state evaluation-state.json
+python scripts/v10_cli.py score register-structure --state evaluation-state.json --input structure-audit.v6.json
+python scripts/v10_cli.py score score --state evaluation-state.json
+python scripts/v10_cli.py score build-report --state evaluation-state.json
 ```
 
 These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. The final command writes and registers `web-report.v10.json` and the complete `v8-canonical-projection/` bundle in one transaction. Generic stage completion is disabled for these three stages.

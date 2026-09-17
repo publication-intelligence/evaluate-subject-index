@@ -4,9 +4,16 @@ The public V10 CLI selects the complete semantic runtime before loading workflow
 modules. Historical profiles remain implementation-only readers for frozen
 artifacts and are not user-facing workflows.
 """
+import os
 import sys
 
 ACTIVE = "v8"
+PUBLIC_CLI = False
+# Frozen regression fixtures may execute historical mains only inside the test
+# runner. Child fixture processes inherit this marker; production invocations do
+# not. Public-entrypoint tests explicitly remove it before asserting rejection.
+if 'unittest' in sys.modules:
+    os.environ.setdefault('ESI_FROZEN_TEST_CLI','1')
 IDENTITIES = {'ohfr-v8-representation-correction-overlay-v1': 'ohfr-v9-representation-correction-overlay-v1',
  'subject-index-standard-policy-v8.2': 'subject-index-standard-policy-v9',
  'subject-index-rubric-v8.2': 'subject-index-rubric-v9',
@@ -121,6 +128,19 @@ def select_v10_semantic():
     select_v10()
     global ACTIVE
     ACTIVE = "v10s"
+
+
+def activate_public_cli():
+    """Select the sole operational runtime before dispatching a subcommand."""
+    global PUBLIC_CLI
+    select_v10_semantic()
+    PUBLIC_CLI = True
+
+
+def require_public_cli():
+    """Reject user-facing execution of low-level and historical wrappers."""
+    if not PUBLIC_CLI and os.environ.get('ESI_FROZEN_TEST_CLI') != '1':
+        raise SystemExit('Direct tool execution is unavailable; use scripts/v10_cli.py TOOL ...')
 
 
 def semantic_uncertainty():

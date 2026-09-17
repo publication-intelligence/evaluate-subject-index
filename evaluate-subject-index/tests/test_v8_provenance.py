@@ -323,6 +323,9 @@ class LedgerIdentityTests(unittest.TestCase):
             artifact["reader_task_results"][0]["access_mode"] = "invalid"
             with self.assertRaisesRegex(audits.PreparationError, "tested access mode"):
                 audits.validate_missing_access_audit(artifact, frozen, workset, "CHUNK-001")
+            artifact["reader_task_results"][0].update(access_mode="direct",result="fails",severity="critical")
+            with self.assertRaisesRegex(audits.PreparationError, "cannot fail while recording a matched delivered route"):
+                audits.validate_missing_access_audit(artifact, frozen, workset, "CHUNK-001")
 
 
 if __name__ == "__main__":

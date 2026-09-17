@@ -25,7 +25,7 @@ All registered paths are relative to the evaluation directory. Restricted source
 Checkpoint when it reduces the cost of interruption—for example after benchmark freeze, candidate registration, a batch of audit chunks, scoring, or before moving work to another chat. It is optional and does not advance a stage.
 
 ```bash
-python scripts/bundle_cli.py checkpoint \
+python scripts/v10_cli.py bundle checkpoint \
   --state /path/to/evaluation/evaluation-state.json \
   --output /path/to/evaluation/checkpoint.zip
 ```
@@ -35,7 +35,7 @@ The checkpoint contains the current state and accessible registered artifacts. C
 ## Import and resume
 
 ```bash
-python scripts/bundle_cli.py import-bundle \
+python scripts/v10_cli.py bundle import-bundle \
   --input /path/to/checkpoint.zip \
   --output-dir /path/to/resumed-evaluation
 ```

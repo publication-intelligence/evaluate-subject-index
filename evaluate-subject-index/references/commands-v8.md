@@ -1,4 +1,8 @@
-# Current V8 commands
+# Archived V8 command record
+
+These commands document the frozen V8 implementation only. They are not
+executable entry points in the current tree. Reproduce V8 from its pinned Git
+revision; use `python scripts/v10_cli.py TOOL ...` for every current operation.
 
 All paths below are examples. Use absolute paths or run from a stable evaluation directory.
 

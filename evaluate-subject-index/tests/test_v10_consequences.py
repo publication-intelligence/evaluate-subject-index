@@ -49,6 +49,45 @@ def pattern(data, count=10, denominator=200, sections=2, section_population=8):
 
 
 class V10ConsequenceTests(unittest.TestCase):
+    def test_indexia_zero_rating_population_reaches_dimension_ceiling_without_global_cap(self):
+        maximum,triggered,band=core.reliability_pattern_cap(2084,13143,17,17)
+        self.assertTrue(triggered);self.assertEqual(core.Decimal(50),maximum)
+        self.assertEqual('15_to_below_30_percent',band)
+
+    def test_indexerlabs_material_node_findings_are_conserved_as_scored_defects(self):
+        from v10_contract import candidate_defect_errors
+        nodes=[];defects=[]
+        for index in range(135):
+            component='conceptual_stance_fidelity' if index<77 else 'heading_access_architecture'
+            owner='conceptual_stance_fidelity' if index<77 else 'findability_navigation'
+            node=f'NODE-CAL-{index:03d}';path=f'PATH-CAL-{index:03d}'
+            nodes.append({'node_id':node,'component_judgments':{component:{'status':'fails' if index==76 else 'major_issues'}}})
+            defects.append({'defect_id':f'DEFECT-CAL-{index:03d}','code':'HED' if index>=77 else 'STA',
+                            'dimension_owner':owner,'severity':'critical' if index==76 else 'major',
+                            'retrieval_consequence':'misleads','affected_item_ids':[node,path]})
+        self.assertEqual([],candidate_defect_errors({'node_judgments':nodes,'defects':defects}))
+        defects.pop();self.assertTrue(candidate_defect_errors({'node_judgments':nodes,'defects':defects}))
+
+    def test_prior_material_and_warranted_reference_findings_require_live_successors_or_resolution(self):
+        from v10_defect_reconciliation import validate,material_ids
+        import study_comparison as study
+        candidate='a'*64;prior_hash='b'*64
+        prior={'candidate_sha256':candidate,'defects':[
+            {'defect_id':'DEFECT-MAJOR','severity':'major'},
+            {'defect_id':'DEFECT-WARRANTED','severity':'minor'}],
+            'scoring_context':{'cross_reference_applicability':{'reference_defect_ids':['DEFECT-WARRANTED']}}}
+        successor={'defects':[{'defect_id':'DEFECT-NEXT','evidence_ids':['EVID-NEXT']}],'node_judgments':[]}
+        receipt={'schema_version':'subject-index-prior-defect-reconciliation-v10-v1','evaluation_id':'EVAL',
+                 'candidate_sha256':candidate,'prior_structure_file_sha256':prior_hash,
+                 'findings':[{'prior_defect_id':'DEFECT-MAJOR','disposition':'superseded','successor_finding_ids':['DEFECT-NEXT'],'evidence_ids':['EVID-NEXT'],'rationale':'Reclassified without losing the quality obligation.'},
+                             {'prior_defect_id':'DEFECT-WARRANTED','disposition':'resolved','successor_finding_ids':[],'evidence_ids':['EVID-NEXT'],'rationale':'Exact destination was independently re-established.'}],
+                 'reviewed_by':'reviewer','reviewed_at':'2026-09-17T00:00:00Z'}
+        receipt['reconciliation_sha256']=study.digest(receipt)
+        self.assertEqual(['DEFECT-MAJOR','DEFECT-WARRANTED'],material_ids(prior))
+        validate(receipt,prior,candidate,prior_hash,successor)
+        successor['defects']=[]
+        with self.assertRaises(ValueError):validate(receipt,prior,candidate,prior_hash,successor)
+
     def test_atomic_destination_predicates_and_uncertainty(self):
         for fit,judgment,treatment,expected in [('no_fit','unsupported','absent',True),('material_partial_fit','partially_supported','mixed',False),('material_mismatch','unsupported','substantive',False),('severe_mismatch','unsupported','substantive',False)]:
             with self.subTest(fit=fit):

@@ -1345,7 +1345,7 @@ def essential_cap(missing: int, denominator: int) -> tuple[Decimal, str]:
 def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, Any]:
     optional_map = ledgers["optional_map"]
     def material_optional_failure(item):
-        return (item.get("severity") in {"major", "critical"} and
+        return (item.get("severity") in {"minor", "major", "critical"} and
                 (item.get("coverage") == "missing" or item.get("stance_preserved") == "no"
                  or item.get("realistic_first_lookup_success") == "no"))
     excluded_optional = [item for item in ledgers["subjects"] if item.get("priority") == "optional" and not optional_map[item["subject_id"]] and not material_optional_failure(item)]

@@ -167,10 +167,20 @@ class WrongDestinationTests(unittest.TestCase):
     def test_missing_supplemental_route_is_not_a_delivered_broken_reference(self):
         data=evidence(fit='material_partial_fit',judgment='partially_supported',treatment='mixed')
         data[0]['cross_reference_judgments']=[]
+        data[3]['cross_references'][0]['target_path_id']='PATH-TARGET'
         data[0]['defects']=[defect('DEFECT-MISSING','misleading_access_route','TASK-ONE')]
         gates, assessment=outcomes(data)
         self.assertFalse(any(g['triggered'] for g in gates.values()))
         self.assertEqual('sufficient',assessment['status'])
+
+    def test_unresolved_inventory_target_cannot_hide_behind_full_scope_attestation(self):
+        data=evidence(fit='exact_fit',judgment='supported',treatment='substantive',resolution='valid_destination')
+        data[0]['cross_reference_judgments']=[]
+        data[3]['cross_references'][0]['target_path_id']=None
+        gates,assessment=outcomes(data)
+        self.assertFalse(gates['GATE-BROKEN-REFERENCE']['triggered'])
+        self.assertEqual('indeterminate',assessment['status'])
+        self.assertEqual(['XREF-ONE'],assessment['blockers'][0]['affected_item_ids'])
 
     def test_no_duplicate_gate_for_same_direct_failure_with_separate_major_defect(self):
         data=evidence()
