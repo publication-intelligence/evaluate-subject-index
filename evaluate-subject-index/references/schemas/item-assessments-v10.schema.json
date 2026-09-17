@@ -162,7 +162,8 @@
                   "fails",
                   "uninspectable",
                   "not_applicable",
-                  "not_measured"
+                  "not_measured",
+                  "semantic_unresolved"
                 ]
               },
               "heading_access_causal_findings": {
