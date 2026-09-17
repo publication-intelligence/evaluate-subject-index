@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from internal_cli import run_internal_cli
 import test_v8_completion as completion
 from test_study_comparison import StudyFixture, self_hash
 import study_comparison as study
@@ -17,9 +18,7 @@ SCRIPTS = completion.SCRIPTS
 
 def v10(*args):
     target={'study':'study_cli.py','access-review':'v10_candidate_access.py','score':'dimension_score_v8_cli.py','bundle':'bundle_cli.py'}[args[0]]
-    code="import runpy,sys;from runtime_profile import select_v10;select_v10();sys.argv=[sys.argv[1],*sys.argv[2:]];runpy.run_path(sys.argv[0],run_name='__main__')"
-    return subprocess.run([sys.executable,'-c',code,str(SCRIPTS/target),*map(str,args[1:])],cwd=SCRIPTS.parent,
-                          env={**__import__('os').environ,'ESI_FROZEN_TEST_CLI':'1','PYTHONPATH':'tests:scripts'},capture_output=True,text=True)
+    return run_internal_cli(target.removesuffix('.py'),*args[1:],profile='v10')
 
 
 def rebind(f):

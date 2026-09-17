@@ -8,18 +8,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from internal_cli import run_internal_cli
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
 
 def run_cli(script: str, *arguments: object, ok: bool = True) -> dict:
-    result = subprocess.run(
-        [sys.executable, str(SCRIPTS / script), *(str(value) for value in arguments)],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = run_internal_cli(script.removesuffix(".py"), *arguments)
     if ok and result.returncode != 0:
         raise AssertionError(result.stdout + result.stderr)
     if not ok and result.returncode == 0:

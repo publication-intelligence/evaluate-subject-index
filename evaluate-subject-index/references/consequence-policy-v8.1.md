@@ -86,23 +86,10 @@ Use the normal policy build input (same source scope, audience, audit mode, blin
 
 Evidence paths resolve relative to the saved build-input file; `sha256` is the file-byte hash, distinct from canonical policy self-hashes. Retain that input with the migration record. The CLI verifies all referenced evidence bytes, the original policy identity/self-hash/freeze, and chronological consistency. Every policy schema consumer also checks timestamp/visibility agreement and the new identity. Missing, empty, inconsistent, or falsely rerun provenance is rejected. The metadata itself does not prove an independent review occurred; preserved evidence supplies that provenance.
 
-For an initial V8-to-V8.1 migration:
-
-```bash
-python scripts/policy_cli.py build --input migration/policy-build-input.json \
-  --original-policy evaluation/archive/v8-original/source/evaluation-policy.v4.json \
-  --output migration/evaluation-policy.v4.json
-```
-
-For provenance-only cleanup after a V8.1 migration, additionally use:
-
-```bash
-python scripts/policy_cli.py build --input migration/policy-build-input.json \
-  --original-policy evaluation/archive/v8-original/source/evaluation-policy.v4.json \
-  --base-policy evaluation/archive/v8.1-before-provenance/source/evaluation-policy.v4.json \
-  --output migration/evaluation-policy.v4.json
-```
-
-Run commands from the installed skill directory or use an absolute script path. Archive the latest V8.1 bytes before cleanup. With `--base-policy`, the builder retains the latest policy's scoring settings and metadata, replacing only policy identity/hash, freeze, the supported migration object, and the obsolete `policy_profile.targeted_migration` workaround. It verifies unchanged original source/audience/audit settings; any discrepancy requires investigation. Initial migration retains original density settings and deviations while instantiating the V8.1 standard consequence policy. The CLI refuses to overwrite its input or preserved evidence even with `--force`.
+The historical low-level migration commands have been removed from the current
+skill. Preserve the original and latest V8.1 policy bytes, then use only the V10
+dispatcher and its typed retrospective study migration. The current workflow
+retains the latest policy's applicable evidence and records the actual migration
+without exposing V8.1 as a runnable profile.
 
 Preserve prior policy/calculation/result/report bytes and original review/release provenance. Update the ledger, necessary artifact registrations and hash cascade, and rebuild affected derived bundles. A changed policy hash requires dependent provenance to be rebound, not new discovery, benchmark review, normalization, locator audit, or missing-access audit. Do not manufacture stage completions or compatibility approvals. For cleanup, compare against that evaluation's own latest V8.1 baseline: all frozen judgments, ordinary deductions, dimension/overall scores, triggered/binding ceilings, publication gates, and validity outcomes must remain invariant. Investigate any unexpected difference. Reconcile the durable saved-project checkout and ignored private evidence/archive explicitly; Git merges do not transport ignored artifacts.

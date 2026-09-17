@@ -10,6 +10,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
+from internal_cli import run_internal_cli
+
 import test_v8_completion as completion
 import study_cli
 import study_comparison as study
@@ -282,9 +284,9 @@ class StudyComparisonTests(unittest.TestCase):
         f=self.fixture();study_cli.migrate(f.args);state=study.read(f.state_path)
         state['source']['document_page_span']=[1,2];f.f.write('evaluation-state.json',state)
         archive=f.root/'portable.zip'
-        command=subprocess.run([sys.executable,str(completion.SCRIPTS/'bundle_cli.py'),'checkpoint','--state',str(f.state_path),'--output',str(archive)],capture_output=True,text=True)
+        command=run_internal_cli('bundle_cli','checkpoint','--state',f.state_path,'--output',archive)
         self.assertEqual(0,command.returncode,command.stdout+command.stderr)
-        command=subprocess.run([sys.executable,str(completion.SCRIPTS/'bundle_cli.py'),'import-bundle','--input',str(archive),'--output-dir',str(f.root/'resumed')],capture_output=True,text=True)
+        command=run_internal_cli('bundle_cli','import-bundle','--input',archive,'--output-dir',f.root/'resumed')
         self.assertNotEqual(0,command.returncode);self.assertIn('study_comparison_failed',command.stdout)
         state=study.read(f.state_path);state['source']['document_page_span']=[1,1];f.f.write('evaluation-state.json',state)
         other=self.fixture(different=True,policy_change=True);study_cli.migrate(other.args);state=study.read(other.state_path);state.pop('study_comparison')
@@ -298,7 +300,7 @@ class StudyComparisonTests(unittest.TestCase):
         self.assertEqual(before,f.state_path.read_bytes())
         source={'policy_id':'UNFROZEN-REFERENCE','source_scope':{k:f.policy['source_scope'][k] for k in ('source_sha256','document_page_span','page_map_sha256','chunk_manifest_sha256','availability')},'audience':f.policy['audience'],'audit_design':{'mode':'full','candidate_blindness':'required'},'deviations':[]}
         f.f.write('template-input.json',source)
-        command=subprocess.run([sys.executable,str(completion.SCRIPTS/'study_cli.py'),'policy-template','--input',str(f.root/'template-input.json'),'--output',str(f.root/'unfrozen.json')],capture_output=True,text=True)
+        command=run_internal_cli('study_cli','policy-template','--input',f.root/'template-input.json','--output',f.root/'unfrozen.json')
         self.assertEqual(0,command.returncode,command.stdout+command.stderr)
         self.assertNotIn('freeze',study.read(f.root/'unfrozen.json')['policy_semantic_content'])
 
@@ -360,16 +362,16 @@ class StudyComparisonTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 f=self.fixture(**changes);study_cli.migrate(f.args)
                 archive=f.root/'portable.zip';output=f.root/'resumed'
-                result=subprocess.run([sys.executable,str(completion.SCRIPTS/'bundle_cli.py'),'checkpoint','--state',str(f.state_path),'--output',str(archive)],capture_output=True,text=True)
+                result=run_internal_cli('bundle_cli','checkpoint','--state',f.state_path,'--output',archive)
                 self.assertEqual(0,result.returncode,result.stdout+result.stderr)
-                result=subprocess.run([sys.executable,str(completion.SCRIPTS/'bundle_cli.py'),'import-bundle','--input',str(archive),'--output-dir',str(output)],capture_output=True,text=True)
+                result=run_internal_cli('bundle_cli','import-bundle','--input',archive,'--output-dir',output)
                 self.assertEqual(0,result.returncode,result.stdout+result.stderr)
                 study.preflight_state(study.read(output/'evaluation-state.json'),output/'evaluation-state.json')
         state=study.read(f.state_path);state['source']['document_page_span']=[1,2];f.f.write('evaluation-state.json',state)
         archive=f.root/'invalid.zip'
-        subprocess.run([sys.executable,str(completion.SCRIPTS/'bundle_cli.py'),'checkpoint','--state',str(f.state_path),'--output',str(archive)],capture_output=True,check=True)
+        run_internal_cli('bundle_cli','checkpoint','--state',f.state_path,'--output',archive,check=True)
         rejected=f.root/'rejected'
-        result=subprocess.run([sys.executable,str(completion.SCRIPTS/'bundle_cli.py'),'import-bundle','--input',str(archive),'--output-dir',str(rejected)],capture_output=True,text=True)
+        result=run_internal_cli('bundle_cli','import-bundle','--input',archive,'--output-dir',rejected)
         self.assertNotEqual(0,result.returncode);self.assertFalse(rejected.exists())
 
     def test_same_total_different_density_map_and_false_map_self_hash_are_rejected(self):

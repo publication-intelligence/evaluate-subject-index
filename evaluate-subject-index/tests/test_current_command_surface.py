@@ -8,18 +8,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from internal_cli import run_internal_cli
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
 
 def help_text(script: str, *arguments: str) -> str:
-    result = subprocess.run(
-        [sys.executable, str(SCRIPTS / script), *arguments, "--help"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = run_internal_cli(script.removesuffix(".py"), *arguments, "--help")
     if result.returncode:
         raise AssertionError(result.stdout + result.stderr)
     return result.stdout
@@ -50,6 +47,25 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         ):
             with self.subTest(legacy_entrypoint=legacy_entrypoint):
                 self.assertNotIn(legacy_entrypoint, text)
+
+    def test_all_documentation_omits_direct_low_level_commands(self) -> None:
+        text = "\n".join(path.read_text() for path in sorted((ROOT / "references").glob("*.md")))
+        for entrypoint in (
+            "scripts/state_cli.py",
+            "scripts/policy_cli.py",
+            "scripts/study_cli.py",
+            "scripts/bundle_cli.py",
+            "scripts/page_chunk_cli.py",
+            "scripts/benchmark_review_cli.py",
+            "scripts/candidate_preparation_cli.py",
+            "scripts/parallel_candidate_audit_cli.py",
+            "scripts/parallel_discovery_cli.py",
+            "scripts/dimension_score_v8_cli.py",
+            "scripts/item_grade_v8_cli.py",
+            "scripts/v9_cli.py",
+        ):
+            with self.subTest(entrypoint=entrypoint):
+                self.assertNotIn(entrypoint, text)
 
     def test_checkpoint_cli_has_no_migration_command(self) -> None:
         text = help_text("bundle_cli.py")
@@ -192,12 +208,39 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             self.assertTrue({"GATE-WRONG-LOCATOR", "GATE-BROKEN-REFERENCE"} <= {row["gate_id"] for row in policy["critical_gates"]})
             self.assertNotIn("standard_policy_sha256", policy["policy_profile"])
 
+    def test_every_low_level_main_rejects_direct_execution_even_with_old_test_marker(self) -> None:
+        environment = {**os.environ, "ESI_FROZEN_TEST_CLI": "1"}
+        for script in (
+            "benchmark_review_cli.py",
+            "bundle_cli.py",
+            "candidate_preparation_cli.py",
+            "dimension_score_v8_cli.py",
+            "item_grade_v8_cli.py",
+            "page_chunk_cli.py",
+            "parallel_candidate_audit_cli.py",
+            "parallel_discovery_cli.py",
+            "policy_cli.py",
+            "state_cli.py",
+            "study_cli.py",
+            "v10_candidate_access.py",
+            "v10_execution.py",
+            "v10_release.py",
+        ):
+            with self.subTest(script=script):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPTS / script), "--help"],
+                    text=True,
+                    capture_output=True,
+                    env=environment,
+                )
+                self.assertNotEqual(0, result.returncode)
+                self.assertIn("use scripts/v10_cli.py", result.stdout + result.stderr)
+
     def test_v10_is_the_only_public_runtime_and_initializes_natively(self) -> None:
         self.assertFalse((SCRIPTS / "v9_cli.py").exists())
         self.assertFalse((SCRIPTS / "v10_semantic_cli.py").exists())
         self.assertFalse((SCRIPTS / "v10_migration_cli.py").exists())
-        direct_env=dict(os.environ);direct_env.pop('ESI_FROZEN_TEST_CLI',None)
-        direct=subprocess.run([sys.executable,str(SCRIPTS/'policy_cli.py'),'--help'],text=True,capture_output=True,env=direct_env)
+        direct=subprocess.run([sys.executable,str(SCRIPTS/'policy_cli.py'),'--help'],text=True,capture_output=True)
         self.assertNotEqual(0,direct.returncode)
         self.assertIn('use scripts/v10_cli.py',direct.stdout+direct.stderr)
         with tempfile.TemporaryDirectory() as temporary:

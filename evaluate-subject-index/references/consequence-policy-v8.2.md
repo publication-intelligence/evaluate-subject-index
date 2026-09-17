@@ -90,15 +90,7 @@ For migration, preserve all original uncertainty rows byte-equivalently as JSON 
 
 ## Retrospective policy provenance contract
 
-Use the [schema-defined retrospective provenance contract](consequence-policy-v8.1.md#retrospective-policy-provenance-contract). Fresh policy freezes remain candidate-blind. For a combined migration, preserve the original candidate-blind policy and the latest V8.1 baseline; provide explicit authorization and a change ledger. The builder accepts the original V8/V8.1/current policy and a V8.1/current `--base-policy`, retains the base's scoring settings and existing gates, then adds the V8.2 direct gates and new policy identity. For a provenance-only cleanup already on V8.2, it retains all scoring settings/gates unchanged.
-
-```bash
-python /path/to/installed/evaluate-subject-index/scripts/policy_cli.py build \
-  --input migration/policy-build-input.json \
-  --original-policy evaluation/archive/v8-original/source/evaluation-policy.v4.json \
-  --base-policy evaluation/archive/v8.1-before-v8.2/source/evaluation-policy.v4.json \
-  --output migration/evaluation-policy.v4.json
-```
+Use the [schema-defined retrospective provenance contract](consequence-policy-v8.1.md#retrospective-policy-provenance-contract). Fresh policy freezes remain candidate-blind. For a combined migration, preserve the original candidate-blind policy and the latest V8.1 baseline; provide explicit authorization and a change ledger. Historical low-level policy commands are no longer exposed. Use only the V10 dispatcher and its typed retrospective study migration; the preserved V8.2 policy remains evidence rather than an executable profile.
 
 Record the actual V8.2 migration timestamp and candidate visibility; preserve original policy/freeze and release/review evidence separately. Reuse discovery, benchmark content/review, source mapping, candidate normalization, locator audits, and missing-access audits. Do not claim a fresh independent review or approval. Populate typed cross-reference resolution only from the already frozen evidence supporting the exception; if that evidence is insufficient, retain an explicit unresolved blocker. Preserve the original judgment and severity, including partial correctness; never turn a partial fit into zero fit to force a gate. Document this targeted structured-evidence encoding in the ledger instead of claiming the supplemented structure audit is byte-identical.
 
