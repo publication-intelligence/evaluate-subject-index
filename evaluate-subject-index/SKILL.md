@@ -1,11 +1,11 @@
 ---
 name: evaluate-subject-index
-description: Run a repeatable, source-grounded V8.2 evaluation of a finished subject index, including page mapping, source-first benchmark construction, candidate normalization, locator and missing-access audits, scoring, reporting, checkpoints, and resume.
+description: Run repeatable, source-grounded evaluations of finished subject indexes, including benchmark construction or reconciliation, candidate audits, scoring, comparison, reporting, checkpoints, and study closeout.
 ---
 
 # Evaluate Subject Index
 
-Current methodology: **V8.2**. Read [Consequence policy and targeted migration](references/consequence-policy-v8.2.md); it supersedes older publication-gate language while retaining V8.1 scoring/caps and validity separation. Frozen evaluations require explicit migration and new policy/calculation identities.
+The default legacy entrypoints remain **V8.2**. For V10 studies, use the explicit V10 runtime described below. Frozen evaluations require explicit migration and new policy/calculation identities.
 
 Evaluate one finished subject index against its source and a frozen policy. Use the current V8.2 workflow and create current-schema artifacts.
 
@@ -59,6 +59,8 @@ Read [storage-and-checkpoints.md](references/storage-and-checkpoints.md) before 
 An already frozen, independently reviewed candidate-blind benchmark may bypass repeated discovery and full editorial review only through `benchmark_review_cli.py import-reviewed-legacy`. Read [benchmark-review.md](references/benchmark-review.md) first. The command requires exact legacy release evidence plus a separate current-schema compatibility approval, permits only its enumerated mechanical normalization and policy/release rebinding, and records explicitly that the four imported stages were not rerun. Never author the compatibility approval on the reviewer's behalf.
 
 For authorized comparison of already candidate-visible evaluations, read [Retrospective study binding and comparison](references/study-comparison.md). Preserve both historical freezes and actual candidate visibility; a reviewed release and approved common policy/density lock are required before binding or assembling comparable outputs. This workflow does not select a release or authorize audit transfer.
+
+For benchmark reconciliation, multi-candidate finalization, artifact preservation, and repository closeout, read [Benchmark reconciliation and study closeout](references/benchmark-reconciliation-and-closeout.md). A numeric comparative study is not complete while a required candidate remains indeterminate; inspect and resolve every defensible blocker before assembly, and escalate genuinely irreducible uncertainty for a reviewed method decision rather than silently coercing it.
 
 ## Parallel chats
 
@@ -121,6 +123,10 @@ independently reviewed, candidate-blind benchmark-access amendment and lock v3.
 Never infer activation, actual amendment freeze, candidate execution, or publication
 from implementation approval. Native V10 human release decisions remain separately
 bound artifacts and never change machine score, gate, validity, or readiness facts.
+
+When a V10 study has an approved runtime, benchmark, and study lock, follow their
+recorded activation status rather than the original implementation hold in the
+design document. Preserve the activation record and exact compatibility identities.
 
 For explicitly reviewed semantic-uncertainty correction adoption, read
 [the semantic execution contract](references/runtime-v10-semantic.md) and use

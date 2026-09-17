@@ -1,16 +1,17 @@
 # Subject-index evaluation V10 decision contract
 
 Contract version: `subject-index-evaluation-v10-decision-v1`  
-Status: adopted for implementation; not activated  
+Status: activated for the OHFR V10 retrospective study; later studies require their own lock and authorization  
 Decision date: 2026-09-16  
 Decision task: `01a09903-ee81-7122-8cfc-b2c2c7217114`  
 Adoption turn: `01a0ad2a-18e6-7991-8285-5f779a93e295`
 
 This record freezes the user-approved V10 methodology scope so runtime,
 benchmark, validator, and website work do not have to infer it from task
-summaries. It authorizes implementation and review only. It does not authorize
-runtime activation, lock selection, benchmark migration, candidate evaluation,
-publication, or deployment.
+summaries. The original adoption authorized implementation and review only. The
+OHFR V10 retrospective study was later activated through its reviewed runtime,
+benchmark, study lock, candidate migrations, and comparison integration.
+Deployment remains separate and was not performed as part of that activation.
 
 ## Exact adoption statement
 
@@ -274,10 +275,27 @@ human release decisions must be exposed separately.
 - Human approval or `approved_with_deviation` is separate and cannot mutate
   score, ceiling, gate, validity, or assessment facts.
 
-## Execution hold
+### Candidate-intrinsic ambiguity clarification
 
-The unchanged V8.2 source freeze may continue. No V10 runtime activation, lock
-selection, benchmark overlay freeze, candidate migration, candidate evaluation,
-website deployment, or publication is authorized until the actual V10 runtime,
-validator, source/overlay proof, fixtures, and consumer implementation have been
-reviewed together.
+Semantic uncertainty is reserved for facts that remain genuinely unresolved
+after complete inspection. It does not protect an ambiguous candidate route from
+evaluation. When the source is inspectable but the delivered path, locator, or
+reference is malformed, semantically incomplete, polysemous, or under-specified,
+judge the delivered route as delivered and do not invent its intended concept.
+If a reasonable reader cannot identify one supported complete concept at the
+cited passage, the fit is known `no_fit`, the judgment is `unsupported`, and the
+locator is `not_kept`. A lesser fit is allowed only when the cited passage visibly
+supports a bounded part of the complete path. Dependent access, task, reference,
+and architecture judgments follow the actual usability of that delivered route.
+This clarification changes no benchmark, denominator, weight, formula, cap, or
+gate threshold; it prevents candidate defects from being mislabeled as missing
+evidence.
+
+## Original execution hold and activation record
+
+The original hold prohibited execution until runtime, validator, source/overlay
+proof, fixtures, and consumer were reviewed together. That review completed for
+the OHFR study through Evaluate Subject Index PRs 58 and 59, OHFR benchmark PR 17,
+the four candidate migration pull requests, and Publication Intelligence website
+PR 5. Those receipts activate only the bound OHFR study identities. They do not
+authorize another study or a website deployment.
