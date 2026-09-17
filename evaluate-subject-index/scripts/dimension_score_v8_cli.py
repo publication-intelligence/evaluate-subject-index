@@ -1015,7 +1015,13 @@ def calculate_loaded(
 
     all_scored = all(item["status"] == "scored" for item in dimensions)
     unrounded_total = sum((core.decimal_value(item["weighted_contribution"]) for item in dimensions), ZERO) if all_scored else None
-    total = core.round_overall_percentage(unrounded_total) if unrounded_total is not None else None
+    ceiling = None
+    capped_total = unrounded_total
+    if semantic_uncertainty():
+        from v10_overall_caps import evaluate as evaluate_overall_caps
+        ceiling = evaluate_overall_caps(loaded["policy"], ledgers, loaded["structure"], unrounded_total, loaded["locator_documents"])
+        capped_total = None if ceiling["post_cap_overall_percentage"] is None else Decimal(ceiling["post_cap_overall_percentage"])
+    total = core.round_overall_percentage(capped_total) if capped_total is not None else None
     result = {
         "schema_version": CALCULATION_SCHEMA,
         "calculation_id": f"CALC-{core.canonical_hash({'evaluation_id': loaded['config']['evaluation_id'], 'audit_mode': audit_mode, 'rubric_version': RUBRIC_VERSION, 'calculation_profile': CALCULATION_PROFILE, 'inputs': calculation_artifacts})[:12].upper()}",
@@ -1040,15 +1046,16 @@ def calculate_loaded(
             "policy": "separate_claim_restrictions",
         },
         "dimensions": dimensions,
+        **({"overall_score_ceiling": ceiling} if ceiling is not None else {}),
         "overall_percentage": core.displayed_number(total, Decimal("0.01")) if total is not None else None,
         "maximum_percentage": 100,
         "final_rounding": {
             "mode": "ROUND_HALF_UP",
             "quantum": "0.01",
-            "input": core.decimal_text(unrounded_total) if unrounded_total is not None else None,
+            "input": core.decimal_text(capped_total) if capped_total is not None else None,
             "output": core.decimal_text(total) if total is not None else None,
         },
-        "arithmetic_check": all_scored and total == unrounded_total.quantize(Decimal("0.01"), rounding=core.ROUND_HALF_UP),
+        "arithmetic_check": all_scored and total == capped_total.quantize(Decimal("0.01"), rounding=core.ROUND_HALF_UP),
     }
     architecture = loaded["structure"]["locator_architecture"]
     result["structure_audit"] = {
@@ -2355,6 +2362,7 @@ def _evaluation_result(
         "audit_scope": {"mode": calculation["audit_mode"], "complete": (calculation["audit_mode"] == "full" and not any(c["not_measured"] for d in calculation["dimensions"] for c in d["denominators"]["components"])) if semantic_uncertainty() else calculation["status"] == "scored"},
         "dimension_calculations": _calculation_reference(calculation_record, calculation),
         "scorecard": _scorecard(calculation),
+        **({"overall_score_ceiling": deepcopy(calculation["overall_score_ceiling"])} if "overall_score_ceiling" in calculation else {}),
         "overall_percentage": calculation["overall_percentage"],
         "interpretation": metadata["interpretation"],
         "metrics": {"keep_precision": {key: reliability[key] for key in ("keep_precision_numerator", "keep_precision_denominator", "keep_precision", "treatment_recall", "reliability_f1")}},
@@ -2424,6 +2432,7 @@ def _web_report(
         "headline": metadata["headline"],
         "summary": metadata["summary"],
         "grade": {"score": calculation["overall_percentage"], "maximum": 100, "label": _grade_label(calculation["overall_percentage"])},
+        **({"overall_score_ceiling": deepcopy(calculation["overall_score_ceiling"])} if "overall_score_ceiling" in calculation else {}),
         "scorecard": _scorecard(calculation),
         "calculation_explainer": {
             **calculation_ref,
@@ -2544,7 +2553,13 @@ def _calculation_loaded_from_state(
     state: Mapping[str, Any], state_path: Path, config_path: Path
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[Mapping[str, Any]], list[Mapping[str, Any]], dict[str, Any]]:
     study_identity = study_comparison.preflight_state(state, state_path, require_density=True)
-    policy, policy_record, policy_path = _registered_documents(state, state_path, stage="define_policy", schema_version=runtime_identity("subject-index-evaluation-policy-v4"), schema_name="evaluation-policy-v4.schema.json")[0]
+    try:
+        policy_entry = _registered_documents(state, state_path, stage="define_policy", schema_version=runtime_identity("subject-index-evaluation-policy-v4"), schema_name="evaluation-policy-v4.schema.json")[0]
+    except core.CalculationError:
+        if not semantic_uncertainty():
+            raise
+        policy_entry = _registered_documents(state, state_path, stage="define_policy", schema_version="subject-index-evaluation-policy-v6", schema_name="evaluation-policy-v6.schema.json")[0]
+    policy, policy_record, policy_path = policy_entry
     validate_v8_policy(policy)
     manifest, manifest_record, manifest_path = _registered_documents(state, state_path, stage="chunk_definition", schema_version="chunk-manifest-v1", schema_name="chunk-manifest.schema.json")[0]
     locator_entries = _registered_documents(state, state_path, stage="locator_audit", schema_version="locator-audit-v2", schema_name="locator-audit-v2.schema.json", many=True)

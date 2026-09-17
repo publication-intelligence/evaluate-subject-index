@@ -10,13 +10,13 @@ from test_study_comparison import StudyFixture, self_hash
 import study_comparison as study
 from runtime_profile import V10_IDENTITIES
 from v10_migration import policy_content, SOURCE_IDENTITIES
-from v10_access import population, preserved_evidence_rows, apply_overlay
+from v10_access import population, preserved_evidence_rows, apply_overlay, reconciliation
 
 SCRIPTS = completion.SCRIPTS
 
 
 def v10(*args):
-    return subprocess.run([sys.executable,str(SCRIPTS/'v10_cli.py'),*map(str,args)],capture_output=True,text=True)
+    return subprocess.run([sys.executable,str(SCRIPTS/'v10_migration_cli.py'),*map(str,args)],capture_output=True,text=True)
 
 
 def rebind(f):
@@ -38,9 +38,10 @@ def prepare_v10(case, *, evaluation_id=None, amendment_style="facet"):
     f.lock['source_methodology']={**SOURCE_IDENTITIES,'source_policy_sha256':source_policy['policy_sha256'],'source_policy_file_sha256':study.file_digest(f.args.release_policy)}
     f.lock['source_benchmark_semantic_sha256']=f.lock['benchmark_semantic_sha256']
     base=study.read(f.args.release_benchmark)
-    overlay={'schema_version':'subject-index-benchmark-access-overlay-v10','overlay_id':'ACCESS-SYNTHETIC','author_id':'AUTHOR-SYNTHETIC','prepared_at':'2026-09-16T00:00:00Z','candidate_seen':False,'source_scope':deepcopy(f.lock['source_scope']),'source_methodology':deepcopy(f.lock['source_methodology']),'base_benchmark_sha256':base['benchmark_sha256'],'base_benchmark_file_sha256':study.file_digest(f.args.release_benchmark),'base_review_file_sha256':study.file_digest(f.args.release_review),'before_population':population(base),'after_population':population(base),'deltas':[]}
+    base_population=population(base)
+    overlay={'schema_version':'subject-index-benchmark-access-overlay-v10','overlay_id':'ACCESS-SYNTHETIC','author_id':'AUTHOR-SYNTHETIC','prepared_at':'2026-09-16T00:00:00Z','candidate_seen':False,'source_scope':deepcopy(f.lock['source_scope']),'source_methodology':deepcopy(f.lock['source_methodology']),'base_benchmark_sha256':base['benchmark_sha256'],'base_benchmark_file_sha256':study.file_digest(f.args.release_benchmark),'base_review_file_sha256':study.file_digest(f.args.release_review),'before_population':base_population,'after_population':deepcopy(base_population),'denominator_reconciliation':[{**row,'explanation':''} for row in reconciliation(base_population,base_population)],'deltas':[]}
     self_hash(overlay,'overlay_sha256');overlay_path=f.f.write('release/access-overlay.json',overlay)
-    review={'schema_version':'subject-index-benchmark-access-review-v10','reviewer_id':'REVIEWER-SYNTHETIC','reviewed_at':'2026-09-16T00:01:00Z','candidate_seen':False,'decision':'approved','overlay_sha256':overlay['overlay_sha256'],'overlay_file_sha256':study.file_digest(overlay_path),'population_sha256':study.digest({'before':overlay['before_population'],'after':overlay['after_population']}),'reviewed_delta_ids':[],'source_evidence_verified':True,'no_source_scope_change':True,'rationale':'Synthetic independent no-change access review.'}
+    review={'schema_version':'subject-index-benchmark-access-review-v10','reviewer_id':'REVIEWER-SYNTHETIC','reviewed_at':'2026-09-16T00:01:00Z','candidate_seen':False,'decision':'approved','overlay_sha256':overlay['overlay_sha256'],'overlay_file_sha256':study.file_digest(overlay_path),'population_sha256':study.digest({'before':overlay['before_population'],'after':overlay['after_population'],'reconciliation':overlay['denominator_reconciliation']}),'reviewed_delta_ids':[],'source_evidence_verified':True,'no_source_scope_change':True,'rationale':'Synthetic independent no-change access review.'}
     review_path=f.f.write('release/access-review.json',review)
     f.lock['benchmark_access']={'overlay':{'path':'access-overlay.json','sha256':study.file_digest(overlay_path)},'review':{'path':'access-review.json','sha256':study.file_digest(review_path)},'overlay_sha256':overlay['overlay_sha256'],'effective_benchmark_semantic_sha256':f.lock['benchmark_semantic_sha256'],'frozen_at':'2026-09-16T00:02:00Z'}
     rebind(f)
@@ -71,8 +72,9 @@ def set_deltas(f,deltas):
         if delta['operation']=='add':rows.append(delta['replacement'])
         elif delta['operation']=='retire':rows[:]=[row for row in rows if row[key]!=delta['item_id']]
         else:rows[:]=[delta['replacement'] if row[key]==delta['item_id'] else row for row in rows]
-    overlay.update(deltas=deltas,after_population=population(effective));self_hash(overlay,'overlay_sha256');op.write_text(json.dumps(overlay))
-    review.update(overlay_sha256=overlay['overlay_sha256'],overlay_file_sha256=study.file_digest(op),reviewed_delta_ids=[row['delta_id'] for row in deltas],population_sha256=study.digest({'before':overlay['before_population'],'after':overlay['after_population']}));rp.write_text(json.dumps(review))
+    after=population(effective)
+    overlay.update(deltas=deltas,after_population=after,denominator_reconciliation=[{**row,'explanation':''} for row in reconciliation(overlay['before_population'],after)]);self_hash(overlay,'overlay_sha256');op.write_text(json.dumps(overlay))
+    review.update(overlay_sha256=overlay['overlay_sha256'],overlay_file_sha256=study.file_digest(op),reviewed_delta_ids=[row['delta_id'] for row in deltas],population_sha256=study.digest({'before':overlay['before_population'],'after':overlay['after_population'],'reconciliation':overlay['denominator_reconciliation']}));rp.write_text(json.dumps(review))
     f.lock['benchmark_semantic_sha256']=study.benchmark_semantic_hash(effective)
     f.lock['benchmark_access'].update(overlay={'path':op.name,'sha256':study.file_digest(op)},review={'path':rp.name,'sha256':study.file_digest(rp)},overlay_sha256=overlay['overlay_sha256'],effective_benchmark_semantic_sha256=f.lock['benchmark_semantic_sha256'])
     rebind(f)
@@ -321,19 +323,6 @@ class V10RuntimeTests(unittest.TestCase):
         self.assertEqual('complete',parent['coverage'])
         blocked={x for row in result['gate_assessment']['blockers'] for x in row['affected_item_ids']}
         self.assertTrue({'SUBJ-001','PATH-001','NODE-001'} <= blocked)
-
-    def test_fresh_policy_and_unbound_v10_lineage_are_rejected(self):
-        f=prepare_v10(self);output=f.root/'unbound-v10.json'
-        result=v10('state','init','--output',output,'--evaluation-id','EVAL-UNBOUND','--source-title','Synthetic','--source-file',f.root/'source.pdf','--page-start','1','--page-end','1','--intended-readership','Synthetic reader')
-        self.assertNotEqual(0,result.returncode);self.assertIn('v10_migration_required',result.stdout);self.assertFalse(output.exists())
-        self.assertNotEqual(0,v10('policy','--help').returncode)
-        direct=subprocess.run([sys.executable,'-c',"import runtime_profile; runtime_profile.select_v10(); import policy_cli; policy_cli.build_policy({})"],cwd=SCRIPTS,capture_output=True,text=True)
-        self.assertNotEqual(0,direct.returncode);self.assertIn('explicit migration',direct.stderr)
-        from v10_migration import migrate_state_identity
-        unbound=study.read(f.state_path);migrate_state_identity(unbound);output.write_text(json.dumps(unbound));before=output.read_bytes()
-        for command in [('state','validate'),('study','preflight'),('score','score'),('state','adopt-standard-policy')]:
-            result=v10(*command,'--state',output);self.assertNotEqual(0,result.returncode,result.stdout+result.stderr);self.assertEqual(before,output.read_bytes())
-        self.assertFalse((f.root/'scoring').exists())
 
     def test_access_proof_tampering_rejects_before_mutation(self):
         for change in ('missing_review','same_author','candidate_exposure','wrong_scope','wrong_population'):

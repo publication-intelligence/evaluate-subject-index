@@ -191,6 +191,10 @@ def bound_document(root, reference):
 
 def registered_document(state, state_path, stage, schema):
     records = [r for r in state['artifacts'] if r['stage'] == stage and r.get('schema_version') == schema]
+    if not records and semantic_uncertainty() and schema == 'subject-index-evaluation-policy-v7':
+        # Read preserved V10 policy bytes after a study adopts the native V10
+        # execution runtime. New studies register V7 directly.
+        records = [r for r in state['artifacts'] if r['stage'] == stage and r.get('schema_version') == 'subject-index-evaluation-policy-v6']
     require(len(records) == 1, f'Expected one registered {schema}')
     return bound_document(state_path.parent, records[0]), records[0]
 

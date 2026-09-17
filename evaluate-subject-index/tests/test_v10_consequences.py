@@ -78,8 +78,8 @@ class V10ConsequenceTests(unittest.TestCase):
         data[1]['dimensions'][0]['reliability_provenance']['locator_utility_assignments'][0]['fit_category']='no_fit'
         gates,_=outcomes(data)
         self.assertTrue(gates['GATE-WRONG-LOCATOR']['triggered'])
-        self.assertFalse(gates['GATE-SYSTEMIC-UNSUPPORTED']['triggered'])
-        self.assertEqual([],gates['GATE-SYSTEMIC-UNSUPPORTED']['systemic_groups'])
+        self.assertTrue(gates['GATE-SYSTEMIC-UNSUPPORTED']['triggered'])
+        self.assertTrue(gates['GATE-SYSTEMIC-UNSUPPORTED']['systemic_groups'])
         data=pattern(evidence(resolution='valid_destination'))
         data[1]['dimensions'][0]['reliability_provenance']['locator_utility_assignments'][0]['fit_category']='material_partial_fit'
         gates,_=outcomes(data);self.assertFalse(gates['GATE-SYSTEMIC-UNSUPPORTED']['triggered'])
@@ -207,5 +207,27 @@ class V10ConsequenceTests(unittest.TestCase):
         data[0]['candidate_denominator']['nodes']=[{'node_id':'NODE-ONE','heading_path':['A','B','C']}]
         gates,_=outcomes(data);self.assertFalse(any(row['triggered'] for row in gates.values()))
         self.assertNotIn('GATE-DEPTH',gates)
+
+    def test_indexia_russia_stance_is_scored_and_gated(self):
+        data=evidence(fit='exact_fit',judgment='supported',treatment='substantive',resolution='valid_destination')
+        node='NODE-21E1763C8A0D';path='PATH-57AD2D32A667'
+        row=defect('DEFECT-STA-WS03-001','stance_reversal',node,code='STA')
+        row.update(affected_item_ids=[node,path],affected_count=2,applicable_count=2,affected_rate='1',severity='major',severity_basis='materially_misleading',retrieval_consequence='misleads')
+        data[0]['defects']=[row];gates,_=outcomes(data)
+        self.assertTrue(gates['GATE-STANCE']['triggered'])
+        concept=core.calculate_concept({'nodes':[{'node_id':node,'component_judgments':{'conceptual_stance_fidelity':{'status':'fails'}}}],
+             'node_original':1,'node_not_measured':[],'defects':[row],'locators':[],
+             'context':{'candidate_attempt':{'status':'meaningful_attempt'}}},'full')
+        self.assertEqual('0',concept['dimension_percentage'])
+
+    def test_destructive_heading_requires_delivered_path_and_material_defect(self):
+        from v10_contract import candidate_defect_errors
+        node='NODE-B444131F40FB';path='PATH-EAC65BF97664'
+        row=defect('DEFECT-HED-W001-B444131F40FB','misleading_access_route',node,code='XRF')
+        row.update(code='HED',dimension_owner='findability_navigation',severity='major',severity_basis='materially_misleading',retrieval_consequence='misleads')
+        document={'node_judgments':[{'node_id':node,'component_judgments':{'heading_access_architecture':{'status':'fails'}}}], 'defects':[row]}
+        self.assertTrue(candidate_defect_errors(document))
+        row['affected_item_ids']=[node,path]
+        self.assertEqual([],candidate_defect_errors(document))
 
 if __name__=='__main__':unittest.main()

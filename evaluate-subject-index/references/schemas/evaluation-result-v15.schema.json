@@ -11,6 +11,7 @@
     "audit_scope",
     "dimension_calculations",
     "scorecard",
+    "overall_score_ceiling",
     "overall_percentage",
     "interpretation",
     "metrics",
@@ -427,6 +428,7 @@
         ]
       }
     },
+    "overall_score_ceiling": {"type": "object"},
     "overall_percentage": {
       "type": [
         "number",

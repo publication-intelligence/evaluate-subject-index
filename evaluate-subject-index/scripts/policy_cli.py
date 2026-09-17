@@ -176,14 +176,14 @@ def read_input(path: Path) -> dict[str, Any]:
 def destination_gate_policy_errors(policy: dict[str, Any]) -> list[str]:
     ids = [gate.get("gate_id") for gate in policy["critical_gates"]]
     if not {"GATE-WRONG-LOCATOR", "GATE-BROKEN-REFERENCE"} <= set(ids) or len(ids) != len(set(ids)):
-        return ["V8.2 requires both direct destination gates and unique gate IDs."]
+        return ["V10 requires both direct destination gates and unique gate IDs."]
     return []
 
 
 def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | None = None,
                  base_policy: dict[str, Any] | None = None) -> dict[str, Any]:
-    if percentage_native():
-        raise ValueError("Percentage-runtime policy construction requires study policy-template --from-source-policy and explicit migration of a preserved V8.2 freeze")
+    if percentage_native() and not is_v10():
+        raise ValueError("Only V10 policy construction is supported")
     scope = source.get("source_scope", {})
     audience = source.get("audience", {})
     audit = source.get("audit_design", {})
@@ -198,7 +198,7 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
         "policy_id": source.get("policy_id") or "subject-index-policy",
         "policy_profile": {
             "id": POLICY_PROFILE,
-            "consequence_policy_reference": "consequence-policy-v8.2.md",
+            "consequence_policy_reference": "consequence-policy-v10.1.md",
         },
         "source_scope": {
             "source_sha256": scope["source_sha256"],
@@ -246,6 +246,13 @@ def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | No
         "freeze": {"frozen_at": stamp, "candidate_seen": False},
         "policy_sha256": None,
     }
+    if is_v10():
+        policy["v10_contract"] = {
+            "contract_id": "subject-index-evaluation-v10-decision-v2",
+            "contract_sha256": "058399c34c0a6997965b39fb5906bde3634c2cdd74d3192bdfd6b4e55452512f",
+            "consequence_policy": "consequence-policy-v10.1.md",
+            "benchmark_access_profile": "subject-index-benchmark-access-v10",
+        }
     migration = source.get("retrospective_migration")
     if migration is not None:
         errors = schema_errors(migration, "retrospective-migration.schema.json")

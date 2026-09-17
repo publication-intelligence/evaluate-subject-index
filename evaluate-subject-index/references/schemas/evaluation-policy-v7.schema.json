@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "V10 Source-bound subject-index judgment policy decoupled from score calculation",
+  "title": "V10 native source-bound subject-index judgment policy",
   "type": "object",
   "required": [
     "schema_version",
@@ -20,7 +20,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "subject-index-evaluation-policy-v6"
+      "const": "subject-index-evaluation-policy-v7"
     },
     "policy_id": {
       "type": "string",
@@ -719,5 +719,5 @@
     }
   },
   "additionalProperties": false,
-  "$id": "evaluation-policy-v6.schema.json"
+  "$id": "evaluation-policy-v7.schema.json"
 }

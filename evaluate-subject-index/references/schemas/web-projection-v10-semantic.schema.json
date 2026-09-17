@@ -9,6 +9,7 @@
     "evaluation_id",
     "view_selection",
     "score_views",
+    "overall_score_ceiling",
     "correction_outcomes",
     "item_summaries",
     "collections",
@@ -24,6 +25,7 @@
     "gate_assessment"
   ],
   "properties": {
+    "overall_score_ceiling": {"type": "object"},
     "methodology": {
       "type": "object",
       "required": [
@@ -510,10 +512,12 @@
         "scorecard",
         "dimension_denominators",
         "critical_gates",
+        "overall_score_ceiling",
         "readiness",
         "provenance_artifacts"
       ],
       "properties": {
+        "overall_score_ceiling": {"type": "object"},
         "view_id": {
           "const": "canonical_as_delivered"
         },

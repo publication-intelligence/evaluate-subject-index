@@ -4,8 +4,8 @@ from runtime_profile import identity
 import v9_migration
 
 SOURCE_IDENTITIES = v9_migration.SOURCE_IDENTITIES
-CONTRACT = 'subject-index-evaluation-v10-decision-v1'
-CONTRACT_SHA256 = 'f812eae0d09b60a4c1e74b1b6b9e6dd5850e088f9f9bb583152e9559f6ee07a9'
+CONTRACT = 'subject-index-evaluation-v10-decision-v2'
+CONTRACT_SHA256 = '058399c34c0a6997965b39fb5906bde3634c2cdd74d3192bdfd6b4e55452512f'
 GATE_IDS = (
     'GATE-WRONG-LOCATOR', 'GATE-BROKEN-REFERENCE', 'GATE-SCOPE-LOCATOR',
     'GATE-SYSTEMIC-UNSUPPORTED', 'GATE-CENTRAL-OMISSION', 'GATE-STANCE',
@@ -20,7 +20,7 @@ def policy_content(source):
     value = v9_migration.policy_content(source)
     value['schema_version'] = identity('subject-index-evaluation-policy-v4', profile='v10')
     value['policy_profile']['id'] = identity(v9_migration.SOURCE_PROFILE, profile='v10')
-    value['policy_profile']['consequence_policy_reference'] = 'consequence-policy-v10.md'
+    value['policy_profile']['consequence_policy_reference'] = 'consequence-policy-v10.1.md'
     for setting in value['content_policies'].values():
         setting['profile'] = value['policy_profile']['id']
     for metric in value['density_profile']['metrics']:
@@ -29,7 +29,7 @@ def policy_content(source):
     value['critical_gates'] = [{'gate_id': k, 'description': v, 'standard': True} for k,v in CRITICAL_GATES]
     require(tuple(row['gate_id'] for row in value['critical_gates']) == GATE_IDS, 'Unexpected core gate register')
     value['v10_contract'] = {'contract_id': CONTRACT, 'contract_sha256': CONTRACT_SHA256,
-                             'consequence_policy': 'consequence-policy-v10.md',
+                             'consequence_policy': 'consequence-policy-v10.1.md',
                              'benchmark_access_profile': 'subject-index-benchmark-access-v10'}
     return value
 
