@@ -78,6 +78,7 @@
                     "coverage",
                     "stance_preserved",
                     "realistic_first_lookup_success",
+                    "architecture",
                     "result"
                   ]
                 }
