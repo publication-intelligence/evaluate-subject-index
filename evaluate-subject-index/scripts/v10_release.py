@@ -11,7 +11,7 @@ from schema_validation import schema_errors
 
 
 def machine_facts(result):
-    keys=('evaluation_id','candidate','provenance','dimension_calculations','scorecard','overall_score_ceiling','overall_percentage','critical_gates','evaluation_validity','gate_assessment','method_readiness','authoritative_evaluation')
+    keys=('evaluation_id','candidate','provenance','dimension_calculations','scorecard','overall_percentage','critical_gates','evaluation_validity','gate_assessment','method_readiness','authoritative_evaluation')
     return {key: result[key] for key in keys if key in result}
 
 

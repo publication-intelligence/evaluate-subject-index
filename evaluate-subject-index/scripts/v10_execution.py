@@ -9,9 +9,9 @@ import study_comparison as study
 from schema_validation import schema_errors
 
 BASELINE='815bcb66d3319d2f730a9645800b304bcbd4b2e9'
-CONTRACT='subject-index-v10-semantic-execution-v2'
+CONTRACT='subject-index-v10-semantic-execution-v3'
 CONSTITUENTS={
- 'subject-index-evaluation-v10-decision-v2':'058399c34c0a6997965b39fb5906bde3634c2cdd74d3192bdfd6b4e55452512f',
+ 'subject-index-evaluation-v10-decision-v3':'779fb8ffb21bc17fe87a23ee9160a124e013a094c08280b7bdb26fef40d2da50',
  'subject-index-evaluation-v10-semantic-uncertainty-addendum-v1':'e0f0e91a23274a94e292409b17df53d1b403bd0a52b26e6e7ae84809430c5f76',
  'subject-index-evaluation-v10-semantic-uncertainty-addendum-v2':'fea2a5b87f9e063d28135895fdb7d3637dfe4d2edd294fb7a50fd3aff7009277',
  'subject-index-evaluation-v10-semantic-uncertainty-addendum-v3':'4031abef00cb37508f30c8c89ec5e12592ce89369f144c1473ebc43bf9503a7d',

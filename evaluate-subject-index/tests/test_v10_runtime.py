@@ -165,12 +165,14 @@ class V10RuntimeTests(unittest.TestCase):
         calculation=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')
         self.assertEqual(original['overall_percentage'],calculation['overall_percentage'])
         self.assertEqual(original['final_rounding'],calculation['final_rounding'])
+        self.assertNotIn('overall_score_ceiling',calculation)
         self.assertEqual(before,{p:p.read_bytes() for p in before})
         self.completed_fixture=f;return f
 
     def test_complete_native_v10_and_portable_checkpoint(self):
         f=self.complete_fixture()
         projection=study.read(f.root/'scoring-v10/v10-canonical-projection/projection.v1.json')
+        self.assertNotIn('overall_score_ceiling',projection)
         self.assertEqual('ready',projection['method_readiness']['status'])
         self.assertEqual({'status':'authoritative'},projection['authoritative_evaluation'])
         self.assertEqual({'status':'not_recorded'},projection['human_release_decision'])
@@ -178,6 +180,7 @@ class V10RuntimeTests(unittest.TestCase):
         self.assertIn('FACET-SYNTHETIC',json.dumps(subjects))
         from v10_release import machine_facts, validate_decision
         result_path=f.root/'scoring-v10/evaluation-result.v14.json';result=study.read(result_path)
+        self.assertNotIn('overall_score_ceiling',result)
         decision={'schema_version':'subject-index-human-release-decision-v10','decision_id':'DECISION-SYNTHETIC','evaluation_id':result['evaluation_id'],'result_file_sha256':study.file_digest(result_path),'machine_facts_sha256':study.digest(machine_facts(result)),'status':'approved','decided_by':'REVIEWER-SYNTHETIC','decided_at':'2026-09-16T00:00:00Z','authorization_reference':'Synthetic test only','rationale':'Synthetic release decision.','acknowledged_gate_ids':[],'machine_outcomes_changed':False}
         before=result_path.read_bytes();validate_decision(decision,result,study.file_digest(result_path))
         decision['machine_facts_sha256']='0'*64

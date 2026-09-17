@@ -161,7 +161,8 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             policy = json.loads(output.read_text())
             self.assertEqual("subject-index-evaluation-policy-v7", policy["schema_version"])
             self.assertEqual("subject-index-standard-policy-v10", policy["policy_profile"]["id"])
-            self.assertEqual("subject-index-evaluation-v10-decision-v2", policy["v10_contract"]["contract_id"])
+            self.assertEqual("subject-index-evaluation-v10-decision-v3", policy["v10_contract"]["contract_id"])
+            self.assertTrue({"GATE-WRONG-LOCATOR", "GATE-BROKEN-REFERENCE"} <= {row["gate_id"] for row in policy["critical_gates"]})
             self.assertNotIn("standard_policy_sha256", policy["policy_profile"])
 
     def test_v10_is_the_only_public_runtime_and_initializes_natively(self) -> None:
