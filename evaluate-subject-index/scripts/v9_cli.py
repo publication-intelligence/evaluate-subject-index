@@ -2,7 +2,7 @@
 """Run an explicitly selected V9 workflow without changing the V8 entrypoints.
 
 Usage: v9_cli.py TOOL [arguments...]
-Tools: state, policy, page-chunks, prepare-candidate, audit-candidate,
+Tools: state, page-chunks, prepare-candidate, audit-candidate,
 score, grade, study, bundle.
 The preserved V8 benchmark/source workflow remains the source-proof authority.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 import runtime_profile
 
 TOOLS = {
-    "state": "state_cli.py", "policy": "policy_cli.py",
+    "state": "state_cli.py",
     "page-chunks": "page_chunk_cli.py", "bundle": "bundle_cli.py",
     "prepare-candidate": "candidate_preparation_cli.py",
     "audit-candidate": "parallel_candidate_audit_cli.py",

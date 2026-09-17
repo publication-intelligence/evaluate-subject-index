@@ -182,6 +182,8 @@ def destination_gate_policy_errors(policy: dict[str, Any]) -> list[str]:
 
 def build_policy(source: dict[str, Any], *, original_policy: dict[str, Any] | None = None,
                  base_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    if is_v9():
+        raise ValueError("V9 policy construction requires study policy-template --from-source-policy and explicit migration of a preserved V8.2 freeze")
     scope = source.get("source_scope", {})
     audience = source.get("audience", {})
     audit = source.get("audit_design", {})

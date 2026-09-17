@@ -69,6 +69,33 @@
     "overlay_sha256": {
       "type": "string",
       "pattern": "^[a-f0-9]{64}$"
+    },
+    "cross_reference_resolution": {
+      "type": "object",
+      "description": "Optional: omitted for heading-only diagnostic overlays; presence supplies explicit cross-reference identities.",
+      "required": [
+        "item_id"
+      ],
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^XREF-"
+        },
+        "remaining_unresolved_reference": {
+          "type": "object",
+          "required": [
+            "reference_id"
+          ],
+          "properties": {
+            "reference_id": {
+              "type": "string",
+              "pattern": "^XREF-"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true,

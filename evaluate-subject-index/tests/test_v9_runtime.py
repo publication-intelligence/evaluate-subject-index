@@ -19,8 +19,8 @@ def v9(*args):
     return subprocess.run([sys.executable, str(SCRIPTS/'v9_cli.py'), *map(str,args)], capture_output=True, text=True)
 
 
-def prepare_v9(case):
-    f = StudyFixture(case)
+def prepare_v9(case, *, evaluation_id=None):
+    f = StudyFixture(case, evaluation_id=evaluation_id)
     f.current_source_release(revised=True)
     f.args.release_policy = str(Path(f.args.release_state).parent/'evaluation-policy.json')
     source_policy = study.read(f.args.release_policy)
@@ -48,6 +48,22 @@ def migrate(f):
 
 
 class V9RuntimeTests(unittest.TestCase):
+    def test_fresh_or_relabelled_unbound_v9_run_is_rejected(self):
+        f=prepare_v9(self);output=f.root/'unbound-state.json'
+        initialized=v9('state','init','--output',output,'--evaluation-id','EVAL-UNBOUND','--source-title','Synthetic','--source-file',f.root/'source.pdf','--page-start','1','--page-end','1','--intended-readership','Synthetic reader')
+        self.assertNotEqual(0,initialized.returncode)
+        self.assertIn('v9_migration_required',initialized.stdout)
+        self.assertFalse(output.exists())
+        policy=v9('policy','--help');self.assertNotEqual(0,policy.returncode)
+        from v9_migration import migrate_state_identity
+        unbound=study.read(f.state_path);migrate_state_identity(unbound)
+        output.write_text(json.dumps(unbound));before=output.read_bytes()
+        for command in [('state','validate'),('study','preflight'),('score','score'),('state','adopt-standard-policy')]:
+            result=v9(*command,'--state',output)
+            self.assertNotEqual(0,result.returncode,result.stdout+result.stderr)
+            self.assertEqual(before,output.read_bytes())
+        self.assertFalse((f.root/'scoring').exists())
+
     def test_migration_preserves_source_bytes_and_invalidates_candidate_audits(self):
         f=prepare_v9(self)
         proof_paths=[Path(getattr(f.args,k)) for k in ('release_policy','release_state','release_draft','release_review','release_benchmark')]
@@ -72,8 +88,22 @@ class V9RuntimeTests(unittest.TestCase):
         rejected=f.f.run_cli('score','--state',str(f.state_path))
         self.assertNotEqual(0,rejected.returncode)
 
-    def test_native_v9_score_report_and_projection(self):
-        f=prepare_v9(self)
+    def complete_v9_fixture(self, *, with_overlay=True, evaluation_id=None, source_fixture=None, attempt=None):
+        f=prepare_v9(self,evaluation_id=evaluation_id)
+        if source_fixture is not None:
+            for key in ('release_policy','release_state','release_draft','release_review','release_benchmark','release_descriptor','release_review_inventory','study_lock','study_policy'):
+                setattr(f.args,key,getattr(source_fixture.args,key))
+            f.lock=deepcopy(source_fixture.lock)
+            approval=study.read(f.args.approval)
+            approval.update(study_lock_sha256=f.lock['lock_sha256'],target_benchmark_sha256=f.lock['release']['benchmark_sha256'],target_policy_semantic_sha256=f.lock['policy_semantic_sha256'],study_policy_template_sha256=study.file_digest(f.args.study_policy))
+            Path(f.args.approval).write_text(json.dumps(approval))
+        if attempt:
+            structure=study.read(f.f.structure_path)
+            structure['scoring_context']['candidate_attempt']={'status':attempt,'evidence_ids':['EVID-ATTEMPT-SYNTHETIC']}
+            f.f.structure_path.write_text(json.dumps(structure))
+            initial=study.read(f.state_path)
+            initial['artifacts']=[f.f.record(f.f.structure_path,'structure_audit',r['artifact_type'],r['schema_version']) if r['stage']=='structure_audit' else r for r in initial['artifacts']]
+            f.state_path.write_text(json.dumps(initial))
         for command, extra in [('score',[])]:
             original=f.f.run_cli(command,'--state',str(f.state_path),*extra)
             self.assertEqual(0,original.returncode,original.stdout+original.stderr)
@@ -99,8 +129,8 @@ class V9RuntimeTests(unittest.TestCase):
                     state['artifacts'].append(fresh)
         f.state_path.write_text(json.dumps(state,indent=2)+'\n')
         for command,extra in [('register-structure',['--input',str(structure)]),('score',['--output-dir','scoring-v9']),('build-report',[])]:
-            if command=='build-report':
-                overlay={'schema_version':'ohfr-v8-representation-correction-overlay-v1','evaluation_id':prior['evaluation_id'],'overlay_role':'display_only_counterfactual_bound_to_canonical_v8','causal_classification':'confirmed_representation_only','affected_heading_count':1,'affected_node_ids':['NODE-001'],'character_replacement_count':1,'headings':[{'node_id':'NODE-001'}],'character_replacements':[{'node_id':'NODE-001'}],'adjusted_item_changes':{},'provenance':{'basis':'synthetic confirmed ledger'},'correction_outcomes':{'affected_headings':1,'character_replacements':1,'corrected_cross_reference_id':'XREF-SYNTHETIC-CORRECTED','remaining_unresolved_cross_reference_id':'XREF-SYNTHETIC-REMAINING','observed_minor_defect_count':1,'adjusted_minor_defect_count':0,'cross_reference_gate_unchanged':True,'readiness_unchanged':True}}
+            if command=='build-report' and with_overlay:
+                overlay={'schema_version':'ohfr-v8-representation-correction-overlay-v1','evaluation_id':prior['evaluation_id'],'overlay_role':'display_only_counterfactual_bound_to_canonical_v8','causal_classification':'confirmed_representation_only','affected_heading_count':1,'affected_node_ids':['NODE-001'],'character_replacement_count':1,'headings':[{'node_id':'NODE-001'}],'character_replacements':[{'node_id':'NODE-001'}],'adjusted_item_changes':{},'provenance':{'basis':'synthetic confirmed ledger'}}
                 self_hash(overlay,'overlay_sha256');overlay_path=f.f.write('corrections/overlay.json',overlay)
                 with_overlay=study.read(f.state_path)
                 with_overlay['artifacts'].append(f.f.record(overlay_path,'scoring','correction_overlay',overlay['schema_version']))
@@ -145,6 +175,37 @@ class V9RuntimeTests(unittest.TestCase):
         resumed=v9('state','validate','--state',restored/'evaluation-state.json')
         self.assertEqual(0,resumed.returncode,resumed.stdout+resumed.stderr)
         self.completed_fixture=f
+        return f
+
+    def test_native_v9_score_report_and_projection(self):
+        f=self.complete_v9_fixture()
+        projection=study.read(f.root/'scoring-v9/v9-canonical-projection/projection.v1.json')
+        self.assertEqual('diagnostic_overlay_only',projection['score_views']['projection_adjustment_status'])
+        self.assertIsNone(projection['correction_outcomes']['corrected_cross_reference_id'])
+        from schema_validation import schema_errors
+        adjusted=deepcopy(projection)
+        alternate=deepcopy(adjusted['score_views']['views'][0]);alternate.update(view_id='representation_adjusted',view_kind='counterfactual')
+        adjusted['score_views']['views'].append(alternate)
+        self.assertTrue(schema_errors(adjusted,'web-projection-v9.schema.json'))
+        overlay=study.read(f.root/'scoring-v9/v9-canonical-projection/data/correction-overlay.v1.json')
+        self.assertFalse(schema_errors(overlay,'correction-overlay-v9.schema.json'))
+        overlay['cross_reference_resolution']={}
+        self.assertTrue(schema_errors(overlay,'correction-overlay-v9.schema.json'))
+
+    def test_observed_only_comparison(self):
+        first=self.complete_v9_fixture(with_overlay=False,evaluation_id='EVAL-FIRST')
+        second=self.complete_v9_fixture(with_overlay=False,evaluation_id='EVAL-SECOND',source_fixture=first)
+        assembled=first.root/'comparison'
+        result=v9('study','assemble-comparison','--state',first.state_path,'--state',second.state_path,'--output-dir',assembled)
+        self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+        manifest=study.read(assembled/'comparison.json')
+        self.assertEqual(2,len(manifest['members']))
+        self.assertTrue(all(row['web_report_path'].endswith('web-report.v11.json') for row in manifest['members']))
+        projection=study.read(first.root/'scoring-v9/v9-canonical-projection/projection.v1.json')
+        self.assertEqual('not_applicable',projection['score_views']['projection_adjustment_status'])
+        report=study.read(second.root/'scoring-v9/web-report.v11.json')
+        self.assertEqual(report['density']['density_fit_percentage'],report['density']['scoring_density_fit_percentage'])
+        self.comparison_fixtures=(first,second,assembled)
 
 
     def test_substantive_target_policy_change_fails_before_state_mutation(self):
@@ -221,6 +282,18 @@ class V9GoldenTests(unittest.TestCase):
         self.assertEqual(6.02,expected['rounding']['1.004999']['overall_percentage'])
         self.assertEqual(6.03,expected['rounding']['1.005']['overall_percentage'])
         self.assertEqual('5.833333333333333333333333334',expected['selectivity']['operation_order']['weighted_contribution'])
+
+    def test_non_attempt_density_override_is_explicit_without_fake_full_report(self):
+        result=subprocess.run([sys.executable,str(Path(__file__).with_name('v9_density_override_probe.py'))],capture_output=True,text=True)
+        self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+        fixture=json.loads(result.stdout)
+        self.assertIs(fixture['publishable_full_evaluation'],False)
+        density=fixture['density_collection']
+        self.assertEqual('50',density['density_fit_percentage'])
+        self.assertEqual('0',density['scoring_density_fit_percentage'])
+        self.assertEqual({'percentage':'0','rule':'candidate_attempt:structurally_incomplete'},density['scoring_override'])
+        self.assertEqual('0',fixture['editorial_selectivity']['density_points_out_of_5'])
+        self.assertEqual('0',fixture['editorial_selectivity']['weighted_contribution'])
 
     def test_density_and_point_tampering_is_rejected_exactly(self):
         from v9_contract import contract_errors

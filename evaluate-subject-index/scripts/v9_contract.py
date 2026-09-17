@@ -57,6 +57,12 @@ def density_errors(density):
 
 def contract_errors(document):
     errors = []
+    if document.get('schema_version') == 'ohfr-v9-canonical-web-projection-v1':
+        views = document['score_views']
+        has_overlay = any(row['collection_id'] == 'correction_overlay' for row in document['collections'])
+        expected = 'diagnostic_overlay_only' if has_overlay else 'not_applicable'
+        if views['projection_adjustment_status'] != expected or views['total_delta'] != 0:
+            errors.append('V9 diagnostic overlays do not produce adjusted scoring views or deltas')
     def visit(value, path=''):
         if isinstance(value, list):
             for i, item in enumerate(value):

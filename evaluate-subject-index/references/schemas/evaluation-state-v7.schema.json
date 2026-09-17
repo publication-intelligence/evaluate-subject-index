@@ -9,7 +9,8 @@
     "configuration",
     "stages",
     "artifacts",
-    "blockers"
+    "blockers",
+    "study_comparison"
   ],
   "properties": {
     "schema_version": {
@@ -396,6 +397,9 @@
       "items": {
         "type": "object"
       }
+    },
+    "study_comparison": {
+      "$ref": "retrospective-study-binding-v2.schema.json"
     }
   },
   "$defs": {

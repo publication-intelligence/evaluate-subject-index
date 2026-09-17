@@ -1655,6 +1655,8 @@ def _public_density(structure: Mapping[str, Any], calculation: Mapping[str, Any]
         detail = component["details"]
         density.update({key: detail[key] for key in ("total_weighted_percentage_numerator", "total_indexable_source_words")})
         density["chapter_measurements"] = deepcopy(calculated_chapters)
+        if "scoring_override" in detail:
+            density["scoring_override"] = deepcopy(detail["scoring_override"])
         for item in calculated_chapters:
             chapter_fits[item["chunk_id"]]["weighted_percentage_numerator"] = item["weighted_percentage_numerator"]
     historical_rounding = density.get("rounding")

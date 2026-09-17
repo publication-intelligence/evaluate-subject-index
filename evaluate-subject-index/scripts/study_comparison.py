@@ -297,6 +297,8 @@ def load_study_binding(state, state_path):
 
 
 def preflight_state(state, state_path, *, require_density=False):
+    if is_v9():
+        require(state.get("study_comparison") is not None, "V9 requires a preserved V8.2 source/methodology binding")
     lock = load_study_binding(state, state_path)
     if lock is None:
         for stage, schema, field in (('define_policy',runtime_identity('subject-index-evaluation-policy-v4'),'retrospective_study_migration'), ('benchmark_freeze','source-subject-benchmark-v2','retrospective_benchmark_migration')):

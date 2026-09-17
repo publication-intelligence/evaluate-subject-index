@@ -4,7 +4,7 @@ V9 preserves V8.2 judgments, weights, thresholds, consequences, gates, caps, unc
 
 ## Commands
 
-Use `python scripts/v9_cli.py TOOL ...`, retaining the underlying tool's arguments. Tools are `state`, `policy`, `page-chunks`, `prepare-candidate`, `audit-candidate`, `score`, `grade`, `study`, and `bundle`. The source-only discovery/review/freeze workflow remains V8.2 for this cutover.
+Use `python scripts/v9_cli.py TOOL ...`, retaining the underlying tool's arguments. Tools are `state`, `page-chunks`, `prepare-candidate`, `audit-candidate`, `score`, `grade`, `study`, and `bundle`. The source-only discovery/review/freeze workflow remains V8.2 for this cutover. V9 rejects state initialization, direct policy construction/adoption, and unbound state validation/preflight. Create source proof under V8.2, then use the explicitly approved study migration; merely changing version strings cannot create a valid V9 run.
 
 ```bash
 python scripts/v9_cli.py study policy-template \
@@ -98,3 +98,11 @@ Additional tests exercise the real source-freeze/migration/scoring/report chain,
 Optional correction overlays use `ohfr-v9-representation-correction-overlay-v1` and `display_only_counterfactual_bound_to_canonical_v9`. They retain their display-only meaning and reject nested five-point aliases. An existing registered V8 overlay fails explicitly until recreated and rebound; it is never silently omitted or reinterpreted.
 
 A future V10 needs separate profile/schema identities and an explicit semantic migration path. The V9 source-policy equality rule must remain frozen; it cannot admit new standards requirements by widening its allowed substitutions. The process selector is intentionally limited to V8/V9 today. V10 should extend profile dispatch explicitly and reuse the preserved percentage contract where applicable, rather than treating every future version as `is_v9()`.
+
+## Diagnostic overlay and consumer fixtures
+
+The V9 canonical producer emits one authoritative `canonical_as_delivered` observed view. A display-only correction overlay is labeled `diagnostic_overlay_only`, has zero aggregate score delta, and does not imply that an adjusted scoring view was produced. A true adjusted score view is outside this canonical producer contract and requires separately validated calculations; consumers must not synthesize it from overlay counts or diagnostic item grades.
+
+`cross_reference_resolution` is optional in the V9 overlay. Heading-only overlays omit it and publish null corrected/remaining cross-reference IDs. When present, it must name an `item_id`; an optional `remaining_unresolved_reference` must name its `reference_id`. Absence means no cross-reference resolution claim, not a successful repair. V8 shapes/labels are unchanged.
+
+A nonzero observed density with a zero non-attempt scoring override is tested as an arithmetic/collection unit case. Existing full-audit validity rules reject structurally incomplete/unparseable ledgers; such a unit fixture is not a publishable full-evaluation report. Actual assembled comparison fixtures use accepted full reports and the `web-report.v11.json` member paths. JavaScript consumers display the provided authoritative decimal strings rather than recomputing them with binary floating-point arithmetic.

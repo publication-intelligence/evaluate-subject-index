@@ -314,6 +314,8 @@ def state_summary(state: dict[str, Any], state_path: Path | None = None) -> dict
 
 
 def command_init(args: argparse.Namespace) -> None:
+    if is_v9():
+        fail("v9_migration_required", "V9 requires an explicit study migration preserving the V8.2 source freeze; initialize and freeze source policy under V8.2.")
     output = Path(args.output).resolve()
     if output.exists() and not args.force:
         fail("state_exists", f"Refusing to overwrite existing state: {output}")
@@ -443,6 +445,8 @@ def command_validate(args: argparse.Namespace) -> None:
 
 
 def command_adopt_standard_policy(args: argparse.Namespace) -> None:
+    if is_v9():
+        fail("v9_migration_required", "V9 requires an explicit study migration preserving the V8.2 source freeze; initialize and freeze source policy under V8.2.")
     state_path = Path(args.state)
     state = load_state(state_path)
     if state.get("stages", {}).get("define_policy", {}).get("status") == "completed":
