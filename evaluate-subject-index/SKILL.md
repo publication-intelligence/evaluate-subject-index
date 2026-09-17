@@ -58,6 +58,8 @@ Treat the underlying modules as implementation details. Do not invoke legacy wra
 
 Artifact SHA-256 values are stable content labels used to join related JSON records. They are not security attestations. State validation reports missing or changed local artifact bytes as warnings; it does not block resume merely because a previously recorded checksum differs.
 
+That resume tolerance does not apply at study closeout. Before publishing, archiving, or cleaning a worktree, require every registered artifact to exist and match its recorded raw SHA-256. Treat coordination notes and delegated workset paths separately from the registered artifact inventory. Resolve any registered mismatch by restoring the recorded bytes or by an explicit correction that revalidates every dependent result; never silently rewrite a frozen artifact binding.
+
 Keep source and candidate files restricted. Keep public reports free of source text, secrets, absolute paths, and storage-provider identifiers.
 
 ## Checkpoints and resume
