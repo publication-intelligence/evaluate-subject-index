@@ -464,9 +464,10 @@ def command_build_assessments(args: argparse.Namespace) -> None:
         missing_documents = []
         for index, stored in enumerate(args.missing_access_audit or []):
             document = core.load_json(Path(stored).resolve(), f"Missing-access audit {index}")
+            schema_name = "missing-access-audit-v2.schema.json" if semantic_uncertainty() and document.get("schema_version") == "missing-access-audit-v2" else "missing-access-audit.schema.json"
             core.validate_schema_document(
                 document,
-                "missing-access-audit.schema.json",
+                schema_name,
                 f"Missing-access audit {index}",
             )
             missing_documents.append(document)
@@ -575,7 +576,8 @@ def command_project_structure_causality(args: argparse.Namespace) -> None:
         for index, document in enumerate(locator_documents):
             core.validate_schema_document(document, "locator-audit-v2.schema.json", f"Locator audit {index}")
         for index, document in enumerate(missing_documents):
-            core.validate_schema_document(document, "missing-access-audit.schema.json", f"Missing-access audit {index}")
+            schema_name = "missing-access-audit-v2.schema.json" if semantic_uncertainty() and document.get("schema_version") == "missing-access-audit-v2" else "missing-access-audit.schema.json"
+            core.validate_schema_document(document, schema_name, f"Missing-access audit {index}")
         result = build_structure_causal_projection(structure, projection)
         result["causal_projection"] = {
             "source_schema_version": "structure-audit-v5",

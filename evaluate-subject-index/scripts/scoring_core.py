@@ -756,7 +756,7 @@ def collect_ledgers(loaded: dict[str, Any]) -> dict[str, Any]:
     identity = validate_ledger_set_integrity(loaded)
     for label, documents, versions in (
         ("locator audit", loc_docs, {"locator-audit-v1", "locator-audit-v2"} | ({"locator-audit-v3"} if semantic_uncertainty() else set())),
-        ("missing-access audit", missing_docs, {"missing-access-audit-v1"}),
+        ("missing-access audit", missing_docs, {"missing-access-audit-v1"} | ({"missing-access-audit-v2"} if semantic_uncertainty() else set())),
     ):
         for document in documents:
             require(document.get("schema_version") in versions, "unsupported_ledger_version", f"Unsupported {label} schema version: {document.get('schema_version')}")
@@ -1347,6 +1347,7 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
     measured = [item for item in applicable_records if item.get("coverage") in COVERAGE_CREDIT]
     uninspectable = [item for item in applicable_records if item.get("coverage") == "uninspectable"]
     explicit_not_measured = [item for item in applicable_records if item.get("coverage") == "not_measured"]
+    semantic_unknown = [item for item in applicable_records if item.get("coverage") is None and item.get("axis_resolution", {}).get("coverage") == "unresolved"]
     missing_ids = ledgers["subject_not_measured"]
     denominator = component_denominators(
         "priority_weighted_subject_access",
@@ -1356,10 +1357,11 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         len(uninspectable),
         len(explicit_not_measured) + len(missing_ids),
         {"optional_not_frozen_as_scored": len(excluded_optional)},
+        semantic_unresolved=len(semantic_unknown),
     )
     weight_total = sum((PRIORITY_CREDIT[item["priority"]] for item in measured), ZERO)
     measured_credit = sum((PRIORITY_CREDIT[item["priority"]] * COVERAGE_CREDIT[item["coverage"]] for item in measured), ZERO)
-    unknown_weight = sum((PRIORITY_CREDIT[item["priority"]] for item in uninspectable + explicit_not_measured), ZERO)
+    unknown_weight = sum((PRIORITY_CREDIT[item["priority"]] for item in uninspectable + explicit_not_measured + semantic_unknown), ZERO)
     # Missing expected records have unknown priorities, so a full audit is blocked.  In pilot mode they
     # conservatively use the maximum priority weight for bounds.
     unknown_weight += Decimal(3 * len(missing_ids))
@@ -1371,7 +1373,7 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         central_base = lower_base = upper_base = ZERO
         mark_defined_zero(denominator, f"candidate_attempt:{attempt}", non_attempt=True)
     essential_measured = [item for item in measured if item.get("priority") == "essential"]
-    essential_unknown = [item for item in uninspectable + explicit_not_measured if item.get("priority") == "essential"]
+    essential_unknown = [item for item in uninspectable + explicit_not_measured + semantic_unknown if item.get("priority") == "essential"]
     essential_total = len(essential_measured) + len(essential_unknown)
     lower_essential_total = essential_total + len(missing_ids)
     essential_missing = sum(item["coverage"] == "missing" for item in essential_measured)
@@ -1407,7 +1409,7 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         caps(upper_max, upper_band, essential_missing, essential_total, [item["subject_id"] for item in essential_measured if item["coverage"] == "missing"]), audit_mode,
     )
     result["input_roles"] = ["missing_access_audit", "structure_audit"]
-    result["raw_status_counts"] = dict(Counter(item.get("coverage") for item in applicable_records)) | {"not_measured_expected_ids": len(missing_ids)}
+    result["raw_status_counts"] = dict(Counter("semantic_unresolved" if item.get("coverage") is None and item.get("axis_resolution", {}).get("coverage") == "unresolved" else item.get("coverage") for item in applicable_records)) | {"not_measured_expected_ids": len(missing_ids)}
     result["credit_mappings"] = {"coverage": {key: decimal_text(value) for key, value in COVERAGE_CREDIT.items()}, "priority": {key: decimal_text(value) for key, value in PRIORITY_CREDIT.items()}}
     result["components"] = [{
         "component_id": "priority_weighted_subject_access",
@@ -1418,6 +1420,12 @@ def calculate_coverage(ledgers: dict[str, Any], audit_mode: str) -> dict[str, An
         "effective_weight": "1",
         "weight_renormalized": False,
     }]
+    if semantic_unknown:
+        result["semantic_uncertainty"] = {
+            "label": "Semantically unresolved after inspection",
+            "unknown_parent_axes": [{"subject_id": item["subject_id"], "axes": ["coverage"]} for item in semantic_unknown],
+            "assessment_sufficiency_restored_by_numeric_invariance": False,
+        }
     return result
 
 
@@ -1824,12 +1832,14 @@ def mean_credit(values: Sequence[Decimal]) -> Decimal:
 def task_component(
     ledgers: dict[str, Any],
 ) -> tuple[Decimal, Decimal, Decimal, dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
-    coverage = {item["subject_id"]: item.get("coverage") for item in ledgers["subjects"]}
+    subject_rows = {item["subject_id"]: item for item in ledgers["subjects"]}
+    coverage = {identity: item.get("coverage") for identity, item in subject_rows.items()}
     fixed: list[Decimal] = []
     eligible_records: list[dict[str, Any]] = []
     coverage_uncertain: list[dict[str, Any]] = []
     result_uninspectable: list[dict[str, Any]] = []
     result_not_measured: list[dict[str, Any]] = []
+    result_semantic_unknown: list[dict[str, Any]] = []
     coverage_excluded = 0
     for task in ledgers["tasks"]:
         required_subjects = task.get("subject_ids", [])
@@ -1840,8 +1850,10 @@ def task_component(
         if any(status in {"uninspectable", "not_measured", None} for status in statuses):
             result = task.get("result")
             measured_credit = TASK_CREDIT.get(result)
+            semantic_dependency = task.get("axis_resolution", {}).get("result") == "unresolved" or any(subject_rows.get(identity, {}).get("axis_resolution", {}).get("coverage") == "unresolved" for identity in required_subjects)
             coverage_uncertain.append({
                 **task,
+                "_semantic_dependency": semantic_dependency,
                 "_lower_credit": measured_credit if measured_credit is not None else ZERO,
                 "_upper_credit": measured_credit if measured_credit is not None else ONE,
                 "_lower_failure": result == "fails" or measured_credit is None,
@@ -1854,12 +1866,14 @@ def task_component(
             eligible_records.append(task)
         elif result == "uninspectable":
             result_uninspectable.append(task)
+        elif result is None and task.get("axis_resolution", {}).get("result") == "unresolved":
+            result_semantic_unknown.append(task)
         else:
             result_not_measured.append(task)
     expected_not_measured = len(ledgers["task_not_measured"])
     central = mean_credit(fixed)
     fixed_failure_ids = [item["task_id"] for item in eligible_records if item.get("result") == "fails"]
-    known_result_unknown_ids = [item["task_id"] for item in result_uninspectable + result_not_measured]
+    known_result_unknown_ids = [item["task_id"] for item in result_uninspectable + result_not_measured + result_semantic_unknown]
 
     def optimize_optional_eligibility(
         mandatory_values: Sequence[Decimal],
@@ -1890,14 +1904,14 @@ def task_component(
         }
 
     lower_scenario = optimize_optional_eligibility(
-        fixed + [ZERO] * (len(result_uninspectable) + len(result_not_measured) + expected_not_measured),
+        fixed + [ZERO] * (len(result_uninspectable) + len(result_not_measured) + len(result_semantic_unknown) + expected_not_measured),
         fixed_failure_ids + known_result_unknown_ids + ledgers["task_not_measured"],
         [(item["_lower_credit"], item["task_id"], item["_lower_failure"]) for item in coverage_uncertain],
         minimize=True,
         scenario="adverse_coverage_eligibility_and_task_credit",
     )
     upper_scenario = optimize_optional_eligibility(
-        fixed + [ONE] * (len(result_uninspectable) + len(result_not_measured) + expected_not_measured),
+        fixed + [ONE] * (len(result_uninspectable) + len(result_not_measured) + len(result_semantic_unknown) + expected_not_measured),
         fixed_failure_ids,
         [(item["_upper_credit"], item["task_id"], item["_upper_failure"]) for item in coverage_uncertain],
         minimize=False,
@@ -1907,8 +1921,9 @@ def task_component(
     upper = upper_scenario["value"]
     original = ledgers["task_original"]
     not_measured = expected_not_measured + len(result_not_measured)
-    uninspectable = len(coverage_uncertain) + len(result_uninspectable)
-    applicable = len(eligible_records) + uninspectable + not_measured
+    semantic_unresolved = sum(item["_semantic_dependency"] for item in coverage_uncertain) + len(result_semantic_unknown)
+    uninspectable = sum(not item["_semantic_dependency"] for item in coverage_uncertain) + len(result_uninspectable)
+    applicable = len(eligible_records) + uninspectable + not_measured + semantic_unresolved
     denominator = component_denominators(
         "coverage_conditioned_reader_tasks",
         original,
@@ -1917,11 +1932,13 @@ def task_component(
         uninspectable,
         not_measured,
         {"excluded_due_to_missing_access": coverage_excluded},
+        semantic_unresolved=semantic_unresolved,
     )
     bound_counts = {
         "coverage_uncertain": coverage_uncertain,
         "result_uninspectable": result_uninspectable,
         "result_not_measured": result_not_measured,
+        "result_semantic_unknown": result_semantic_unknown,
         "expected_not_measured": expected_not_measured,
         "lower_scenario": lower_scenario["scenario"],
         "lower_total": lower_scenario["total"],
@@ -2049,7 +2066,7 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
     result = finish_dimension("findability_navigation", [task_denom, arch_denom, ref_denom], central_base, lower_base, upper_base, central_caps, lower_caps, upper_caps, audit_mode)
     result["input_roles"] = ["missing_access_audit", "structure_audit"]
     result["raw_status_counts"] = {
-        "tasks": dict(Counter(item.get("result") for item in ledgers["tasks"])),
+        "tasks": dict(Counter("semantic_unresolved" if item.get("result") is None and item.get("axis_resolution", {}).get("result") == "unresolved" else item.get("result") for item in ledgers["tasks"])),
         "tasks_excluded_due_to_coverage": task_denom["exclusion_reasons"].get("excluded_due_to_missing_access", 0),
         "architecture": dict(Counter(item["_status"] for item in architecture)) | {"uninspectable": len(arch_unknown), "not_measured": len(arch_not_measured)},
         "cross_references": dict(Counter(item.get("judgment") for item in ledgers["references"])) | {"warranted_undelivered_zero": 0 if ref_inapplicable else obligation_zeros, "reference_defect_zero": 0 if ref_inapplicable else defect_zeros},
@@ -2064,6 +2081,14 @@ def calculate_findability(ledgers: dict[str, Any], audit_mode: str) -> dict[str,
         {"component_id": "heading_access_architecture", "raw_numerator": decimal_text(arch_credit), "raw_denominator": decimal_text(Decimal(len(architecture))), "normalized_value": decimal_text(arch_central), "weight": "0.30", "effective_weight": decimal_text(weights[1]), "weight_renormalized": ref_inapplicable},
         {"component_id": "cross_reference_validity", "raw_numerator": decimal_text(ref_raw_numerator), "raw_denominator": decimal_text(ref_raw_denominator), "normalized_value": None if ref_inapplicable else decimal_text(ref_central), "weight": "0.10", "effective_weight": decimal_text(weights[2]), "weight_renormalized": ref_inapplicable, "details": {"warranted_undelivered_zero_count": 0 if ref_inapplicable else obligation_zeros, "reference_defect_zero_count": 0 if ref_inapplicable else defect_zeros}},
     ]
+    semantic_tasks = [item for item in ledgers["tasks"] if item.get("axis_resolution", {}).get("result") == "unresolved"]
+    semantic_subjects = [item for item in ledgers["subjects"] if item.get("axis_resolution", {}).get("coverage") == "unresolved"]
+    if semantic_tasks or semantic_subjects:
+        result["semantic_uncertainty"] = {
+            "label": "Semantically unresolved after inspection",
+            "unknown_parent_axes": ([{"task_id": item["task_id"], "axes": ["result"]} for item in semantic_tasks] + [{"subject_id": item["subject_id"], "axes": ["coverage"]} for item in semantic_subjects]),
+            "assessment_sufficiency_restored_by_numeric_invariance": False,
+        }
     return result
 
 
@@ -2200,7 +2225,7 @@ def preflight_loaded(loaded: dict[str, Any]) -> tuple[dict[str, Any] | None, lis
                 "message": "Full mode cannot score required not-measured cross-references.",
                 "item_ids": explicit_reference_ids,
             })
-        explicit_task_ids = [item.get("task_id") for item in ledgers["tasks"] if item.get("result") is None]
+        explicit_task_ids = [item.get("task_id") for item in ledgers["tasks"] if item.get("result") is None and item.get("axis_resolution", {}).get("result") != "unresolved"]
         if explicit_task_ids:
             missing.append({"code": "incomplete_full_audit", "path": "missing_access_audits.reader_task_results", "message": "Full mode cannot score reader-task records without a result.", "item_ids": explicit_task_ids})
         explicit_treatment_ids = [item.get("treatment_id") for item in ledgers["treatments"] if item.get("status") is None]

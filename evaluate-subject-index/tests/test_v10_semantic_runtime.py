@@ -23,6 +23,39 @@ def compatibility(f,revision=None):
 
 
 class SemanticRuntimeTests(unittest.TestCase):
+    def test_native_semantic_parent_axes_are_typed_and_neutral(self):
+        case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups);f=case.complete_fixture()
+        state=study.read(f.state_path)
+        audit_record=next(r for r in state['artifacts'] if r.get('schema_version')=='missing-access-audit-v1')
+        audit_path=f.root/audit_record['path'];audit=study.read(audit_path);audit['schema_version']='missing-access-audit-v2'
+        subject=audit['subject_judgments'][0]
+        subject.update(coverage=None,stance_preserved=None,realistic_first_lookup_success=None,axis_resolution={'coverage':'unresolved','stance_preserved':'unresolved','realistic_first_lookup_success':'unresolved'},semantic_uncertainties=[{'field':field,'reason_category':'unresolved_relationship','rationale':f'PRIVATE-PARENT-TEST {field} depends on inspected unresolved semantics.','evidence_ids':subject['evidence_ids'],'locator_ids':['LOC-001']} for field in ('coverage','stance_preserved','realistic_first_lookup_success')])
+        task=audit['reader_task_results'][0]
+        task.update(result=None,axis_resolution={'result':'unresolved'},semantic_uncertainties=[{'field':'result','reason_category':'dependent_semantic_uncertainty','rationale':'PRIVATE-PARENT-TEST Task result depends on unresolved parent coverage.','evidence_ids':task['evidence_ids'],'locator_ids':['LOC-001']}])
+        audit['completion']['semantic_unresolved']=1;audit['reader_task_completion']['semantic_unresolved']=1
+        audit_path.write_text(json.dumps(audit));audit_record.update(sha256=study.file_digest(audit_path),schema_version='missing-access-audit-v2')
+        audit_record['artifact_id']=baseline.completion.state_cli.artifact_id(audit_record['path'],audit_record['sha256'])
+        review_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='candidate_benchmark_access_review')
+        review_path=f.root/review_record['path'];review=study.read(review_path);review['audit_bindings']=[{'path':audit_record['path'],'sha256':audit_record['sha256']}]
+        for row in review['requirements']:
+            row.update(disposition='unresolved',factual_status='partially_satisfied',resulting_parent_judgment=deepcopy(subject),judgment_fields=['coverage'])
+        review_path.write_text(json.dumps(review));review_record['sha256']=study.file_digest(review_path);review_record['artifact_id']=baseline.completion.state_cli.artifact_id(review_record['path'],review_record['sha256'])
+        f.state_path.write_text(json.dumps(state))
+        approval,release=compatibility(f);adopted=command('adopt','--state',f.state_path,'--compatibility',approval,'--source-release',release,'--output-dir','semantic-execution')
+        self.assertEqual(0,adopted.returncode,adopted.stdout+adopted.stderr)
+        output=command('score','score','--state',f.state_path,'--output-dir','scoring-semantic')
+        self.assertEqual(0,output.returncode,output.stdout+output.stderr)
+        calculation=study.read(f.root/'scoring-semantic/dimension-calculations.v9.json');dimensions={r['dimension_id']:r for r in calculation['dimensions']}
+        coverage=dimensions['meaningful_coverage']['denominators']['components'][0];tasks=dimensions['findability_navigation']['denominators']['components'][0]
+        self.assertEqual(1,coverage['semantic_unresolved']);self.assertEqual(0,coverage['uninspectable'])
+        self.assertEqual(1,tasks['semantic_unresolved']);self.assertEqual(0,tasks['uninspectable'])
+        result=study.read(f.root/'scoring-semantic/evaluation-result.v15.json');self.assertEqual('indeterminate',result['authoritative_evaluation']['status'])
+        parent_blocker=next(row for row in result['gate_assessment']['blockers'] if row['blocker_id']=='GATE-ASSESSMENT-ACCESS-PARENT-UNCERTAIN')
+        self.assertEqual(['coverage','realistic_first_lookup_success','result','stance_preserved'],parent_blocker['semantic_unknown_axes'])
+        report=command('score','build-report','--state',f.state_path);self.assertEqual(0,report.returncode,report.stdout+report.stderr)
+        public=''.join(p.read_text() for p in (f.root/'scoring-semantic/v10-canonical-projection').rglob('*.json'))
+        self.assertNotIn('PRIVATE-PARENT-TEST',public);self.assertIn('semantically unresolved after inspection',public.lower())
+
     def test_native_adoption_preserves_source_and_resolved_scores(self):
         case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups);f=case.complete_fixture()
         before=study.read(f.state_path);prior=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')

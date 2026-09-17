@@ -74,7 +74,11 @@
                     "treatment",
                     "complete_path_fit",
                     "keep",
-                    "judgment_subtype"
+                    "judgment_subtype",
+                    "coverage",
+                    "stance_preserved",
+                    "realistic_first_lookup_success",
+                    "result"
                   ]
                 }
               },
