@@ -90,7 +90,7 @@ def migrate(f):
     return v10(*args)
 
 
-def create_access_review(f, *, unresolved=False):
+def create_access_review(f, *, unresolved=False, material_first_lookup=False):
     from v10_candidate_access import requirements,bound_amendment
     state=study.read(f.state_path);benchmark=study.read(f.root/'migration/selected-benchmark.json')
     lock=study.read(f.root/state['study_comparison']['lock']['path'])
@@ -104,7 +104,8 @@ def create_access_review(f, *, unresolved=False):
     expected=requirements(benchmark,bound_amendment(state,f.state_path,lock))
     if not expected:return None
     for (kind,parent,requirement_kind,identity),sha in expected.items():
-        rows.append({'parent_kind':kind,'parent_id':parent,'requirement_kind':requirement_kind,'requirement_id':identity,'requirement_sha256':sha,'disposition':'unresolved' if unresolved else 'reviewed','factual_status':'uninspectable' if unresolved else 'satisfied','judgment_fields':['coverage'] if kind=='subject' else ['result'],'tested_path_ids':['PATH-001'],'evidence_ids':['EVID-TREAT-001'],'structure_finding_ids':['NODE-001'],'rationale':'Synthetic factual inspection of the required access, existing parent judgment and structure evidence.','resulting_parent_judgment':deepcopy(parents[(kind,parent)])})
+        adverse_lookup = material_first_lookup and kind == 'subject'
+        rows.append({'parent_kind':kind,'parent_id':parent,'requirement_kind':requirement_kind,'requirement_id':identity,'requirement_sha256':sha,'disposition':'unresolved' if unresolved else 'reviewed','factual_status':'uninspectable' if unresolved else 'not_satisfied' if adverse_lookup else 'satisfied','judgment_fields':['realistic_first_lookup_success'] if adverse_lookup else ['coverage'] if kind=='subject' else ['result'],'tested_path_ids':['PATH-001'],'evidence_ids':['EVID-TREAT-001'],'structure_finding_ids':['DEFECT-FIRST-LOOKUP'] if adverse_lookup else ['NODE-001'],'rationale':'Synthetic factual inspection of the required access, existing parent judgment and structure evidence.','resulting_parent_judgment':deepcopy(parents[(kind,parent)])})
     receipt={'schema_version':'subject-index-v10-candidate-access-review-v1','review_id':'ACCESS-REVIEW-SYNTHETIC','reviewer_id':'REVIEWER-SYNTHETIC','reviewed_at':'2026-09-16T00:03:00Z','candidate_seen':True,'evaluation_id':state['evaluation_id'],'candidate_sha256':state['candidate']['candidate_sha256'],'benchmark_sha256':benchmark['benchmark_sha256'],'study_lock_sha256':lock['lock_sha256'],'benchmark_access_sha256':lock['benchmark_access']['overlay_sha256'],'audit_bindings':[{'path':r['path'],'sha256':r['sha256']} for r in records],'structure_binding':{'path':f.f.structure_path.relative_to(f.root).as_posix(),'sha256':study.file_digest(f.f.structure_path)},'requirements':rows}
     path=f.f.write('candidate/v10-access-review.json',receipt)
     result=v10('access-review','--state',f.state_path,'--input',path)
@@ -135,7 +136,7 @@ def add_broken_reference(f):
 
 
 class V10RuntimeTests(unittest.TestCase):
-    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, unresolved_access=False, amendment_style="facet"):
+    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, unresolved_access=False, amendment_style="facet", material_first_lookup=False):
         f=prepare_v10(self,evaluation_id=evaluation_id,amendment_style=amendment_style)
         if source_fixture is not None:
             for key in ('release_policy','release_state','release_draft','release_review','release_benchmark','release_descriptor','release_review_inventory','study_lock','study_policy'):
@@ -161,16 +162,35 @@ class V10RuntimeTests(unittest.TestCase):
         for stage in ('locator_chunk_preparation','locator_audit','missing_access_audit'):
             state['stages'][stage]=deepcopy(prior['stages'][stage])
             state['artifacts'] += [f.f.record(f.root/r['path'],stage,r['artifact_type'],r.get('schema_version')) for r in prior['artifacts'] if r['stage']==stage]
+        if material_first_lookup:
+            from test_v10_consequences import defect
+            audit_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='missing_access_audit')
+            audit_path=f.root/audit_record['path'];audit=study.read(audit_path)
+            audit['subject_judgments'][0].update(coverage='partial',realistic_first_lookup_success='no',severity='major')
+            audit_path.write_text(json.dumps(audit));audit_record.update(sha256=study.file_digest(audit_path),artifact_id=completion.state_cli.artifact_id(audit_record['path'],study.file_digest(audit_path)))
+            structure=study.read(f.f.structure_path)
+            finding=defect('DEFECT-FIRST-LOOKUP','misleading_access_route','SUBJ-001')
+            finding.update(code='HED',affected_item_ids=['PATH-001'],affected_count=1,affected_rate='1',source_section_rate='1',structural_section_rate='0')
+            structure['defects'].append(finding);f.f.structure_path.write_text(json.dumps(structure))
         f.state_path.write_text(json.dumps(state))
-        create_access_review(f,unresolved=unresolved_access)
+        create_access_review(f,unresolved=unresolved_access,material_first_lookup=material_first_lookup)
         for command,extra in [('register-structure',['--input',f.f.structure_path]),('score',['--output-dir','scoring-v10']),('build-report',[])]:
             result=v10('score',command,'--state',f.state_path,*extra);self.assertEqual(0,result.returncode,result.stdout+result.stderr)
         calculation=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')
-        self.assertEqual(original['overall_percentage'],calculation['overall_percentage'])
-        self.assertEqual(original['final_rounding'],calculation['final_rounding'])
+        if not material_first_lookup:
+            self.assertEqual(original['overall_percentage'],calculation['overall_percentage'])
+            self.assertEqual(original['final_rounding'],calculation['final_rounding'])
         self.assertNotIn('overall_score_ceiling',calculation)
         self.assertEqual(before,{p:p.read_bytes() for p in before})
         self.completed_fixture=f;return f
+
+    def test_material_first_lookup_path_binding_survives_access_review_and_scoring(self):
+        f=self.complete_fixture(material_first_lookup=True)
+        receipt=study.read(f.root/'candidate/v10-access-review.json')
+        self.assertEqual(study.file_digest(f.f.structure_path),receipt['structure_binding']['sha256'])
+        calculation=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')
+        findability=next(row for row in calculation['dimensions'] if row['dimension_id']=='findability_navigation')
+        self.assertTrue(next(row for row in findability['cap_evaluations'] if row['cap_id']=='findability.localized_major_navigation')['triggered'])
 
     def test_complete_native_v10_and_portable_checkpoint(self):
         f=self.complete_fixture()
