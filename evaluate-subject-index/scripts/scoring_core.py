@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from schema_validation import schema_errors
 from structure_audit import StructureAuditError, materialize_structure_records
