@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from runtime_profile import identity as runtime_identity, is_v9
+
 import argparse
 from copy import deepcopy
 import hashlib
@@ -14,8 +16,8 @@ from typing import Any
 from schema_validation import schema_errors
 
 
-POLICY_SCHEMA = "subject-index-evaluation-policy-v4"
-POLICY_PROFILE = "subject-index-standard-policy-v8.2"
+POLICY_SCHEMA = runtime_identity("subject-index-evaluation-policy-v4")
+POLICY_PROFILE = runtime_identity("subject-index-standard-policy-v8.2")
 
 DEFAULT_INCLUDED = [
     "preparation-approved indexable content",

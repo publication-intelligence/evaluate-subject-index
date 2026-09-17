@@ -1,0 +1,629 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "V9 Canonical V8 public web projection",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "projection_id",
+    "projection_role",
+    "evaluation_id",
+    "view_selection",
+    "score_views",
+    "correction_outcomes",
+    "item_summaries",
+    "collections",
+    "provenance",
+    "density_denominator",
+    "public_safety",
+    "limitations",
+    "projection_sha256"
+  ],
+  "properties": {
+    "methodology": {
+      "type": "object",
+      "required": [
+        "rubric_version",
+        "calculation_profile",
+        "benchmark"
+      ]
+    },
+    "comparison_identity": {
+      "type": "object"
+    },
+    "review_signals": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "schema_version": {
+      "const": "ohfr-v9-canonical-web-projection-v1"
+    },
+    "projection_id": {
+      "type": "string",
+      "pattern": "^OHFR-V9-WEB-[A-F0-9]{12}$"
+    },
+    "projection_role": {
+      "const": "deterministic_public_safe_display_projection"
+    },
+    "evaluation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "view_selection": {
+      "type": "object",
+      "required": [
+        "authoritative_view_id",
+        "primary_view_id",
+        "default_display_view_id",
+        "display_view_rationale"
+      ],
+      "properties": {
+        "authoritative_view_id": {
+          "const": "canonical_as_delivered"
+        },
+        "primary_view_id": {
+          "const": "canonical_as_delivered"
+        },
+        "default_display_view_id": {
+          "const": "canonical_as_delivered"
+        },
+        "display_view_rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "score_views": {
+      "type": "object",
+      "required": [
+        "canonical_source_adjustment_status",
+        "projection_adjustment_status",
+        "total_delta",
+        "views"
+      ],
+      "properties": {
+        "canonical_source_adjustment_status": {
+          "enum": [
+            "none",
+            "separate_evidentiary_correction"
+          ]
+        },
+        "projection_adjustment_status": {
+          "enum": [
+            "not_applicable",
+            "confirmed_representation_adjustment_applied"
+          ]
+        },
+        "total_delta": {
+          "type": "number"
+        },
+        "views": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scoreView"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "correction_outcomes": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/noCorrection"
+        },
+        {
+          "$ref": "#/$defs/correctionOutcomes"
+        }
+      ]
+    },
+    "item_summaries": {
+      "type": "object",
+      "required": [
+        "observed"
+      ]
+    },
+    "collections": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/collectionBinding"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source_artifacts",
+        "source_sha256",
+        "benchmark_sha256",
+        "judgment_policy_sha256",
+        "rubric_version",
+        "dimension_calculation_profile",
+        "projection_metadata_sha256",
+        "calculation_sha256",
+        "missing_access_audit_set_sha256",
+        "correction_overlay_sha256"
+      ]
+    },
+    "density_denominator": {
+      "type": "object",
+      "required": [
+        "indexable_source_words",
+        "unit"
+      ]
+    },
+    "public_safety": {
+      "type": "object",
+      "required": [
+        "source_excerpts_included",
+        "restricted_files_included",
+        "private_layout_evidence_included",
+        "absolute_paths_included",
+        "source_subject_summaries_are_synthesized_not_quoted"
+      ],
+      "properties": {
+        "source_excerpts_included": {
+          "const": false
+        },
+        "restricted_files_included": {
+          "const": false
+        },
+        "private_layout_evidence_included": {
+          "const": false
+        },
+        "absolute_paths_included": {
+          "const": false
+        },
+        "source_subject_summaries_are_synthesized_not_quoted": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "projection_sha256": {
+      "$ref": "#/$defs/hash"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "scoreView": {
+      "type": "object",
+      "required": [
+        "view_id",
+        "label",
+        "view_kind",
+        "role",
+        "score",
+        "maximum",
+        "scorecard",
+        "dimension_denominators",
+        "critical_gates",
+        "readiness",
+        "provenance_artifacts"
+      ],
+      "properties": {
+        "view_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "view_kind": {
+          "enum": [
+            "observed",
+            "counterfactual"
+          ]
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "score": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "maximum": {
+          "const": 100
+        },
+        "scorecard": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/scorecardRow"
+          }
+        },
+        "dimension_denominators": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/inherited_1"
+          }
+        },
+        "critical_gates": {
+          "type": "array"
+        },
+        "readiness": {
+          "type": "object"
+        },
+        "provenance_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "scorecardRow": {
+      "type": "object",
+      "required": [
+        "dimension_id",
+        "dimension_percentage",
+        "weight",
+        "weighted_contribution",
+        "awarded_points",
+        "maximum_points",
+        "formula_id"
+      ],
+      "properties": {
+        "dimension_id": {
+          "type": "string"
+        },
+        "dimension_percentage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "weight": {
+          "type": "number"
+        },
+        "weighted_contribution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "awarded_points": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "maximum_points": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "formula_id": {
+          "type": "string",
+          "pattern": "^subject-index-dimension-calculation-v8:"
+        },
+        "substantive_selectivity_percentage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "density_fit_percentage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "substantive_points_out_of_10": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "density_points_out_of_5": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "dimension_id": {
+                "const": "editorial_selectivity"
+              }
+            },
+            "required": [
+              "dimension_id"
+            ]
+          },
+          "then": {
+            "required": [
+              "substantive_selectivity_percentage",
+              "density_fit_percentage",
+              "substantive_points_out_of_10",
+              "density_points_out_of_5"
+            ]
+          }
+        }
+      ]
+    },
+    "noCorrection": {
+      "type": "object",
+      "required": [
+        "applicable",
+        "overlay_included",
+        "reason",
+        "affected_headings",
+        "character_replacements"
+      ],
+      "properties": {
+        "applicable": {
+          "const": false
+        },
+        "overlay_included": {
+          "const": false
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affected_headings": {
+          "const": 0
+        },
+        "character_replacements": {
+          "const": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "correctionOutcomes": {
+      "type": "object",
+      "required": [
+        "affected_headings",
+        "character_replacements",
+        "corrected_cross_reference_id",
+        "remaining_unresolved_cross_reference_id",
+        "observed_minor_defect_count",
+        "adjusted_minor_defect_count",
+        "cross_reference_gate_unchanged",
+        "readiness_unchanged"
+      ],
+      "properties": {
+        "affected_headings": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "character_replacements": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "corrected_cross_reference_id": {
+          "type": "string",
+          "pattern": "^XREF-"
+        },
+        "remaining_unresolved_cross_reference_id": {
+          "type": "string",
+          "pattern": "^XREF-"
+        },
+        "observed_minor_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "adjusted_minor_defect_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cross_reference_gate_unchanged": {
+          "type": "boolean"
+        },
+        "readiness_unchanged": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "collectionBinding": {
+      "type": "object",
+      "required": [
+        "collection_id",
+        "artifact_path",
+        "count",
+        "content_sha256",
+        "file_sha256"
+      ],
+      "properties": {
+        "collection_id": {
+          "enum": [
+            "index_records",
+            "source_subjects",
+            "density",
+            "correction_overlay"
+          ]
+        },
+        "artifact_path": {
+          "type": "string",
+          "pattern": "^data/.+\\.json$"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/hash"
+        },
+        "file_sha256": {
+          "$ref": "#/$defs/hash"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_2": {
+      "type": "object",
+      "required": [
+        "component_id",
+        "original",
+        "applicable",
+        "measured",
+        "excluded",
+        "uninspectable",
+        "not_measured",
+        "exclusion_reasons",
+        "measurement_coverage",
+        "small_denominator_exception",
+        "genuinely_inapplicable",
+        "zero_due_to_non_attempt",
+        "defined_zero_rule",
+        "provisionally_scoreable"
+      ],
+      "properties": {
+        "component_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "original": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measured": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "excluded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uninspectable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "not_measured": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exclusion_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "measurement_coverage": {
+          "type": "string",
+          "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "small_denominator_exception": {
+          "type": "boolean"
+        },
+        "genuinely_inapplicable": {
+          "type": "boolean"
+        },
+        "zero_due_to_non_attempt": {
+          "type": "boolean"
+        },
+        "defined_zero_rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provisionally_scoreable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_1": {
+      "type": "object",
+      "required": [
+        "dimension_id",
+        "components"
+      ],
+      "properties": {
+        "dimension_id": {
+          "enum": [
+            "meaningful_coverage",
+            "editorial_selectivity",
+            "conceptual_stance_fidelity",
+            "page_reference_reliability",
+            "findability_navigation",
+            "mechanics_consistency"
+          ]
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/inherited_2"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "$id": "web-projection-v9.schema.json",
+  "allOf": [
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ]
+}

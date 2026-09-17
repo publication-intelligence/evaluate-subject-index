@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "V9 public web collection",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "collection_kind",
+    "source_order",
+    "count",
+    "items",
+    "collection_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "ohfr-v9-web-collection-v1"
+    },
+    "collection_kind": {
+      "enum": [
+        "index_records",
+        "source_subjects",
+        "density"
+      ]
+    },
+    "source_order": {
+      "type": "string",
+      "minLength": 1
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array"
+    },
+    "collection_sha256": {
+      "$ref": "#/$defs/hash"
+    }
+  },
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "collection_kind": {
+            "const": "density"
+          }
+        },
+        "required": [
+          "collection_kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "fit_percentage",
+          "density_fit_percentage",
+          "total_weighted_percentage_numerator",
+          "total_indexable_source_words"
+        ],
+        "properties": {
+          "fit_percentage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^-?[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "density_fit_percentage": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "total_weighted_percentage_numerator": {
+            "type": "string",
+            "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+          },
+          "total_indexable_source_words": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ],
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "$id": "web-collection-v9.schema.json"
+}

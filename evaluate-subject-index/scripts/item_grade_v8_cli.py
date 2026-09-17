@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from runtime_profile import identity as runtime_identity, is_v9
+
 import argparse
 from collections import Counter
 from copy import deepcopy
@@ -22,7 +24,7 @@ from heading_access_provenance import (
 from structure_audit import validate_structure_audit_semantics
 
 
-SCHEMA_VERSION = "subject-index-item-assessments-v7"
+SCHEMA_VERSION = runtime_identity("subject-index-item-assessments-v7")
 GRADING_POLICY = "subject-index-item-grading-v4"
 
 
@@ -201,7 +203,7 @@ def build_v8_assessments(
 
     if base_items.get("schema_version") != "subject-index-item-assessments-v3":
         raise ValueError("base_item_assessments_required")
-    if calculation.get("schema_version") != "subject-index-dimension-calculations-v6":
+    if calculation.get("schema_version") != runtime_identity("subject-index-dimension-calculations-v6"):
         raise ValueError("v8_calculation_required")
     if base_items.get("evaluation_id") != calculation.get("evaluation_id"):
         raise ValueError("item_calculation_evaluation_mismatch")

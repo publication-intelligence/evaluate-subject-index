@@ -1,0 +1,698 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "V9 Source-bound subject-index judgment policy decoupled from score calculation",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "policy_id",
+    "policy_profile",
+    "source_scope",
+    "audience",
+    "audit_design",
+    "content_policies",
+    "stage_application",
+    "density_profile",
+    "critical_gates",
+    "deviations",
+    "freeze",
+    "policy_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "subject-index-evaluation-policy-v5"
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_profile": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "const": "subject-index-standard-policy-v9"
+        }
+      },
+      "additionalProperties": true
+    },
+    "source_scope": {
+      "type": "object",
+      "required": [
+        "source_sha256",
+        "document_page_span",
+        "page_map_sha256",
+        "chunk_manifest_sha256",
+        "included",
+        "excluded",
+        "availability",
+        "mixed_page_rule",
+        "word_count_basis"
+      ],
+      "properties": {
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "document_page_span": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "page_map_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "chunk_manifest_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "included": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "excluded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "availability": {
+          "type": "object"
+        },
+        "mixed_page_rule": {
+          "type": "string"
+        },
+        "word_count_basis": {
+          "const": "indexable source words only"
+        }
+      },
+      "additionalProperties": true
+    },
+    "audience": {
+      "type": "object",
+      "required": [
+        "label",
+        "basis",
+        "confidence",
+        "rationale"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "enum": [
+            "inferred",
+            "user_supplied"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "audit_design": {
+      "type": "object",
+      "required": [
+        "mode",
+        "candidate_blindness",
+        "uncertainty_policy",
+        "uninspectable_locator_rate_tolerance"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "full",
+            "pilot"
+          ]
+        },
+        "candidate_blindness": {
+          "enum": [
+            "required",
+            "preferred",
+            "not_claimed"
+          ]
+        },
+        "uncertainty_policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uninspectable_locator_rate_tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "content_policies": {
+      "type": "object",
+      "minProperties": 10,
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "stage_application": {
+      "type": "object",
+      "minProperties": 6
+    },
+    "density_profile": {
+      "type": "object",
+      "required": [
+        "status",
+        "measurement_level",
+        "aggregation",
+        "metrics",
+        "rationale",
+        "maximum_score_contribution"
+      ],
+      "properties": {
+        "status": {
+          "const": "scored"
+        },
+        "measurement_level": {
+          "const": "chapter_or_approved_intellectual_unit"
+        },
+        "aggregation": {
+          "const": "indexable_source_word_weighted_mean"
+        },
+        "metrics": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object"
+          }
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "maximum_score_contribution": {
+          "const": 5
+        }
+      },
+      "additionalProperties": true
+    },
+    "critical_gates": {
+      "type": "array",
+      "minItems": 10,
+      "items": {
+        "type": "object"
+      }
+    },
+    "deviations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "freeze": {
+      "type": "object",
+      "required": [
+        "frozen_at",
+        "candidate_seen"
+      ],
+      "properties": {
+        "frozen_at": {
+          "type": "string"
+        },
+        "candidate_seen": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "retrospective_study_migration": {
+      "$ref": "#/$defs/inherited_1"
+    },
+    "retrospective_migration": {
+      "$ref": "#/$defs/inherited_2"
+    },
+    "policy_sha256": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "allOf": [
+    {
+      "not": {
+        "required": [
+          "retrospective_migration",
+          "retrospective_study_migration"
+        ]
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "retrospective_migration"
+              ]
+            },
+            {
+              "required": [
+                "retrospective_study_migration"
+              ]
+            }
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "freeze": {
+            "properties": {
+              "candidate_seen": {
+                "const": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$ref": "#/$defs/percentageOnly"
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "inherited_1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": [
+        "candidate_seen",
+        "migrated_at",
+        "approval_id",
+        "approval_sha256",
+        "authorization",
+        "study_lock_sha256",
+        "target_policy_semantic_sha256",
+        "previous_policy",
+        "original_freeze",
+        "audit_transfer_authorized"
+      ],
+      "properties": {
+        "candidate_seen": {
+          "const": true
+        },
+        "migrated_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "authorization": {
+          "type": "object",
+          "required": [
+            "authorized_by",
+            "reference"
+          ],
+          "properties": {
+            "authorized_by": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reference": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "study_lock_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "target_policy_semantic_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "previous_policy": {
+          "type": "object",
+          "required": [
+            "policy_id",
+            "policy_sha256",
+            "artifact",
+            "freeze"
+          ],
+          "properties": {
+            "policy_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "policy_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "artifact": {
+              "type": "object",
+              "required": [
+                "path",
+                "sha256"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "additionalProperties": false
+            },
+            "freeze": {
+              "type": "object",
+              "required": [
+                "frozen_at",
+                "candidate_seen"
+              ],
+              "properties": {
+                "frozen_at": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "candidate_seen": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "original_freeze": {
+          "type": "object",
+          "required": [
+            "frozen_at",
+            "candidate_seen"
+          ],
+          "properties": {
+            "frozen_at": {
+              "type": "string",
+              "minLength": 1
+            },
+            "candidate_seen": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "audit_transfer_authorized": {
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_3": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_4": {
+      "type": "object",
+      "required": [
+        "rerun",
+        "evidence"
+      ],
+      "properties": {
+        "rerun": {
+          "const": false
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/inherited_3"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "inherited_2": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Authorized retrospective policy migration provenance",
+      "type": "object",
+      "required": [
+        "original_policy",
+        "migrated_at",
+        "candidate_seen",
+        "authorization",
+        "change_ledger_reference",
+        "reused_stages"
+      ],
+      "properties": {
+        "original_policy": {
+          "type": "object",
+          "required": [
+            "policy_id",
+            "policy_profile_id",
+            "policy_sha256",
+            "artifact",
+            "freeze"
+          ],
+          "properties": {
+            "policy_id": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "policy_profile_id": {
+              "enum": [
+                "subject-index-standard-policy-v8",
+                "subject-index-standard-policy-v8.1",
+                "subject-index-standard-policy-v9"
+              ]
+            },
+            "policy_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "artifact": {
+              "$ref": "#/$defs/inherited_3"
+            },
+            "freeze": {
+              "type": "object",
+              "required": [
+                "frozen_at",
+                "candidate_seen"
+              ],
+              "properties": {
+                "frozen_at": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "\\S"
+                },
+                "candidate_seen": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "migrated_at": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "candidate_seen": {
+          "type": "boolean"
+        },
+        "authorization": {
+          "type": "object",
+          "required": [
+            "authorized_by",
+            "reference"
+          ],
+          "properties": {
+            "authorized_by": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "reference": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "additionalProperties": false
+        },
+        "change_ledger_reference": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "reused_stages": {
+          "type": "object",
+          "required": [
+            "page_mapping",
+            "chunk_definition",
+            "source_subject_discovery",
+            "benchmark_synthesis",
+            "benchmark_review",
+            "benchmark_freeze",
+            "candidate_normalization"
+          ],
+          "properties": {
+            "page_mapping": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "chunk_definition": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "source_subject_discovery": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "benchmark_synthesis": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "benchmark_review": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "benchmark_freeze": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "candidate_normalization": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "source_chunk_preparation": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "locator_chunk_preparation": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "locator_audit": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "missing_access_audit": {
+              "$ref": "#/$defs/inherited_4"
+            },
+            "structure_audit": {
+              "$ref": "#/$defs/inherited_4"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "$defs": {
+        "artifact": {
+          "type": "object",
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "reuse": {
+          "type": "object",
+          "required": [
+            "rerun",
+            "evidence"
+          ],
+          "properties": {
+            "rerun": {
+              "const": false
+            },
+            "evidence": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/inherited_3"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "percentageOnly": {
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "propertyNames": {
+          "not": {
+            "pattern": "(^rating$|^rating_delta$|^maximum_rating$|_rating$)"
+          }
+        },
+        "additionalProperties": {
+          "$ref": "#/$defs/percentageOnly"
+        }
+      },
+      "else": {
+        "if": {
+          "type": "array"
+        },
+        "then": {
+          "items": {
+            "$ref": "#/$defs/percentageOnly"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$id": "evaluation-policy-v5.schema.json"
+}
