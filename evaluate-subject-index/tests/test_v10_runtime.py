@@ -135,8 +135,9 @@ def add_broken_reference(f):
 
 
 class V10RuntimeTests(unittest.TestCase):
-    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, unresolved_access=False, amendment_style="facet", material_first_lookup=False):
+    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, unresolved_access=False, amendment_style="facet", material_first_lookup=False, benchmark_deltas=None, prepare_migrated=None, stop_before_structure=False):
         f=prepare_v10(self,evaluation_id=evaluation_id,amendment_style=amendment_style)
+        if benchmark_deltas is not None:set_deltas(f,benchmark_deltas(f))
         if source_fixture is not None:
             for key in ('release_policy','release_state','release_draft','release_review','release_benchmark','release_descriptor','release_review_inventory','study_lock','study_policy'):
                 setattr(f.args,key,getattr(source_fixture.args,key))
@@ -171,8 +172,10 @@ class V10RuntimeTests(unittest.TestCase):
             finding=defect('DEFECT-FIRST-LOOKUP','misleading_access_route','SUBJ-001')
             finding.update(code='HED',affected_item_ids=['PATH-001'],affected_count=1,affected_rate='1',source_section_rate='1',structural_section_rate='0')
             structure['defects'].append(finding);f.f.structure_path.write_text(json.dumps(structure))
+        if prepare_migrated is not None:prepare_migrated(f,state)
         f.state_path.write_text(json.dumps(state))
         create_access_review(f,unresolved=unresolved_access,material_first_lookup=material_first_lookup)
+        if stop_before_structure:self.completed_fixture=f;return f
         for command,extra in [('register-structure',['--input',f.f.structure_path]),('score',['--output-dir','scoring-v10']),('build-report',[])]:
             result=v10('score',command,'--state',f.state_path,*extra);self.assertEqual(0,result.returncode,result.stdout+result.stderr)
         calculation=study.read(f.root/'scoring-v10/dimension-calculations.v8.json')
