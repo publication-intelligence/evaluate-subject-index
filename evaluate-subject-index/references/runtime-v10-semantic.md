@@ -17,10 +17,24 @@ The current execution safeguards conserve every prior major/critical finding
 and every prior warranted-reference defect against live successor IDs or
 evidence-backed resolution. They require a findability defect for failed first
 lookup, coherent access for every multi-facet parent, and exact judgment of any
-delivered reference whose inventory target is unresolved. Confirmed optional
+delivered reference whose inventory target is unresolved. A null legacy
+`target_path_id` is migration metadata, not candidate-side half-credit evidence:
+a confirmed clean destination is supported, a material usable-but-defective
+route requires typed adverse evidence for partial support, and an unresolved
+binding remains an assessment blocker or uncertainty. Confirmed optional
 minor failures enter their dimension without severity escalation. Distributed
 reliability prevalence counts every zero-rating locator. These are dimension and
 audit-integrity consequences only; decision v3 still has no overall-score cap.
+
+For structure-ledger validation, `partially_supported` retains half credit only
+for a material but nonfatal candidate-side cross-reference defect. The exception
+must have a confirmed usable destination, nontrivial severity and evidence, plus
+either a typed `defective_but_identifiable_destination` resolution or a
+structured `XRF` defect bound to that delivered `XREF-*`. A
+`valid_destination` resolution without documented adverse candidate behavior is
+`supported`; omit it from the exception-oriented ledger so the complete-scope
+supported attestation applies. A missing or genuinely unresolved binding must
+remain an assessment-sufficiency blocker or explicit uncertainty.
 
 ## Adoption
 

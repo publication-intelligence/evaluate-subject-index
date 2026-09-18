@@ -5,6 +5,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import jsonschema
 
@@ -21,6 +22,7 @@ from structure_audit import (  # noqa: E402
     materialize_structure_records,
     validate_structure_audit_semantics,
 )
+from schema_validation import schema_errors  # noqa: E402
 
 
 SHA = "a" * 64
@@ -153,6 +155,71 @@ class NativeStructureAuditTests(unittest.TestCase):
         document = audit()
         schema = json.loads((SCHEMAS / "structure-audit-v5.schema.json").read_text())
         jsonschema.validate(document, schema)
+
+    @patch("structure_audit.semantic_uncertainty", return_value=True)
+    def test_v10_rejects_process_only_partial_reference_judgments(self, _) -> None:
+        for resolution in (None, "uncertain", "valid_destination"):
+            document = audit()
+            document["schema_version"] = "structure-audit-v6"
+            row = {
+                "reference_id": "XREF-00001", "judgment": "partially_supported",
+                "summary": "The legacy inventory lacks target_path_id.", "severity": "none",
+                "confidence": "high", "evidence_ids": ["EVID-XREF-0001"],
+            }
+            if resolution is not None:
+                row["target_resolution"] = {
+                    "status": resolution, "reference_type": "see also", "target_display": "Resolved heading",
+                    "resolved_path_ids": ["PATH-00001"] if resolution == "valid_destination" else [],
+                    "evidence_ids": ["EVID-XREF-0001"], "rationale": "Exact delivered heading inspected.",
+                }
+            document["cross_reference_judgments"] = [row]
+            self.assertEqual([], schema_errors(document, "structure-audit-v6.schema.json", profile="v10s"))
+            with self.subTest(resolution=resolution), self.assertRaises(StructureAuditError) as raised:
+                validate_structure_audit_semantics(document)
+            self.assertEqual(
+                "partial_reference_requires_candidate_defect" if resolution == "valid_destination" else "partial_reference_requires_resolved_destination",
+                raised.exception.code,
+            )
+
+    @patch("structure_audit.semantic_uncertainty", return_value=True)
+    def test_v10_preserves_material_partial_reference_cases(self, _) -> None:
+        row = {
+            "reference_id": "XREF-00001", "judgment": "partially_supported",
+            "summary": "The malformed target remains identifiable but needs repair.", "severity": "minor",
+            "confidence": "high", "evidence_ids": ["EVID-XREF-0001"],
+            "target_resolution": {
+                "status": "defective_but_identifiable_destination", "reference_type": "see also",
+                "target_display": "Malformed heading", "resolved_path_ids": ["PATH-00001"],
+                "evidence_ids": ["EVID-XREF-0001"], "rationale": "The delivered variant resolves uniquely.",
+            },
+        }
+        document = audit()
+        document["schema_version"] = "structure-audit-v6"
+        document["cross_reference_judgments"] = [row]
+        self.assertEqual([], schema_errors(document, "structure-audit-v6.schema.json", profile="v10s"))
+        validate_structure_audit_semantics(document)
+        self.assertEqual("partially_supported", materialize_structure_records(document)[1][0]["judgment"])
+        from scoring_core import REFERENCE_CREDIT
+        self.assertEqual("0.5", str(REFERENCE_CREDIT["partially_supported"]))
+
+        document = audit()
+        document["schema_version"] = "structure-audit-v6"
+        row = copy.deepcopy(row)
+        row["target_resolution"]["status"] = "valid_destination"
+        document["cross_reference_judgments"] = [row]
+        document["defects"] = [{
+            "defect_id": "DEFECT-XREF-0001", "code": "XRF", "dimension_owner": "findability_navigation",
+            "severity": "minor", "severity_basis": "localized_repairable_friction",
+            "retrieval_consequence": "slows", "defect_kind": "unsupported_reference",
+            "affected_item_ids": ["XREF-00001"], "affected_source_sections": [],
+            "affected_structural_sections": [], "root_cause_family": "malformed_reference",
+            "affected_count": 1, "applicable_count": 2, "affected_rate": "0.5",
+            "source_section_denominator": 1, "source_section_rate": "0",
+            "structural_section_denominator": 3, "structural_section_rate": "0",
+            "high_priority_access_destroyed": False,
+        }]
+        self.assertEqual([], schema_errors(document, "structure-audit-v6.schema.json", profile="v10s"))
+        validate_structure_audit_semantics(document)
 
     def test_denominator_hash_and_count_tampering_fail_closed(self) -> None:
         for field, value in (("node_count", 99), ("node_id_set_sha256", "f" * 64)):
