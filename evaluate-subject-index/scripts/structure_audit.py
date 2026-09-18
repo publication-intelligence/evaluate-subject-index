@@ -160,6 +160,7 @@ def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
 
     node_exceptions = _unique_records(structure["node_judgments"], "node_id", "node_judgments")
     reference_exceptions = _unique_records(structure["cross_reference_judgments"], "reference_id", "cross_reference_judgments")
+    defects = _unique_records(structure["defects"], "defect_id", "defects")
     _require(set(node_exceptions) <= set(node_ids), "unexpected_ledger_items", "Node judgments contain identities outside the candidate denominator.", sorted(set(node_exceptions) - set(node_ids)))
     _require(set(reference_exceptions) <= set(reference_ids), "unexpected_ledger_items", "Cross-reference judgments contain identities outside the candidate denominator.", sorted(set(reference_exceptions) - set(reference_ids)))
     for node_id, record in node_exceptions.items():
@@ -170,6 +171,30 @@ def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
         resolution = record.get("target_resolution")
         if resolution is not None:
             _require(resolution["status"] != "no_valid_destination" or record["judgment"] == "unsupported", "contradictory_reference_resolution", "A confirmed absent destination requires an unsupported delivered reference, not partial correctness or uninspectability.", reference_id)
+        if semantic_uncertainty() and record["judgment"] == "partially_supported":
+            candidate_defect = resolution is not None and resolution["status"] == "defective_but_identifiable_destination"
+            candidate_defect = candidate_defect or any(
+                defect.get("code") == "XRF"
+                and reference_id in defect.get("affected_item_ids", [])
+                and defect.get("severity") in {"minor", "major", "critical"}
+                and defect.get("retrieval_consequence") in {"slows", "misleads", "blocks"}
+                for defect in defects.values()
+            )
+            _require(
+                resolution is not None and resolution["status"] in {"valid_destination", "defective_but_identifiable_destination"},
+                "partial_reference_requires_resolved_destination",
+                "A partially supported reference requires a confirmed usable destination; unresolved binding is assessment uncertainty, not half credit.",
+                reference_id,
+            )
+            _require(
+                record["severity"] in {"minor", "major", "critical"}
+                and bool(record["evidence_ids"])
+                and bool(record["summary"].strip())
+                and candidate_defect,
+                "partial_reference_requires_candidate_defect",
+                "Half credit requires documented material candidate-side cross-reference behavior; omit a clean resolved reference so the supported attestation applies.",
+                reference_id,
+            )
 
     attestation = structure["full_scope_attestation"]
     pilot_pass_nodes = set(attestation["pilot_pass_node_ids"])
@@ -201,7 +226,6 @@ def validate_structure_audit_semantics(structure: Mapping[str, Any]) -> None:
     metrics = structure["metrics"]
     _require(metrics["page_bearing_paths"] == len(path_ids) and metrics["cross_references"] == len(reference_ids) and metrics["total_nodes"] == len(node_ids) and metrics["total_paths"] >= metrics["page_bearing_paths"], "candidate_denominator_metric_mismatch", "Structure metrics must agree with the bound candidate denominator.")
 
-    defects = _unique_records(structure["defects"], "defect_id", "defects")
     _unique_records(structure["strengths"], "strength_id", "strengths")
     _unique_records(structure["uncertainties"], "uncertainty_id", "uncertainties")
     architecture = structure["locator_architecture"]
