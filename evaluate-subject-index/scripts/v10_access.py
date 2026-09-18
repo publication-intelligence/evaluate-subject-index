@@ -188,3 +188,5 @@ def validate_facets(benchmark):
                     ids = facet.get('required_subject_ids')
                     study.require(isinstance(ids,list) and ids and all(isinstance(x,str) for x in ids) and len(ids)==len(set(ids)) and set(ids)<=set(parent['subject_ids']), 'Task facet cites an unknown or non-parent required subject')
                     study.require(facet.get('weight') == 'unweighted_access_facet', 'Task facet must be unweighted')
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

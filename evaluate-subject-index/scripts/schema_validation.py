@@ -132,3 +132,5 @@ def policy_migration_errors(policy: dict[str, Any]) -> list[str]:
     except ValueError:
         errors.append("Original freeze and migration timestamps must be ISO 8601 with timezones.")
     return errors
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

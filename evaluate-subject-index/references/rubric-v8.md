@@ -1,8 +1,8 @@
 # Subject Index Evaluation technical rubric — V8
 
-Current methodology: **V8.2**. Read [Consequence policy and targeted migration](consequence-policy-v8.2.md); it supersedes older publication-gate language while retaining V8.1 scoring/caps and validity separation. Frozen evaluations require explicit migration and new policy/calculation identities.
+Archived methodology: **V8.2**. This page is retained only as frozen migration evidence; current operations use `scripts/v10_cli.py` and V10 contracts.
 
-## Current identities
+## Frozen identities
 
 - rubric: `subject-index-rubric-v8.1`
 - standard policy: `subject-index-standard-policy-v8.1`

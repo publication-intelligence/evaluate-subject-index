@@ -32,8 +32,9 @@ def main():
     args = parser.parse_args()
     runtime_profile.activate_public_cli()
     script = Path(__file__).with_name(TOOLS[args.tool])
-    sys.argv = [str(script), *args.arguments]
-    runpy.run_path(str(script), run_name="__main__")
+    namespace = runpy.run_path(str(script), run_name=f"_v10_{args.tool.replace('-', '_')}")
+    sys.argv = [f"scripts/v10_cli.py {args.tool}", *args.arguments]
+    namespace["main"]()
 
 
 if __name__ == "__main__":

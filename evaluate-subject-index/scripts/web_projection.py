@@ -665,3 +665,5 @@ def validate_bundle(
             return [item for child in value for item in keys(child)]
         return []
     core.require(not any(token in key for key in keys({"projection": projection, "collections": collections}) for token in SECRET_KEYS), "unsafe_public_projection", "Projected output contains a secret-bearing field.")
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

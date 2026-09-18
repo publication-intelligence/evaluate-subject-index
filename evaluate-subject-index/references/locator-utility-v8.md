@@ -1,5 +1,8 @@
 # Locator utility — V8
 
+Archived methodology. This page is retained only as frozen migration evidence;
+current operations use `scripts/v10_cli.py` and V10 contracts.
+
 ## Two axes
 
 Page treatment measures how much independently useful information about the complete heading path is present at the destination. Complete-path fit measures whether the full path accurately identifies that treatment. Rhetorical form does not determine depth: comparative facts and useful attributed observations may be substantive or mixed; contentless attributions, citations, and examples remain weak. Derive both axes from current structured audit fields and use the lower value only as diagnostic credit.

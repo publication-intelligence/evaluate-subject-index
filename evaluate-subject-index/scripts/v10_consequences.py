@@ -134,3 +134,5 @@ def authoritative(result):
 def outcome_fields(result):
     return {'method_readiness': readiness(result), 'authoritative_evaluation': authoritative(result),
             'human_release_decision': {'status':'not_recorded'}}
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

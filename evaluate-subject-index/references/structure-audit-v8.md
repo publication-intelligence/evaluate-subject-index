@@ -1,6 +1,9 @@
 # Structure audit — V8
 
-Native V8 structure audits use `structure-audit-v6` directly. The artifact is an exception ledger, not one stored pass row per heading.
+Archived methodology. This page is retained only as frozen migration evidence;
+current operations use `scripts/v10_cli.py` and V10 contracts.
+
+Frozen V8 structure audits used `structure-audit-v6`. The artifact is an exception ledger, not one stored pass row per heading.
 
 ## Exact scope
 

@@ -135,3 +135,5 @@ def apply_axis_diagnostics(result,assignments,semantic_rows,semantic_keep):
         if result['dimension_percentage'] is None:
             for key in ('base_percentage','pre_cap_percentage','post_cap_percentage'):result[key]=None
             provenance['pre_cap_percentage']=None
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

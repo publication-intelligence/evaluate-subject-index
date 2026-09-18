@@ -3,7 +3,7 @@
 Archived contract: this page describes frozen V8.1 evidence and is not an
 operational command guide. Current work uses the semantic V10 wrapper only.
 
-This is a substantive methodology revision, not a correction to the meaning of a frozen V8 score. It supersedes earlier cap/gate language in the V8 references. The current identities are `subject-index-standard-policy-v8.1`, `subject-index-rubric-v8.1`, and `subject-index-dimension-calculation-v6`. Artifact schema versions and CLI filenames remain unchanged where their data contracts remain compatible. Current validators require the revised identities. The original V8 implementation and contracts remain in Git at `514bcca`; use that version to reproduce original evaluations.
+This was a substantive methodology revision, not a correction to the meaning of a frozen V8 score. Its frozen identities are `subject-index-standard-policy-v8.1`, `subject-index-rubric-v8.1`, and `subject-index-dimension-calculation-v6`. Artifact schema identities remain recorded where their data contracts are required for migration validation. The original implementation and contracts are preserved at Git revision `514bcca` as evidence, not as an executable workflow.
 
 ## Four distinct consequences
 

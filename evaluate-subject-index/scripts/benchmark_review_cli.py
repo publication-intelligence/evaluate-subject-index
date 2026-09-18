@@ -1415,7 +1415,7 @@ def build_parser() -> argparse.ArgumentParser:
     freeze.set_defaults(func=command_freeze)
     migration = subparsers.add_parser(
         "import-reviewed-legacy",
-        help="Import a candidate-blind, fully reviewed legacy benchmark under the current V8 policy.",
+        help="Import a candidate-blind, fully reviewed legacy benchmark into the current V10 workflow.",
     )
     migration.add_argument("--state", required=True)
     migration.add_argument("--page-map", required=True)

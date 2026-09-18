@@ -97,3 +97,5 @@ def contract_errors(document, *, allow_semantic=False):
     except (InvalidOperation, TypeError, KeyError, ValueError) as exc:
         errors.append(f'Invalid V9 percentage contract: {exc}')
     return errors
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

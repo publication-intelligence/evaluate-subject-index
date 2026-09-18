@@ -431,3 +431,5 @@ def validate_native_lineage(lock, release, state_path, draft_path, review_path, 
         errors=native_v8_review_errors(draft_path,read(draft_path),release,read(inventory_path),read(review_path))
     require(not errors,f'Native historical review chain invalid: {errors}')
     # Checkpoint checksums are retained transport provenance, not resume/import gates.
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

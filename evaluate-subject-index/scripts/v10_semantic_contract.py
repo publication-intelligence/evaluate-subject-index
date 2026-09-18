@@ -66,3 +66,5 @@ def contract_errors(document):
         if assessment["status"]!="indeterminate" or not any(r.get("semantic_unknown_axes") for r in assessment["blockers"]):
             errors.append("Semantic uncertainty cannot restore sufficient gate assessment")
     return errors
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

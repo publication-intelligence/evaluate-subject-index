@@ -55,3 +55,5 @@ def selectivity_envelope(locators, source_units, *, non_attempt=False):
             'lower':lower,'upper':upper,'cap_invariant':cap_invariant,
             'central_percentage':lower['percentage'] if invariant else None,
             'central_cap':lower['cap'] if invariant else None,'evaluated_extreme_scenarios':2}
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

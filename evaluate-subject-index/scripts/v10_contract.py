@@ -68,3 +68,5 @@ def candidate_defect_errors(document):
                     and row.get('severity') in {'major','critical'} for row in defects):
                     errors.append(f"{node['node_id']}: {component} {status} requires a corresponding major/critical defect record")
     return errors
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

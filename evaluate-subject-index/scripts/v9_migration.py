@@ -49,3 +49,5 @@ def migrate_state_identity(state):
     config['policy_profile'] = identity(SOURCE_PROFILE, profile='v9')
     config['rubric_version'] = identity(SOURCE_IDENTITIES['rubric_version'], profile='v9')
     config['scoring_identity'] = {'rubric_version': config['rubric_version'], 'dimension_calculation_profile': identity(SOURCE_IDENTITIES['calculation_profile'], profile='v9')}
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()
