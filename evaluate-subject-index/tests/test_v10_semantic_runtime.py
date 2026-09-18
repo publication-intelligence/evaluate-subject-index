@@ -1,5 +1,6 @@
 """Synthetic explicit adoption and native successor output integration."""
 from copy import deepcopy
+from decimal import Decimal
 import json
 from pathlib import Path
 import subprocess
@@ -23,29 +24,65 @@ def compatibility(f,revision=None):
 
 
 class SemanticRuntimeTests(unittest.TestCase):
-    def test_material_optional_failure_scores_and_builds_report(self):
-        case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups);f=case.complete_fixture(amendment_style='none')
+    def test_public_score_and_report_share_published_optional_failure_coverage(self):
+        optional_id='SUBJ-PUBLISHED-OPTIONAL-FAILURE'
+        specs=[('SUBJ-001','essential','complete')]
+        specs += [(f'SUBJ-PUBLISHED-COMPLETE-{i:03d}','essential','complete') for i in range(323)]
+        specs += [('SUBJ-PUBLISHED-PARTIAL-MAJOR','major','partial'),('SUBJ-PUBLISHED-PARTIAL-ESSENTIAL','essential','partial')]
+        specs += [(f'SUBJ-PUBLISHED-MISSING-{i:02d}','major','missing') for i in range(64)]
+        specs += [(optional_id,'optional','missing')]
+
+        def benchmark_deltas(f):
+            source=study.read(f.args.release_benchmark)['subjects'][0];evidence_ids=[row['evidence_id'] for row in source['evidence']]
+            deltas=[]
+            for index,(subject_id,priority,_) in enumerate(specs[1:],1):
+                replacement=deepcopy(source);replacement.update(subject_id=subject_id,label=f'Synthetic published subject {index}',priority=priority)
+                deltas.append({'delta_id':f'DELTA-PUBLISHED-{index:03d}','clause_ids':['IPDF-ANA-06'],'family':'subjects','item_id':subject_id,'operation':'add','weight_treatment':'new_weighted_parent','reason':'Synthetic Published coverage replay.','distinct_obligation_rationale':'A distinct synthetic source-supported obligation for the Published coverage denominator.','evidence_ids':evidence_ids,'replacement':replacement})
+            return deltas
+
+        def prepare_migrated(f,state):
+            audit_record=next(r for r in state['artifacts'] if r.get('schema_version')=='missing-access-audit-v1')
+            audit_path=f.root/audit_record['path'];audit=study.read(audit_path);base=audit['subject_judgments'][0]
+            def subject(subject_id,priority,coverage):
+                row=deepcopy(base);row.update(subject_id=subject_id,priority=priority,coverage=coverage)
+                if coverage=='partial':row.update(stance_preserved='partly',realistic_first_lookup_success='partly',severity='minor')
+                elif coverage=='missing':row.update(direct_access=False,matched_path_ids=[],stance_preserved='not_applicable',realistic_first_lookup_success='no',severity='major')
+                return row
+            rows=[subject(*spec) for spec in specs]
+            audit['expected_subject_ids']=[row['subject_id'] for row in rows];audit['subject_judgments']=rows
+            audit['completion'].update(expected=len(rows),judged=len(rows),complete=True)
+            audit_path.write_text(json.dumps(audit));audit_record['sha256']=study.file_digest(audit_path)
+            audit_record['artifact_id']=baseline.completion.state_cli.artifact_id(audit_record['path'],audit_record['sha256'])
+            structure=study.read(f.f.structure_path)
+            structure['scoring_context']['optional_subject_scoring']=[{'subject_id':optional_id,'scored':False,'rule_id':'published_optional_not_frozen_as_scored'}]
+            f.f.structure_path.write_text(json.dumps(structure))
+
+        case=baseline.V10RuntimeTests();self.addCleanup(case.doCleanups)
+        f=case.complete_fixture(amendment_style='none',benchmark_deltas=benchmark_deltas,prepare_migrated=prepare_migrated,stop_before_structure=True)
+
         approval,release=compatibility(f)
         adopted=command('adopt','--state',f.state_path,'--compatibility',approval,'--source-release',release,'--output-dir','semantic-execution')
         self.assertEqual(0,adopted.returncode,adopted.stdout+adopted.stderr)
-        state=study.read(f.state_path)
-        audit_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='missing_access_audit')
-        audit_path=f.root/audit_record['path'];audit=study.read(audit_path);subject=audit['subject_judgments'][0]
-        subject.update(priority='optional',severity='major',stance_preserved='no',error_codes=['STA'])
-        audit_path.write_text(json.dumps(audit))
-        audit_record.update(sha256=study.file_digest(audit_path),artifact_id=baseline.completion.state_cli.artifact_id(audit_record['path'],study.file_digest(audit_path)))
-        structure_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='structure_audit')
-        structure_path=f.root/structure_record['path'];structure=study.read(structure_path)
-        structure['scoring_context']['optional_subject_scoring']=[{'subject_id':subject['subject_id'],'scored':False,'rule_id':'OPTIONAL-SYNTHETIC'}]
-        structure_path.write_text(json.dumps(structure));structure_record.update(sha256=study.file_digest(structure_path),artifact_id=baseline.completion.state_cli.artifact_id(structure_record['path'],study.file_digest(structure_path)))
-        f.state_path.write_text(json.dumps(state))
-        scored=command('score','score','--state',f.state_path,'--output-dir','scoring-optional')
+        registered=command('score','register-structure','--state',f.state_path,'--input',f.f.structure_path)
+        self.assertEqual(0,registered.returncode,registered.stdout+registered.stderr)
+        scored=command('score','score','--state',f.state_path,'--output-dir','scoring-semantic')
         self.assertEqual(0,scored.returncode,scored.stdout+scored.stderr)
+        calculation=study.read(f.root/'scoring-semantic/dimension-calculations.v9.json')
+        coverage=next(c for d in calculation['dimensions'] if d['dimension_id']=='meaningful_coverage' for c in d['components'] if c['component_id']=='priority_weighted_subject_access')
+        self.assertEqual(('974.5','1106'),(coverage['raw_numerator'],coverage['raw_denominator']))
+        self.assertNotIn('overall_score_ceiling',calculation)
+
         reported=command('score','build-report','--state',f.state_path)
         self.assertEqual(0,reported.returncode,reported.stdout+reported.stderr)
-        report=study.read(f.root/'scoring-optional/web-report.v13.json')
-        coverage=next(r for r in report['presentation_summary']['metrics'] if r['metric_id']=='weighted_concept_access_partial_credit')
-        self.assertEqual('1',coverage['denominator_weight'])
+        self.assertNotIn('presentation_metric_binding_mismatch',reported.stdout+reported.stderr)
+        current=study.read(f.state_path);report_record=next(r for r in current['artifacts'] if r['stage']=='web_report' and r['artifact_type']=='web_report')
+        metric=next(r for r in study.read(f.root/report_record['path'])['presentation_summary']['metrics'] if r['metric_id']=='weighted_concept_access_partial_credit')
+        presentation_numerator=Decimal(metric['complete_weight'])+Decimal(metric['partial_weight'])*Decimal('0.5')
+        self.assertEqual((Decimal('974.5'),'1106'),(presentation_numerator,metric['denominator_weight']))
+        structure=study.read(f.f.structure_path);audit=study.read(next(f.root/r['path'] for r in current['artifacts'] if r.get('schema_version')=='missing-access-audit-v1'))
+        optional=next(row for row in audit['subject_judgments'] if row['subject_id']==optional_id)
+        self.assertEqual({'subject_id':optional_id,'scored':False,'rule_id':'published_optional_not_frozen_as_scored'},structure['scoring_context']['optional_subject_scoring'][0])
+        self.assertEqual(('optional','missing','major','no'),tuple(optional[key] for key in ('priority','coverage','severity','realistic_first_lookup_success')))
 
     def test_public_v8_four_family_migration_then_decision_v3_adoption(self):
         f=baseline.prepare_v10(self)
