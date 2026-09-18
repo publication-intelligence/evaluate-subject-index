@@ -97,6 +97,11 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertNotIn("bind-publication", text)
         self.assertNotIn("integrate", text)
 
+    def test_reviewed_reference_binding_has_a_public_registered_command(self) -> None:
+        text = help_text("reference-review")
+        self.assertIn("--state", text)
+        self.assertIn("--input", text)
+
     def test_candidate_preparation_has_no_success_only_artifact_schemas(self) -> None:
         schemas = ROOT / "references" / "schemas"
         self.assertTrue((schemas / "candidate-normalization-issues.schema.json").is_file())

@@ -331,6 +331,9 @@
         }
       ]
     },
+    "reviewed_cross_reference_bindings": {
+      "$ref": "#/$defs/reviewedCrossReferenceBindings"
+    },
     "counterfactual_score_views": {
       "$ref": "#/$defs/inherited_17"
     },
@@ -344,6 +347,18 @@
     "inherited_1": {
       "type": "string",
       "minLength": 1
+    },
+    "reviewedCrossReferenceBindings": {
+      "type": "object",
+      "required": ["schema_version", "artifact_path", "sha256", "binding_set_sha256", "binding_count"],
+      "properties": {
+        "schema_version": {"const": "subject-index-v10-reviewed-cross-reference-bindings-v1"},
+        "artifact_path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "binding_set_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "binding_count": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
     },
     "inherited_2": {
       "type": "string",

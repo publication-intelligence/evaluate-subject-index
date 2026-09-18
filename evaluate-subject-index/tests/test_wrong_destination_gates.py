@@ -182,6 +182,36 @@ class WrongDestinationTests(unittest.TestCase):
         self.assertEqual('indeterminate',assessment['status'])
         self.assertEqual(['XREF-ONE'],assessment['blockers'][0]['affected_item_ids'])
 
+    def test_registered_reviewed_binding_clears_only_its_exact_supported_references(self):
+        data=evidence(fit='exact_fit',judgment='supported',treatment='substantive',resolution='valid_destination')
+        data[0]['cross_reference_judgments']=[]
+        data[3]['cross_references'][0]['target_path_id']=None
+        reviewed={'bindings':{'XREF-ONE':{
+            'reference_id':'XREF-ONE','status':'valid_destination','reference_type':'see also',
+            'target_display':'B','resolved_path_ids':['PATH-TARGET'],
+            'evidence_ids':['EVID-TARGET'],'rationale':'Reviewed.'}}}
+        proof=cli._destination_gate_evidence(*data,reviewed_reference_bindings=reviewed)
+        self.assertEqual('sufficient',proof[2]['status'])
+
+        data[0]['candidate_denominator']['cross_reference_ids'].append('XREF-TWO')
+        data[3]['cross_references'].append({'reference_id':'XREF-TWO','reference_type':'see',
+            'target_display':'C','target_path_id':None})
+        proof=cli._destination_gate_evidence(*data,reviewed_reference_bindings=reviewed)
+        self.assertEqual('indeterminate',proof[2]['status'])
+        self.assertEqual(['XREF-TWO'],proof[2]['blockers'][0]['affected_item_ids'])
+
+    def test_reviewed_binding_does_not_suppress_genuine_partial_or_unsupported_rows(self):
+        for judgment in ('partially_supported','unsupported'):
+            data=evidence(fit='exact_fit',judgment='supported',treatment='substantive',resolution='no_valid_destination' if judgment=='unsupported' else 'valid_destination')
+            data[0]['cross_reference_judgments'][0]['judgment']=judgment
+            reviewed={'bindings':{'XREF-ONE':{}}}
+            proof=cli._destination_gate_evidence(*data,reviewed_reference_bindings=reviewed)
+            if judgment == 'unsupported':
+                self.assertEqual(['XREF-ONE'],[row['reference_id'] for row in proof[1]])
+            else:
+                self.assertEqual([],proof[1])
+            self.assertEqual('sufficient',proof[2]['status'])
+
     def test_no_duplicate_gate_for_same_direct_failure_with_separate_major_defect(self):
         data=evidence()
         data[0]['defects']=[defect('DEFECT-LOC','generic','LOC-ONE',code='LOC_POS'),defect('DEFECT-XREF','unsupported_reference','XREF-ONE')]

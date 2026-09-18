@@ -17,7 +17,7 @@ SCRIPTS = completion.SCRIPTS
 
 
 def v10(*args):
-    target={'study':'study_cli.py','access-review':'v10_candidate_access.py','score':'dimension_score_v8_cli.py','bundle':'bundle_cli.py'}[args[0]]
+    target={'study':'study_cli.py','access-review':'v10_candidate_access.py','reference-review':'v10_reference_bindings.py','score':'dimension_score_v8_cli.py','bundle':'bundle_cli.py'}[args[0]]
     return run_internal_cli(target.removesuffix('.py'),*args[1:],profile='v10')
 
 
@@ -135,7 +135,7 @@ def add_broken_reference(f):
 
 
 class V10RuntimeTests(unittest.TestCase):
-    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, unresolved_access=False, amendment_style="facet", material_first_lookup=False, benchmark_deltas=None, prepare_migrated=None, stop_before_structure=False):
+    def complete_fixture(self, *, evaluation_id=None, source_fixture=None, broken_reference=False, supported_unresolved_reference=False, unresolved_access=False, amendment_style="facet", material_first_lookup=False, benchmark_deltas=None, prepare_migrated=None, stop_before_structure=False):
         f=prepare_v10(self,evaluation_id=evaluation_id,amendment_style=amendment_style)
         if benchmark_deltas is not None:set_deltas(f,benchmark_deltas(f))
         if source_fixture is not None:
@@ -143,8 +143,17 @@ class V10RuntimeTests(unittest.TestCase):
                 setattr(f.args,key,getattr(source_fixture.args,key))
             f.lock=deepcopy(source_fixture.lock)
             rebind(f)
-        if broken_reference:
+        if broken_reference or supported_unresolved_reference:
             add_broken_reference(f)
+        if supported_unresolved_reference:
+            structure=study.read(f.f.structure_path)
+            structure['cross_reference_judgments']=[]
+            f.f.structure_path.write_text(json.dumps(structure))
+            state=study.read(f.state_path)
+            record=next(r for r in state['artifacts'] if r.get('artifact_type')=='structure_audit')
+            record['sha256']=study.file_digest(f.f.structure_path)
+            record['artifact_id']=completion.state_cli.artifact_id(record['path'],record['sha256'])
+            f.state_path.write_text(json.dumps(state))
         before={Path(getattr(f.args,k)):Path(getattr(f.args,k)).read_bytes() for k in ('release_policy','release_state','release_draft','release_review','release_benchmark')}
         prior=study.read(f.state_path)
         result=f.f.run_cli('score','--state',str(f.state_path));self.assertEqual(0,result.returncode,result.stdout+result.stderr)
@@ -185,6 +194,36 @@ class V10RuntimeTests(unittest.TestCase):
         self.assertNotIn('overall_score_ceiling',calculation)
         self.assertEqual(before,{p:p.read_bytes() for p in before})
         self.completed_fixture=f;return f
+
+    def test_registered_reviewed_reference_receipt_clears_only_the_resolution_blocker(self):
+        f=self.complete_fixture(supported_unresolved_reference=True,stop_before_structure=True)
+        state=study.read(f.state_path)
+        candidate_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='candidate_index')
+        inventory_record=next(r for r in state['artifacts'] if r.get('artifact_type')=='item_inventory')
+        structure=study.read(f.f.structure_path)
+        bindings=[{'reference_id':'XREF-001','status':'valid_destination','reference_type':'see also',
+            'target_display':'Missing target','resolved_path_ids':['PATH-001'],'evidence_ids':['EVID-XREF-REVIEW'],
+            'rationale':'Reviewed against the complete delivered index; the target is PATH-001.'}]
+        receipt={'schema_version':'subject-index-v10-reviewed-cross-reference-bindings-v1','review_id':'XREF-REVIEW-SYNTHETIC',
+            'evaluation_id':state['evaluation_id'],'candidate_sha256':state['candidate']['candidate_sha256'],
+            'normalized_candidate_sha256':candidate_record['sha256'],'item_inventory_sha256':inventory_record['sha256'],
+            'structure_binding':{'path':f.f.structure_path.relative_to(f.root).as_posix(),'sha256':study.file_digest(f.f.structure_path)},
+            'binding_set_sha256':study.digest(bindings),'reviewed_at':'2026-09-18T00:00:00Z','reviewed_by':'REVIEWER-SYNTHETIC',
+            'authorization_reference':'Synthetic reviewed destination test','review_confidence':'high',
+            'scope_attestation':{'destination_sets_complete':True,'unresolved_or_ambiguous_bindings_included':False},'bindings':bindings}
+        path=f.f.write('candidate/reviewed-cross-reference-bindings.json',receipt)
+        registered=v10('reference-review','--state',f.state_path,'--input',path)
+        self.assertEqual(0,registered.returncode,registered.stdout+registered.stderr)
+        state=study.read(f.state_path)
+        record=next(r for r in state['artifacts'] if r.get('artifact_type')=='reviewed_cross_reference_bindings')
+        self.assertEqual('missing_access_audit',record['stage'])
+        self.assertEqual(study.digest(bindings),json.loads(registered.stdout)['binding_set_sha256'])
+        for command,extra in [('register-structure',['--input',f.f.structure_path]),('score',['--output-dir','scoring-reviewed-reference'])]:
+            result=v10('score',command,'--state',f.state_path,*extra)
+            self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+        metadata=study.read(f.root/'scoring-reviewed-reference/projection-metadata.v10.json')
+        self.assertEqual('sufficient',metadata['gate_assessment']['status'])
+        self.assertEqual(study.digest(bindings),metadata['reviewed_cross_reference_bindings']['binding_set_sha256'])
 
     def test_material_first_lookup_path_binding_survives_access_review_and_scoring(self):
         f=self.complete_fixture(material_first_lookup=True)

@@ -27,7 +27,7 @@ Never silently choose a benchmark, create a duplicate, or expose candidate outpu
 4. Freeze one V10 benchmark release and create one shared execution kit containing its source, page map, chunks, policy, semantic fingerprint, study lock, runtime revision and payload, comparison compatibility receipt, density evidence, and a manifest of their exact file hashes. Distribute those exact common bytes to every candidate; candidate workers must not regenerate equivalent-looking locks, policies, density evidence, or compatibility receipts.
 5. Preserve the delivered candidate while mechanically normalizing its complete hierarchy and locator assignments.
 6. Audit every locator against the complete delivered heading path, then audit missing access against the frozen benchmark.
-7. Build the exception-oriented structure ledger after locator and missing-access audits are complete. Bind exact denominators and record exceptions, architecture decisions, defects, strengths, and real uncertainties.
+7. Build the exception-oriented structure ledger after locator and missing-access audits are complete. Bind exact denominators and record exceptions, architecture decisions, defects, strengths, and real uncertainties. If mechanically normalized reference targets are null, register one exact reviewed destination-binding receipt before registering the structure audit.
 8. As soon as two candidates have adopted the shared execution kit, run a multi-state study preflight; repeat it with every candidate before scoring. Register benchmark-access review, calculate the six V10 dimensions deterministically, build the V10 report and canonical public projection, and run the final all-candidate preflight before comparison assembly.
 
 Default to a full audit. A pilot may calibrate the method but cannot support full-index claims.
@@ -44,6 +44,7 @@ Use `scripts/v10_cli.py TOOL ...` for every user-facing operation:
 - `prepare-candidate`: normalize and register the delivered candidate.
 - `audit-candidate`: validate and register locator and missing-access audits.
 - `access-review`: register V10 benchmark-access review.
+- `reference-review`: register exact reviewed destinations for otherwise-unresolved references attested as supported.
 - `score`: register structure, calculate, and build the report/projection.
 - `grade`: validate diagnostic item projections.
 - `study`: bind, preflight, and assemble comparable evaluations.
@@ -97,6 +98,8 @@ Use [V10.2 decision contract](references/consequence-policy-v10.2.md) and [V10 s
 Inspect the exact source and full delivered candidate path before leaving an axis unresolved. When the source is available but the candidate path, locator, or reference is malformed, incomplete, polysemous, or under-specified, judge the candidate as delivered. If the candidate’s intended concept cannot be known, treat that as a severe candidate failure: do not invent intent or convert the defect into neutral uncertainty. Record known `no_fit`, `unsupported`, and `not_kept` outcomes where applicable, and apply every qualifying cap or gate without double counting.
 
 Reserve uncertainty for source facts that genuinely remain unavailable or unresolved after inspection. Apply singleton-domain and known-nonkeep rules first. A comparative study requiring numeric results is not complete while a required candidate remains indeterminate.
+
+When supported references retain null normalized `target_path_id` values, first author a `subject-index-v10-reviewed-cross-reference-bindings-v1` receipt and run `v10_cli.py reference-review --state ... --input ...`. The receipt must bind the exact normalized candidate, inventory, and selected structure bytes and cover the complete unresolved supported-reference set. It may contain one or more delivered `PATH-*` destinations per reference. It cannot replace a partial, unsupported, uninspectable, not-measured, or uncertain structure judgment and never changes scores or weights.
 
 Complete final stages with `v10_cli.py score register-structure`, `score`, and `build-report`. These commands validate exact registered artifacts, advance state atomically, and produce the V10 report and canonical projection. Do not complete typed stages with generic state mutation.
 

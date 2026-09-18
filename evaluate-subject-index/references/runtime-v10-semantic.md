@@ -36,6 +36,24 @@ structured `XRF` defect bound to that delivered `XREF-*`. A
 supported attestation applies. A missing or genuinely unresolved binding must
 remain an assessment-sufficiency blocker or explicit uncertainty.
 
+Mechanically normalized null targets may be resolved without rewriting candidate
+preparation output or adding clean rows to the exception ledger. After the
+missing-access audit and before structure registration, use
+`scripts/v10_cli.py reference-review --state ... --input ...` with a
+`subject-index-v10-reviewed-cross-reference-bindings-v1` receipt. The receipt
+binds the exact normalized candidate, item inventory, and selected structure
+bytes; its `binding_set_sha256` is the canonical hash of the ordered `bindings`
+array. Each binding preserves the delivered reference type and target text and
+names one or more existing delivered `PATH-*` destinations.
+
+The receipt must cover exactly every null-target reference attested as supported.
+It cannot include structure exceptions or references affected by destination
+uncertainty, and duplicates, omissions, stale bytes, type/text mismatches, or
+nonexistent paths are rejected. A valid receipt removes only the corresponding
+assessment-sufficiency resolution blocker. It is carried in projection metadata
+provenance and does not mutate candidate artifacts, exception judgments, score
+inputs, dimension weights, calculations, or genuine partial/unsupported results.
+
 ## Adoption
 
 Already frozen studies may carry an execution-compatibility adoption receipt.

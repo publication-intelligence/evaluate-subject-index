@@ -2042,7 +2042,15 @@ def _presentation_summary(
     }
 
 
-def _destination_gate_evidence(structure, calculation, locator_documents, inventory, *, source_binding_valid=True):
+def _destination_gate_evidence(
+    structure,
+    calculation,
+    locator_documents,
+    inventory,
+    *,
+    source_binding_valid=True,
+    reviewed_reference_bindings=None,
+):
     """Read finalized audit axes; never infer total wrongness from severity or prose."""
     reliability = reliability_dimension(dict(calculation))["reliability_provenance"]
     expected = {row["locator_id"] for row in reliability.get("locator_utility_assignments", [])}
@@ -2083,9 +2091,11 @@ def _destination_gate_evidence(structure, calculation, locator_documents, invent
     for reference_id in sorted(uncertain_references):
         block("GATE-ASSESSMENT-REFERENCE-UNCERTAIN", [reference_id], "Explicitly scoped uncertainty affects this delivered reference destination.")
     explicit_references={row['reference_id'] for row in structure.get('cross_reference_judgments',[])}
+    reviewed_references = set((reviewed_reference_bindings or {}).get("bindings", {}))
     unresolved_attested={identity for identity,row in references.items()
                          if identity in delivered and row.get('target_path_id') is None
-                         and identity not in explicit_references and identity not in uncertain_references}
+                         and identity not in explicit_references and identity not in uncertain_references
+                         and identity not in reviewed_references}
     if unresolved_attested:
         block('GATE-ASSESSMENT-REFERENCE-RESOLUTION',unresolved_attested,
               'A delivered reference with no resolved inventory target cannot be treated as supported by an unlisted-reference attestation; record an exact destination judgment.')
@@ -2283,8 +2293,15 @@ def _projection_metadata(
     missing_access_documents: Sequence[Mapping[str, Any]],
     inventory: Mapping[str, Any],
     candidate_access_review=None,
+    reviewed_reference_bindings=None,
 ) -> dict[str, Any]:
-    destination_evidence = _destination_gate_evidence(structure, calculation, locator_documents, inventory)
+    destination_evidence = _destination_gate_evidence(
+        structure,
+        calculation,
+        locator_documents,
+        inventory,
+        reviewed_reference_bindings=reviewed_reference_bindings,
+    )
     if candidate_access_review and candidate_access_review['blockers']:
         destination_evidence[2]['blockers'].extend(deepcopy(candidate_access_review['blockers']))
         destination_evidence[2]['status'] = 'indeterminate'
@@ -2334,6 +2351,15 @@ def _projection_metadata(
             **_structure_reference(structure_record),
         },
     }
+    if reviewed_reference_bindings and reviewed_reference_bindings["record"]:
+        record = reviewed_reference_bindings["record"]
+        metadata["reviewed_cross_reference_bindings"] = {
+            "schema_version": "subject-index-v10-reviewed-cross-reference-bindings-v1",
+            "artifact_path": record["path"],
+            "sha256": record["sha256"],
+            "binding_set_sha256": reviewed_reference_bindings["binding_set_sha256"],
+            "binding_count": len(reviewed_reference_bindings["bindings"]),
+        }
     metadata["projection_metadata_sha256"] = core.canonical_hash(metadata, "projection_metadata_sha256")
     core.validate_schema_document(metadata, "v8-projection-metadata-v2.schema.json", "Generated V8 projection metadata")
     return metadata
@@ -2532,9 +2558,11 @@ def command_register_structure(args: argparse.Namespace) -> None:
             _validate_structure_inventory(structure, inventory)
             if is_v10():
                 from v10_candidate_access import bound_review
+                from v10_reference_bindings import bound_bindings
                 benchmark, _ = study_comparison.registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
                 lock = study_comparison.load_study_binding(state, state_path)
                 bound_review(state, state_path, benchmark, lock, structure_path=structure_path)
+                bound_bindings(state, state_path, structure=structure, structure_path=structure_path)
             payload = structure_path.read_bytes()
             stamp = now()
             record = _artifact_record(state_path.parent, structure_path, payload, stage="structure_audit", artifact_type="structure_audit", schema_version="structure-audit-v6", stamp=stamp, input_sha256=(candidate_record["sha256"], inventory_record["sha256"]))
@@ -2624,9 +2652,16 @@ def _calculation_loaded_from_state(
     loaded["study_identity"] = study_identity
     if is_v10():
         from v10_candidate_access import bound_review
+        from v10_reference_bindings import bound_bindings
         benchmark, _ = study_comparison.registered_document(state, state_path, 'benchmark_freeze', 'source-subject-benchmark-v2')
         lock = study_comparison.load_study_binding(state, state_path)
         loaded["candidate_access_review"] = bound_review(state, state_path, benchmark, lock)
+        loaded["reviewed_reference_bindings"] = bound_bindings(
+            state,
+            state_path,
+            structure=structure,
+            structure_path=structure_path,
+        )
     return loaded, inventory, inventory_record, loaded["locator_documents"], loaded["missing_documents"], structure_record
 
 
@@ -2662,9 +2697,12 @@ def command_score_state(args: argparse.Namespace) -> None:
             input_record = _artifact_record(root, outputs["input"], input_payload, stage="scoring", artifact_type="dimension_calculation_input", schema_version=runtime_identity("subject-index-dimension-calculation-input-v2"), stamp=stamp, input_sha256=input_hashes)
             calculation_record = _artifact_record(root, outputs["calculation"], calculation_payload, stage="scoring", artifact_type="dimension_calculations", schema_version=runtime_identity("subject-index-dimension-calculations-v6"), stamp=stamp, input_sha256=input_hashes)
             items_record = _artifact_record(root, outputs["items"], items_payload, stage="scoring", artifact_type="item_assessments", schema_version=runtime_identity("subject-index-item-assessments-v7"), stamp=stamp, input_sha256=(calculation_record["sha256"], inventory_record["sha256"], structure_record["sha256"]))
-            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, missing_access_documents=loaded["missing_documents"], inventory=inventory, candidate_access_review=loaded.get("candidate_access_review"))
+            metadata = _projection_metadata(policy=loaded["policy"], calculation=calculation, calculation_record=calculation_record, structure=loaded["structure"], structure_record=structure_record, candidate_label=inventory["candidate_id"], locator_documents=locator_documents, missing_access_documents=loaded["missing_documents"], inventory=inventory, candidate_access_review=loaded.get("candidate_access_review"), reviewed_reference_bindings=loaded.get("reviewed_reference_bindings"))
             metadata_payload = _json_bytes(metadata)
-            metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version=runtime_identity("subject-index-v8-projection-metadata-v2"), stamp=stamp, input_sha256=(calculation_record["sha256"], structure_record["sha256"]))
+            metadata_inputs = [calculation_record["sha256"], structure_record["sha256"]]
+            if loaded.get("reviewed_reference_bindings", {}).get("receipt_file_sha256"):
+                metadata_inputs.append(loaded["reviewed_reference_bindings"]["receipt_file_sha256"])
+            metadata_record = _artifact_record(root, outputs["metadata"], metadata_payload, stage="scoring", artifact_type="projection_metadata", schema_version=runtime_identity("subject-index-v8-projection-metadata-v2"), stamp=stamp, input_sha256=metadata_inputs)
             result = _evaluation_result(calculation=calculation, calculation_record=calculation_record, items=items, items_record=items_record, structure_record=structure_record, metadata=metadata, metadata_record=metadata_record)
             if loaded.get("study_identity") is not None:
                 result["comparison_key"]["study_identity"] = loaded["study_identity"]
