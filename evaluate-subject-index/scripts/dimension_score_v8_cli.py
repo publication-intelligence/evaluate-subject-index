@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic current V8 scoring and projection tooling.
-
-V8 uses the frozen keep judgment as binary rating credit while retaining the
-independent page-treatment and complete-path-fit minimum as a diagnostic grade.
-V8.1 revises consequence thresholds under a new frozen policy and calculation identity.
-V8.2 adds direct destination gates without changing ordinary scores or ceilings.
-"""
+"""Deterministic V10 scoring and projection tooling."""
 
 from __future__ import annotations
 
@@ -2788,11 +2782,11 @@ def command_build_report_state(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    preflight = subparsers.add_parser("preflight", help="Report exact V8 diagnostic-and-rating calculation sufficiency.")
+    preflight = subparsers.add_parser("preflight", help="Report exact V10 diagnostic-and-rating calculation sufficiency.")
     preflight.add_argument("--input", required=True)
     preflight.add_argument("--output")
     preflight.set_defaults(func=command_preflight)
-    calculate = subparsers.add_parser("calculate", help="Derive all six V8 ratings from frozen ledgers.")
+    calculate = subparsers.add_parser("calculate", help="Derive all six V10 ratings from frozen ledgers.")
     calculate.add_argument("--input", required=True)
     calculate.add_argument("--output")
     calculate.set_defaults(func=command_calculate)
@@ -2800,14 +2794,14 @@ def build_parser() -> argparse.ArgumentParser:
     register_structure.add_argument("--state", required=True)
     register_structure.add_argument("--input", required=True)
     register_structure.set_defaults(func=command_register_structure)
-    score = subparsers.add_parser("score", help="Build, validate, and atomically register all current V8 scoring artifacts from canonical state.")
+    score = subparsers.add_parser("score", help="Build, validate, and atomically register all current V10 scoring artifacts from canonical state.")
     score.add_argument("--state", required=True)
     score.add_argument("--output-dir", default="scoring", help="Output directory inside the evaluation directory (default: scoring).")
     score.set_defaults(func=command_score_state)
     report = subparsers.add_parser("build-report", help="Build, validate, and atomically register web-report.v10 and its canonical public web projection bundle.")
     report.add_argument("--state", required=True)
     report.add_argument("--output", help="Output path inside the evaluation directory (default: beside the registered result).")
-    report.add_argument("--bundle-output", help="Bundle directory inside the evaluation directory (default: v8-canonical-projection beside the result).")
+    report.add_argument("--bundle-output", help="Bundle directory inside the evaluation directory (default: v10-canonical-projection beside the result).")
     report.add_argument("--replace-complete-bundle", action="store_true", help="Validate and atomically replace the complete registered web-report bundle without changing scoring artifacts.")
     report.set_defaults(func=command_build_report_state)
     return parser

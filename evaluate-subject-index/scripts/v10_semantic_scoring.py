@@ -62,3 +62,5 @@ def selectivity(ledgers,audit_mode,resolved):
         return value
     result['semantic_uncertainty']={'label':LABEL,'treatment_envelope':serialize(neutral),'central_is_invariant':invariant,'assessment_sufficiency_restored_by_numeric_invariance':False}
     return result
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

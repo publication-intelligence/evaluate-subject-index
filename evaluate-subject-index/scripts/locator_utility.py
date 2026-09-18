@@ -332,3 +332,5 @@ def not_measured_assignment(locator_id: str) -> dict[str, Any]:
         "disposition_reason": "The required locator assignment was not measured.",
         "rating_credit_uncertainty_bounds": {"lower": "0", "upper": "1"},
     }
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

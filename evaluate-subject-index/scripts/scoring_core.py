@@ -1,4 +1,4 @@
-"""Shared deterministic arithmetic used by current V8 scoring."""
+"""Shared deterministic arithmetic used by current V10 scoring."""
 
 from __future__ import annotations
 
@@ -2257,3 +2257,5 @@ def preflight_loaded(loaded: dict[str, Any]) -> tuple[dict[str, Any] | None, lis
         if explicit_treatment_ids:
             missing.append({"code": "incomplete_full_audit", "path": "missing_access_audits.treatment_judgments", "message": "Full mode cannot score expected-treatment records without a status.", "item_ids": explicit_treatment_ids})
     return ledgers, missing
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

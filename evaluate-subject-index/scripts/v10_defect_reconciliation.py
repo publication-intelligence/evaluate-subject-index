@@ -49,3 +49,5 @@ def validate(document, prior_structure, candidate_sha256, prior_structure_file_s
     return {'prior_material_finding_count':len(expected),
             'disposition_counts':{name:sum(row['disposition']==name for row in rows)
                                   for name in ('retained','resolved','evidence_rebutted','superseded')}}
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

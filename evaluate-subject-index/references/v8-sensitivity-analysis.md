@@ -1,5 +1,8 @@
 # V8 locator diagnostics and binary keep-credit analysis
 
+Archived analysis. This page is retained only as frozen migration evidence;
+current operations use `scripts/v10_cli.py` and V10 contracts.
+
 This analysis uses synthetic mixtures and exact `Decimal` arithmetic. It is not fitted to a candidate. Diagnostic fit values remain 1.00, 0.70, 0.35, 0.15, and 0.
 
 The synthetic cases isolate the arithmetic change by holding structured locator judgments constant. V8 also changes judgment policy: its clarified evidence rules may produce different treatment classifications or keep decisions in a new audit. Those changed inputs can affect downstream results independently of the arithmetic change tested here.

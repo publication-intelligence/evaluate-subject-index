@@ -39,17 +39,6 @@ SCHEMAS = {'correction-overlay-v1.schema.json': 'correction-overlay-v9.schema.js
  'study-benchmark-lock.schema.json': 'study-benchmark-lock-v2.schema.json'}
 
 
-def select_v9():
-    global ACTIVE
-    if any(name in sys.modules for name in ("scoring_core", "state_cli", "policy_cli", "schema_validation")):
-        raise RuntimeError("Select V9 before importing workflow modules")
-    ACTIVE = "v9"
-
-
-def is_v9():
-    return ACTIVE == "v9"
-
-
 def select_v10():
     global ACTIVE
     if any(name in sys.modules for name in ("scoring_core", "state_cli", "policy_cli", "schema_validation")):
@@ -160,3 +149,7 @@ V10S_SCHEMAS.update({
     'evaluation-state.schema.json': 'evaluation-state-v9.schema.json',
     'evaluation-state-v8.schema.json': 'evaluation-state-v9.schema.json',
 })
+
+
+if __name__ == "__main__":
+    require_public_cli()

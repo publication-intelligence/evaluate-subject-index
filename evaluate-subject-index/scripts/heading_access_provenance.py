@@ -306,3 +306,5 @@ def validate_heading_access_provenance(
                     "An explicitly adjudicated primary cause must cite an existing ARCHREV-* decision.",
                     {"node_id": node_id, "basis_id": basis_id},
                 )
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()

@@ -400,15 +400,6 @@ class V10RuntimeTests(unittest.TestCase):
                 self_hash(bad,'overlay_sha256')
                 with self.assertRaises(ValueError):apply_overlay(base,bad)
 
-    def test_v9_numeric_boundaries_are_unchanged(self):
-        probe=Path(__file__).with_name('v9_golden_probe.py')
-        old=subprocess.run([sys.executable,str(probe),'v9'],capture_output=True,text=True)
-        new=subprocess.run([sys.executable,str(probe),'v10'],capture_output=True,text=True)
-        self.assertEqual(0,old.returncode,old.stderr);self.assertEqual(0,new.returncode,new.stderr)
-        previous=json.loads(old.stdout);current=json.loads(new.stdout)
-        previous.pop('gates');current.pop('gates')
-        self.assertEqual(previous,current)
-
     def test_confirmed_quality_gate_precedes_assessment_gap(self):
         from v10_consequences import outcome_fields
         result={'critical_gates':[{'gate_id':'GATE-WRONG-LOCATOR','triggered':True}], 'evaluation_validity':{'status':'indeterminate'}, 'gate_assessment':{'status':'indeterminate','blockers':[]}}

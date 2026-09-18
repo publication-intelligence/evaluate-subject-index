@@ -8,15 +8,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from internal_cli import run_internal_cli
-
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
 
-def help_text(script: str, *arguments: str) -> str:
-    result = run_internal_cli(script.removesuffix(".py"), *arguments, "--help")
+def help_text(tool: str, *arguments: str) -> str:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS / "v10_cli.py"), tool, *arguments, "--help"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
     if result.returncode:
         raise AssertionError(result.stdout + result.stderr)
     return result.stdout
@@ -67,13 +69,20 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             with self.subTest(entrypoint=entrypoint):
                 self.assertNotIn(entrypoint, text)
 
+    def test_archived_v8_references_are_evidence_not_operational_guides(self) -> None:
+        for path in sorted((ROOT / "references").glob("*v8*.md")):
+            text = path.read_text()
+            with self.subTest(path=path.name):
+                self.assertIn("Archived", text[:500])
+                self.assertNotRegex(text, r"python(?:3)?\s+(?![^\n]*scripts/v10_cli\.py)[^\n]*\.py")
+
     def test_checkpoint_cli_has_no_migration_command(self) -> None:
-        text = help_text("bundle_cli.py")
+        text = help_text("bundle")
         self.assertIn("checkpoint", text)
         self.assertIn("import-bundle", text)
         self.assertNotIn("export-bundle", text)
         self.assertNotIn("migrate-publication-profile", text)
-        checkpoint_help = help_text("bundle_cli.py", "checkpoint")
+        checkpoint_help = help_text("bundle", "checkpoint")
         self.assertIn("portable", checkpoint_help)
         self.assertIn("private-complete", checkpoint_help)
 
@@ -82,7 +91,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertFalse((ROOT / "references" / "schemas" / "locator-worker-prompt-pack.schema.json").exists())
 
     def test_candidate_preparation_is_local(self) -> None:
-        text = help_text("candidate_preparation_cli.py")
+        text = help_text("prepare-candidate")
         self.assertIn("register", text)
         self.assertNotIn("extract", text)
         self.assertNotIn("bind-publication", text)
@@ -101,7 +110,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             self.assertFalse((schemas / name).exists())
 
     def test_locator_preparation_uses_registered_state_not_repository_locks(self) -> None:
-        text = help_text("page_chunk_cli.py")
+        text = help_text("page-chunks")
         self.assertIn("prepare-locator-chunks", text)
         self.assertNotIn("filter-candidate", text)
         source = (SCRIPTS / "page_chunk_cli.py").read_text()
@@ -131,30 +140,30 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
         self.assertFalse((ROOT / "references" / "schemas" / "candidate-benchmark-lock.schema.json").exists())
 
     def test_parallel_audits_require_no_github_evidence(self) -> None:
-        text = help_text("parallel_candidate_audit_cli.py")
+        text = help_text("audit-candidate")
         self.assertIn("validate-audits", text)
         self.assertIn("register-audits", text)
-        self.assertIn("--replace-complete-batch", help_text("parallel_candidate_audit_cli.py", "register-audits"))
+        self.assertIn("--replace-complete-batch", help_text("audit-candidate", "register-audits"))
         self.assertNotIn("merge-evidence", text)
         self.assertNotIn("build-locator-worker", text)
 
     def test_parallel_discovery_is_local(self) -> None:
-        text = help_text("parallel_discovery_cli.py")
+        text = help_text("discover-source")
         self.assertIn("validate-discoveries", text)
         self.assertIn("register-discoveries", text)
         self.assertNotIn("worker-receipt", text)
         self.assertNotIn("integrate", text)
 
     def test_benchmark_review_has_narrow_legacy_import(self) -> None:
-        text = help_text("benchmark_review_cli.py")
+        text = help_text("benchmark")
         self.assertIn("import-reviewed-legacy", text)
-        import_help = help_text("benchmark_review_cli.py", "import-reviewed-legacy")
+        import_help = help_text("benchmark", "import-reviewed-legacy")
         self.assertIn("--compatibility-approval", import_help)
         self.assertIn("--legacy-review-inventory", import_help)
         self.assertIn("--provenance-output", import_help)
 
     def test_scoring_surface_is_current_only(self) -> None:
-        text = help_text("dimension_score_v8_cli.py")
+        text = help_text("score")
         self.assertIn("preflight", text)
         self.assertIn("calculate", text)
         self.assertNotIn("derive-structure-review", text)
@@ -167,7 +176,7 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, scoring_runtime)
         self.assertFalse((SCRIPTS / "structure_locator_review.py").exists())
-        self.assertIn("project-structure-causality", help_text("item_grade_v8_cli.py"))
+        self.assertIn("project-structure-causality", help_text("grade"))
 
     def test_policy_builder_uses_the_current_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -210,25 +219,12 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
 
     def test_every_low_level_main_rejects_direct_execution_even_with_old_test_marker(self) -> None:
         environment = {**os.environ, "ESI_FROZEN_TEST_CLI": "1"}
-        for script in (
-            "benchmark_review_cli.py",
-            "bundle_cli.py",
-            "candidate_preparation_cli.py",
-            "dimension_score_v8_cli.py",
-            "item_grade_v8_cli.py",
-            "page_chunk_cli.py",
-            "parallel_candidate_audit_cli.py",
-            "parallel_discovery_cli.py",
-            "policy_cli.py",
-            "state_cli.py",
-            "study_cli.py",
-            "v10_candidate_access.py",
-            "v10_execution.py",
-            "v10_release.py",
-        ):
-            with self.subTest(script=script):
+        for path in sorted(SCRIPTS.glob("*.py")):
+            if path.name == "v10_cli.py":
+                continue
+            with self.subTest(script=path.name):
                 result = subprocess.run(
-                    [sys.executable, str(SCRIPTS / script), "--help"],
+                    [sys.executable, str(path), "--help"],
                     text=True,
                     capture_output=True,
                     env=environment,
@@ -236,10 +232,46 @@ class CurrentCommandSurfaceTests(unittest.TestCase):
                 self.assertNotEqual(0, result.returncode)
                 self.assertIn("use scripts/v10_cli.py", result.stdout + result.stderr)
 
+    def test_runtime_has_no_legacy_selector_or_execution_bypass(self) -> None:
+        source = (SCRIPTS / "runtime_profile.py").read_text()
+        self.assertNotIn("ESI_FROZEN_TEST_CLI", source)
+        self.assertNotIn("def select_v9", source)
+
+    def test_no_internal_module_or_package_metadata_exposes_an_entrypoint(self) -> None:
+        for path in sorted(SCRIPTS.glob("*.py")):
+            if path.name != "v10_cli.py":
+                with self.subTest(module=path.name):
+                    self.assertFalse(path.stat().st_mode & 0o111)
+        for name in ("pyproject.toml", "setup.cfg", "setup.py"):
+            path = ROOT.parent / name
+            if path.exists():
+                text = path.read_text()
+                self.assertNotIn("console_scripts", text)
+                self.assertNotIn("project.scripts", text)
+
+    def test_automation_does_not_invoke_internal_modules(self) -> None:
+        workflows = ROOT.parent / ".github" / "workflows"
+        text = "\n".join(path.read_text() for path in sorted(workflows.glob("*")) if path.is_file())
+        for path in SCRIPTS.glob("*.py"):
+            if path.name != "v10_cli.py":
+                with self.subTest(module=path.name):
+                    self.assertNotIn(path.name, text)
+
+    def test_public_help_names_only_the_dispatcher(self) -> None:
+        internal_names = {path.name for path in SCRIPTS.glob("*.py")} - {"v10_cli.py"}
+        for tool in ("state", "policy", "page-chunks", "discover-source", "benchmark", "prepare-candidate", "audit-candidate", "access-review", "score", "grade", "study", "bundle", "release-decision", "adopt"):
+            text = help_text(tool)
+            with self.subTest(tool=tool):
+                self.assertTrue(text.startswith(f"usage: v10_cli.py {tool}"))
+                self.assertFalse(internal_names.intersection(text.split()))
+                self.assertNotIn("current V8", text)
+
     def test_v10_is_the_only_public_runtime_and_initializes_natively(self) -> None:
         self.assertFalse((SCRIPTS / "v9_cli.py").exists())
         self.assertFalse((SCRIPTS / "v10_semantic_cli.py").exists())
         self.assertFalse((SCRIPTS / "v10_migration_cli.py").exists())
+        self.assertFalse((ROOT / "tests" / "v9_golden_probe.py").exists())
+        self.assertFalse((ROOT / "tests" / "v9_density_override_probe.py").exists())
         direct=subprocess.run([sys.executable,str(SCRIPTS/'policy_cli.py'),'--help'],text=True,capture_output=True)
         self.assertNotEqual(0,direct.returncode)
         self.assertIn('use scripts/v10_cli.py',direct.stdout+direct.stderr)

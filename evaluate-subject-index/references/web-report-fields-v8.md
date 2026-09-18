@@ -1,6 +1,7 @@
 # Web report fields — V8
 
-New reports use `subject-index-web-report-v10` and point to the current V8 calculation and V7 item-assessment artifacts.
+Archived contract. This page is retained only as frozen migration evidence;
+current reports use the V10 contracts through `scripts/v10_cli.py`.
 
 The report exposes:
 

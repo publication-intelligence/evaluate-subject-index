@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build V8 diagnostic item projections from a frozen V8 calculation ledger."""
+"""Build V10 diagnostic item projections from a frozen calculation ledger."""
 
 from __future__ import annotations
 
@@ -626,7 +626,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     build = subparsers.add_parser(
         "build-assessments",
-        help="Project current V8 diagnostic locator grades and binary keep credit.",
+        help="Project current V10 diagnostic locator grades and binary keep credit.",
     )
     build.add_argument("--base-items", required=True)
     build.add_argument("--calculation", required=True)

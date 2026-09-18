@@ -1,8 +1,8 @@
-# Current V8 JSON contracts
+# Archived V8 JSON contracts
 
-Current methodology: **V8.2**. Read [Consequence policy and targeted migration](consequence-policy-v8.2.md); it supersedes older cap, publication-gate, and validity language below. Frozen V8 evaluations require explicit migration and new policy/calculation identities.
+Frozen methodology: **V8.2**. These identities are retained only to validate and migrate historical artifacts through `scripts/v10_cli.py`. They are not current defaults.
 
-The active workflow uses these primary identities:
+The frozen workflow used these primary identities:
 
 | Artifact | Schema identity |
 | --- | --- |
@@ -42,9 +42,7 @@ The active workflow uses these primary identities:
 - Stable semantic IDs join worker records. Calculation-input file references and their
   verified bytes define the selected scoring artifacts.
 - Benchmark review uses one draft artifact SHA-256, exact stable-ID coverage, and an exact normalized `approved_changes` ledger. Its deterministic screen is recomputed as a temporary queue and is not registered.
-- `benchmark_review_cli.py freeze` is the normal completion path for `benchmark_review` and `benchmark_freeze`; it registers the review and final benchmark in one atomic state replacement.
-- `benchmark_review_cli.py import-reviewed-legacy` is the narrow exception for exact candidate-blind releases with completed full review. Its distinct compatibility approval does not claim a new full editorial review.
-- `dimension_score_v8_cli.py register-structure`, `score`, and `build-report` are the normal completion paths for the final three stages. They select exact registered inputs, reject missing, duplicate, changed, or cross-boundary artifacts, and replace state only after all current-schema outputs validate. `build-report` registers the report, projection, and every collection in the same state inventory and rolls back new output files if the commit fails.
+- Current benchmark review, reviewed-legacy import, structure registration, scoring, and report building run only through their `scripts/v10_cli.py` tool groups. The historical atomicity and validation requirements remain migration evidence.
 - The projection preserves the established `correction_outcomes` contract and adjustment-status vocabulary. A confirmed registered overlay adds the fourth collection binding and `data/correction-overlay.v1.json`; otherwise exactly three collection bindings are emitted and the overlay file is absent.
 - Public collections may retain evidence IDs and finalized judgments but never source excerpts, quotes, PDFs, absolute paths, private layout evidence, storage-provider identifiers, secrets, or restricted inputs.
 - The V10 web report may include the optional typed `presentation_summary` projection. It contains only public-safe numeric/category reporting values derived from the canonical calculation and registered inputs. Its legacy-named `web_report_sha256` provenance field is the registered dimension-calculation file SHA-256 (`calculation_explainer.sha256`); the canonical projection separately binds the final report-file SHA-256.

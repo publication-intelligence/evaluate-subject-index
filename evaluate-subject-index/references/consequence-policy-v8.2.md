@@ -1,10 +1,10 @@
-# Consequence policy — V8.2 (archived)
+# Archived consequence policy — V8.2
 
 This frozen contract is retained for historical validation only. Its former
 low-level CLI filenames are not operational in the current tree; current work
 uses `python scripts/v10_cli.py TOOL ...`.
 
-V8.2 changes publication gates for confirmed completely wrong delivered destinations. Its identities are `subject-index-standard-policy-v8.2`, `subject-index-rubric-v8.2`, and `subject-index-dimension-calculation-v7`. The six dimension formulas, ordinary deductions, diagnostic grades, dimension ceilings, and quantitative thresholds for other patterns remain those of [V8.1](consequence-policy-v8.1.md). Artifact schema identities and CLI filenames remain unchanged where their shapes are retained. Current validators reject V8.1 scoring identities; reproduce V8.1 with merged revision `1e513806e58028b53c3e5d64dbe54b060e9aab56`. Never reinterpret a frozen V8.1 policy as V8.2.
+V8.2 changed publication gates for confirmed completely wrong delivered destinations. Its frozen identities are `subject-index-standard-policy-v8.2`, `subject-index-rubric-v8.2`, and `subject-index-dimension-calculation-v7`. The six dimension formulas, ordinary deductions, diagnostic grades, dimension ceilings, and quantitative thresholds for other patterns remain those of [V8.1](consequence-policy-v8.1.md). Artifact schema identities remain recorded where their shapes are required for migration validation. Revision `1e513806e58028b53c3e5d64dbe54b060e9aab56` is preserved as evidence of the V8.1 implementation; it is not a current execution path. Never reinterpret a frozen V8.1 policy as V8.2.
 
 ## Confirmed wrong delivered locators
 

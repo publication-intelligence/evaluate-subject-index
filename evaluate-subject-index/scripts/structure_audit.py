@@ -280,3 +280,5 @@ def materialize_structure_records(structure: Mapping[str, Any]) -> tuple[list[di
         else:
             reference_not_measured.append(reference_id)
     return nodes, references, node_not_measured, reference_not_measured
+if __name__ == "__main__":
+    __import__("runtime_profile").require_public_cli()
