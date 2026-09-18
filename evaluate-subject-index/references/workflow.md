@@ -53,10 +53,13 @@ The command generates the current benchmark rather than accepting a caller-autho
 The final transitions use one current command surface:
 
 ```bash
+python scripts/v10_cli.py reference-review --state evaluation-state.json --input reviewed-cross-reference-bindings.json
 python scripts/v10_cli.py score register-structure --state evaluation-state.json --input structure-audit.v6.json
 python scripts/v10_cli.py score score --state evaluation-state.json
 python scripts/v10_cli.py score build-report --state evaluation-state.json
 ```
+
+`reference-review` is conditional: use it only when the finalized structure audit attests supported references whose normalized candidate and inventory targets remain null. Its typed receipt binds the exact candidate, inventory, and structure bytes and must map the complete eligible set, with one or more existing delivered `PATH-*` IDs per reference. Duplicate, incomplete, type/text-mismatched, nonexistent, uncertain, or exception-ledger bindings fail closed. The receipt is registered after missing-access audit and before structure registration; it changes assessment sufficiency only, never score arithmetic or weights.
 
 These typed commands validate every selected registered artifact and cross-artifact binding before writing outputs or atomically advancing state. The final command writes and registers the current V10 report and canonical projection bundle in one transaction. Generic stage completion is disabled for these three stages.
 
@@ -89,6 +92,7 @@ Invalidate from the earliest changed substantive input:
 - Policy or benchmark meaning changes invalidate dependent judgment stages.
 - Candidate normalization changes invalidate locator packets and later candidate stages.
 - Locator-audit changes invalidate missing-access and later stages.
+- Replacing candidate, inventory, missing-access, or structure evidence invalidates any reviewed cross-reference binding receipt; author and register a new exact receipt when still required.
 - Judgment changes invalidate structure, scoring, and reporting as applicable.
 - Presentation-only changes require only rebuilding the web report.
 

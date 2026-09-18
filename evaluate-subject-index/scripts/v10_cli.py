@@ -4,7 +4,7 @@
 Usage: v10_cli.py TOOL [arguments...]
 Tools: state, policy, page-chunks, discover-source, benchmark,
 prepare-candidate, audit-candidate, score, grade, study, bundle,
-release-decision, access-review.
+release-decision, access-review, reference-review.
 """
 import argparse
 import runpy
@@ -17,6 +17,7 @@ TOOLS = {
     "state": "state_cli.py", "policy": "policy_cli.py",
     "discover-source": "parallel_discovery_cli.py", "benchmark": "benchmark_review_cli.py",
     "access-review": "v10_candidate_access.py", "release-decision": "v10_release.py",
+    "reference-review": "v10_reference_bindings.py",
     "page-chunks": "page_chunk_cli.py", "bundle": "bundle_cli.py",
     "prepare-candidate": "candidate_preparation_cli.py",
     "audit-candidate": "parallel_candidate_audit_cli.py",

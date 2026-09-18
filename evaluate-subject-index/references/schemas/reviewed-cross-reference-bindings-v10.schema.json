@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reviewed-cross-reference-bindings-v10.schema.json",
+  "title": "Reviewed V10 supported cross-reference destination bindings",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "review_id",
+    "evaluation_id",
+    "candidate_sha256",
+    "normalized_candidate_sha256",
+    "item_inventory_sha256",
+    "structure_binding",
+    "binding_set_sha256",
+    "reviewed_at",
+    "reviewed_by",
+    "authorization_reference",
+    "review_confidence",
+    "scope_attestation",
+    "bindings"
+  ],
+  "properties": {
+    "schema_version": {"const": "subject-index-v10-reviewed-cross-reference-bindings-v1"},
+    "review_id": {"type": "string", "minLength": 1},
+    "evaluation_id": {"type": "string", "minLength": 1},
+    "candidate_sha256": {"$ref": "#/$defs/sha256"},
+    "normalized_candidate_sha256": {"$ref": "#/$defs/sha256"},
+    "item_inventory_sha256": {"$ref": "#/$defs/sha256"},
+    "structure_binding": {"$ref": "#/$defs/artifactBinding"},
+    "binding_set_sha256": {"$ref": "#/$defs/sha256"},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "reviewed_by": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "authorization_reference": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "review_confidence": {"const": "high"},
+    "scope_attestation": {
+      "type": "object",
+      "required": ["destination_sets_complete", "unresolved_or_ambiguous_bindings_included"],
+      "properties": {
+        "destination_sets_complete": {"const": true},
+        "unresolved_or_ambiguous_bindings_included": {"const": false}
+      },
+      "additionalProperties": false
+    },
+    "bindings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/binding"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "artifactBinding": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "binding": {
+      "type": "object",
+      "required": ["reference_id", "status", "reference_type", "target_display", "resolved_path_ids", "evidence_ids", "rationale"],
+      "properties": {
+        "reference_id": {"type": "string", "pattern": "^XREF-"},
+        "status": {"const": "valid_destination"},
+        "reference_type": {"enum": ["see", "see also"]},
+        "target_display": {"type": "string", "minLength": 1},
+        "resolved_path_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^PATH-"}
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^EVID-"}
+        },
+        "rationale": {"type": "string", "minLength": 1, "pattern": "\\S"}
+      },
+      "additionalProperties": false
+    }
+  }
+}
